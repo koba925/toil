@@ -1,0 +1,7 @@
+{
+    "files.trimTrailingWhitespace": true,
+    "editor.formatOnSave": false,
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.analysis.typeCheckingMode": "basic",
+}

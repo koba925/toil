@@ -1,0 +1,19 @@
+{
+	"name": "toil",
+	"dockerComposeFile": "compose.yml",
+	"service": "toil",
+	"workspaceFolder": "/workspaces/toil",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"ms-python.vscode-pylance",
+				"ms-python.black-formatter",
+				"ms-python.debugpy",
+				"donjayamanne.githistory",
+				"google.geminicodeassist"
+			]
+		}
+	},
+	"remoteUser": "vscode"
+}

@@ -1,0 +1,8 @@
+services:
+  toil:
+    build:
+      context: python3
+      dockerfile: Dockerfile
+    volumes:
+      - ../:/workspaces/toil:cached
+    command: sleep infinity
