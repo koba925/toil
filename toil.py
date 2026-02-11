@@ -1,13 +1,14 @@
-def new_env():
-    return {}
+class Environment:
+    def __init__(self):
+        self._vars = {}
 
 def define(env, name, val):
-    env[name] = val
+    env._vars[name] = val
     return val
 
 def lookup(env, name):
-    assert name in env, f"Undefined variable @ lookup(): {name}"
-    return env[name]
+    assert name in env._vars, f"Undefined variable @ lookup(): {name}"
+    return env._vars[name]
 
 
 def evaluate(expr, env):
@@ -30,7 +31,7 @@ def evaluate_if(cond_expr, then_expr, else_expr, env):
         return evaluate(else_expr, env)
 
 if __name__ == "__main__":
-    env = new_env()
+    env = Environment()
 
     print(evaluate(("define", "a", 2), env))        # 2
     print(evaluate("a", env))                       # 2
