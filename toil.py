@@ -30,6 +30,8 @@ def evaluate(expr, env):
             return evaluate_if(cond_expr, then_expr, else_expr, env)
         case ("scope", expr):
             return evaluate(expr, Environment(env))
+        case (op_expr, args_expr):
+            return eval_op(op_expr, args_expr, env)
         case unexpected:
             assert False, f"Unexpected expression @ evaluate(): {unexpected}"
 
@@ -45,13 +47,29 @@ def evaluate_if(cond_expr, then_expr, else_expr, env):
     else:
         return evaluate(else_expr, env)
 
-if __name__ == "__main__":
+def eval_op(op_expr, args_expr, env):
+    op_val = evaluate(op_expr, env)
+    args_val = [evaluate(arg, env) for arg in args_expr]
+    return op_val(args_val)
+
+def init_env():
     env = Environment()
 
-    program = ("seq", [
-        ("define", "a", 2),
-        ("define", "b", ("if", ("if", True, False, True), 3, 4)),
-        "b"
-    ])
-    print(evaluate(program, env)) # 4
-    print(evaluate("a", env))     # 2
+    define(env, "add", lambda args: args[0] + args[1])
+    define(env, "sub", lambda args: args[0] - args[1])
+    define(env, "mul", lambda args: args[0] * args[1])
+    define(env, "equal", lambda args: args[0] == args[1])
+    define(env, "print", lambda args: print(*args))
+
+    return env
+
+if __name__ == "__main__":
+    env = init_env()
+
+    evaluate(("print", [2]), env)
+    evaluate(("print", [2, 3]), env)
+    evaluate(("print", [("add", [2, 3])]), env)
+    evaluate(("print", [("sub", [5, 3])]), env)
+    evaluate(("print", [("mul", [2, 3])]), env)
+    evaluate(("print", [("equal", [2, 3])]), env)
+    evaluate(("print", [("equal", [2, 2])]), env)
