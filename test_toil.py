@@ -78,3 +78,46 @@ def test_builtin_functions(capsys):
 
     evaluate(("print", [("add", [5, 5])]), env)
     assert capsys.readouterr().out == "10\n"
+
+def test_user_func():
+    env = init_env()
+
+    assert evaluate(
+        ("define", "add2", ("func",["a"], ("add", ["a", 2]))),
+        env) == ("func",["a"], ("add", ["a", 2]))
+    assert evaluate(("add2", [3]), env) == 5
+
+    evaluate(("define", "sum3", ("func",["a", "b", "c"],
+        ("add", ["a", ("add", ["b", "c"])])
+    )), env)
+    assert evaluate(("sum3", [2, 3, 4]), env) == 9
+
+def test_recursion():
+    env = init_env()
+
+    evaluate(("define", "fac", ("func",["n"],
+        ("if", ("equal", ["n", 1]),
+            1,
+            ("mul", ["n", ("fac", [("sub", ["n", 1])])])
+        )
+    )), env)
+    assert evaluate(("fac", [1]), env) == 1
+    assert evaluate(("fac", [3]), env) == 6
+    assert evaluate(("fac", [5]), env) == 120
+
+def test_scope_leak():
+    env = init_env()
+    evaluate(("define", "x", 2), env)
+    evaluate(("define", "f", ("func", ["x"], 3)), env)
+    evaluate(("f", [4]), env)
+    assert evaluate("x", env) == 2
+
+def test_closure():
+    env = init_env()
+    evaluate(("define", "x", 2), env)
+    evaluate(("define", "return_x", ("func", [], "x")), env)
+    assert evaluate(("return_x", []), env) == 2
+    assert evaluate(("scope", ("seq", [
+        ("define", "x", 3),
+        ("return_x", [])
+    ])), env) == 3

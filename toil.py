@@ -28,6 +28,8 @@ def evaluate(expr, env):
             return evaluate_seq(exprs, env)
         case ("if", cond_expr, then_expr, else_expr):
             return evaluate_if(cond_expr, then_expr, else_expr, env)
+        case ("func", params, body):
+            return expr
         case ("scope", expr):
             return evaluate(expr, Environment(env))
         case (op_expr, args_expr):
@@ -50,7 +52,17 @@ def evaluate_if(cond_expr, then_expr, else_expr, env):
 def eval_op(op_expr, args_expr, env):
     op_val = evaluate(op_expr, env)
     args_val = [evaluate(arg, env) for arg in args_expr]
-    return op_val(args_val)
+
+    match op_val:
+        case c if callable(c):
+            return c(args_val)
+        case ("func", params, body):
+            new_env = Environment(env)
+            for param, arg in zip(params, args_val):
+                define(new_env, param, arg)
+            return evaluate(body, new_env)
+        case _:
+            assert False, f"Illegal operator @ eval_op(): {op_val}"
 
 def init_env():
     env = Environment()
@@ -66,10 +78,22 @@ def init_env():
 if __name__ == "__main__":
     env = init_env()
 
-    evaluate(("print", [2]), env)
-    evaluate(("print", [2, 3]), env)
-    evaluate(("print", [("add", [2, 3])]), env)
-    evaluate(("print", [("sub", [5, 3])]), env)
-    evaluate(("print", [("mul", [2, 3])]), env)
-    evaluate(("print", [("equal", [2, 3])]), env)
-    evaluate(("print", [("equal", [2, 2])]), env)
+    evaluate(("print", [
+        ("define", "add2", ("func",["a"], ("add", ["a", 2]))
+    )]), env)
+    evaluate(("print", [("add2", [3])]), env)
+
+    evaluate(("define", "sum3", ("func",["a", "b", "c"],
+            ("add", ["a", ("add", ["b", "c"])]))
+    ), env)
+    evaluate(("print", [("sum3", [2, 3, 4])]), env)
+
+    evaluate(("define", "fac", ("func",["n"],
+        ("if", ("equal", ["n", 1]),
+            1,
+            ("mul", ["n", ("fac", [("sub", ["n", 1])])])
+        )
+    )), env)
+    evaluate(("print", [("fac", [1])]), env)
+    evaluate(("print", [("fac", [3])]), env)
+    evaluate(("print", [("fac", [5])]), env)
