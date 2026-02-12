@@ -84,9 +84,9 @@ def test_builtin_functions(capsys):
 def test_user_func():
     env = init_env()
 
-    assert evaluate(
-        ("define", "add2", ("func",["a"], ("add", ["a", 2]))),
-        env) == ("func",["a"], ("add", ["a", 2]))
+    evaluate(("define", "add2", ("func", ["a"],
+        ("add", ["a", 2])
+    )), env)
     assert evaluate(("add2", [3]), env) == 5
 
     evaluate(("define", "sum3", ("func",["a", "b", "c"],
@@ -122,4 +122,31 @@ def test_closure():
     assert evaluate(("scope", ("seq", [
         ("define", "x", 3),
         ("return_x", [])
-    ])), env) == 3
+    ])), env) == 2
+    assert evaluate("x", env) == 2
+
+def test_adder():
+    env = init_env()
+
+    evaluate(("define", "make_adder", ("func", ["n"],
+        ("func", ["m"], ("add", ["n", "m"]))
+    )), env)
+    evaluate(("define", "add2", ("make_adder", [2])), env)
+    evaluate(("define", "add3", ("make_adder", [3])), env)
+
+    assert evaluate(("add2", [3]), env) == 5
+    assert evaluate(("add3", [4]), env) == 7
+
+def test_shadowing():
+    env = init_env()
+    # クロージャ内のローカル変数が、キャプチャされた変数を隠蔽（シャドーイング）できるか確認
+    evaluate(("define", "make_shadow", ("func", ["x"],
+        ("func", [],
+            ("seq", [
+                ("define", "x", 3),
+                "x"
+            ])
+        )
+    )), env)
+    evaluate(("define", "g", ("make_shadow", [2])), env)
+    assert evaluate(("g", []), env) == 3

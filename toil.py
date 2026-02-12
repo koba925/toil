@@ -3,6 +3,11 @@ class Environment:
         self.parent = parent
         self.vars = {}
 
+    def __repr__(self):
+        content = "__builtins__" if "__builtins__" in self.vars else \
+                  ", ".join(self.vars)
+        return f"[{content}]" + (f" < {self.parent}" if self.parent else "")
+
 def define(env, name, val):
     env.vars[name] = val
     return val
@@ -22,14 +27,14 @@ def evaluate(expr, env):
             return expr
         case str(name):
             return lookup(env, name)
-        case ("define", name, val):
+        case ("define", str(name), val):
             return define(env, name, evaluate(val, env))
         case ("seq", exprs):
             return evaluate_seq(exprs, env)
         case ("if", cond_expr, then_expr, else_expr):
             return evaluate_if(cond_expr, then_expr, else_expr, env)
         case ("func", params, body):
-            return expr
+            return ("closure", params, body, env)
         case ("scope", expr):
             return evaluate(expr, Environment(env))
         case (op_expr, args_expr):
@@ -56,8 +61,8 @@ def eval_op(op_expr, args_expr, env):
     match op_val:
         case c if callable(c):
             return c(args_val)
-        case ("func", params, body):
-            new_env = Environment(env)
+        case ("closure", params, body, closure_env):
+            new_env = Environment(closure_env)
             for param, arg in zip(params, args_val):
                 define(new_env, param, arg)
             return evaluate(body, new_env)
@@ -67,26 +72,27 @@ def eval_op(op_expr, args_expr, env):
 def init_env():
     env = Environment()
 
+    define(env, "__builtins__", None)
     define(env, "add", lambda args: args[0] + args[1])
     define(env, "sub", lambda args: args[0] - args[1])
     define(env, "mul", lambda args: args[0] * args[1])
     define(env, "equal", lambda args: args[0] == args[1])
     define(env, "print", lambda args: print(*args))
 
-    return env
+    return Environment(env)
 
 if __name__ == "__main__":
     env = init_env()
 
     evaluate(("print", [
         ("define", "add2", ("func",["a"], ("add", ["a", 2]))
-    )]), env)
-    evaluate(("print", [("add2", [3])]), env)
+    )]), env) # -> ('closure', ...)
+    evaluate(("print", [("add2", [3])]), env) # -> 5
 
     evaluate(("define", "sum3", ("func", ["a", "b", "c"],
             ("add", ["a", ("add", ["b", "c"])]))
     ), env)
-    evaluate(("print", [("sum3", [2, 3, 4])]), env)
+    evaluate(("print", [("sum3", [2, 3, 4])]), env) # -> 9
 
     evaluate(("define", "fac", ("func",["n"],
         ("if", ("equal", ["n", 1]),
@@ -94,6 +100,12 @@ if __name__ == "__main__":
             ("mul", ["n", ("fac", [("sub", ["n", 1])])])
         )
     )), env)
-    evaluate(("print", [("fac", [1])]), env)
-    evaluate(("print", [("fac", [3])]), env)
-    evaluate(("print", [("fac", [5])]), env)
+    evaluate(("print", [("fac", [1])]), env) # -> 1
+    evaluate(("print", [("fac", [3])]), env) # -> 6
+    evaluate(("print", [("fac", [5])]), env) # -> 120
+
+    evaluate(("define", "make_adder", ("func", ["x"],
+        ("func", ["y"], ("add", ["x", "y"]))
+    )), env)
+    evaluate(("define", "add10", ("make_adder", [10])), env)
+    evaluate(("print", [("add10", [5])]), env) # -> 15
