@@ -46,15 +46,17 @@ def test_evaluate_scope(capsys):
 
     evaluate(("define", "a", 2), env)
     assert evaluate("a", env) == 2
+    assert evaluate(("scope", "a"), env) == 2
 
     assert evaluate(("scope", ("seq", [
+        ("print", ["a"]),
         ("define", "a", 3),
         ("print", ["a"]),
         ("define", "b", 4),
         ("print", ["b"]),
         "b"
     ])), env) == 4
-    assert capsys.readouterr().out == "3\n4\n"
+    assert capsys.readouterr().out == "2\n3\n4\n"
 
     assert evaluate("a", env) == 2
 

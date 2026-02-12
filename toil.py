@@ -83,7 +83,7 @@ if __name__ == "__main__":
     )]), env)
     evaluate(("print", [("add2", [3])]), env)
 
-    evaluate(("define", "sum3", ("func",["a", "b", "c"],
+    evaluate(("define", "sum3", ("func", ["a", "b", "c"],
             ("add", ["a", ("add", ["b", "c"])]))
     ), env)
     evaluate(("print", [("sum3", [2, 3, 4])]), env)
