@@ -1,152 +1,137 @@
 import pytest
-from toil import evaluate, Environment, init_env
+from toil import Interpreter
 
+class TestToil:
+    @pytest.fixture(autouse=True)
+    def set_interpreter(self):
+        self.i = Interpreter().init_env()
 
-def test_evaluate_value():
-    env = Environment()
-    assert evaluate(None, env) is None
-    assert evaluate(5, env) == 5
-    assert evaluate(True, env) is True
-    assert evaluate(False, env) is False
+    def test_evaluate_value(self):
+        assert self.i.evaluate(None) is None
+        assert self.i.evaluate(5) == 5
+        assert self.i.evaluate(True) is True
+        assert self.i.evaluate(False) is False
 
-def test_seq(capsys):
-    env = init_env()
-    evaluate(("seq", [
-        ("print", [2]),
-        ("print", [3])
-    ]), env)
-    assert capsys.readouterr().out == "2\n3\n"
+    def test_seq(self, capsys):
+        self.i.evaluate(("seq", [
+            ("print", [2]),
+            ("print", [3])
+        ]))
+        assert capsys.readouterr().out == "2\n3\n"
 
-def test_evaluate_if():
-    env = Environment()
-    assert evaluate(("if", True, 2, 3), env) == 2
-    assert evaluate(("if", False, 2, 3), env) == 3
-    assert evaluate(("if", ("if", True, True, False), 2, 3), env) == 2
-    assert evaluate(("if", True, ("if", True, 2, 3), 4), env) == 2
-    assert evaluate(("if", False, 2, ("if", False, 3, 4)), env) == 4
+    def test_evaluate_if(self):
+        assert self.i.evaluate(("if", True, 2, 3)) == 2
+        assert self.i.evaluate(("if", False, 2, 3)) == 3
+        assert self.i.evaluate(("if", ("if", True, True, False), 2, 3)) == 2
+        assert self.i.evaluate(("if", True, ("if", True, 2, 3), 4)) == 2
+        assert self.i.evaluate(("if", False, 2, ("if", False, 3, 4))) == 4
 
-def test_evaluate_variable():
-    env = Environment()
-    assert evaluate(("define", "a", 2), env) == 2
-    assert evaluate("a", env) == 2
+    def test_evaluate_variable(self):
+        assert self.i.evaluate(("define", "a", 2)) == 2
+        assert self.i.evaluate("a") == 2
 
-    assert evaluate(("define", "b", True), env) == True
-    assert evaluate(("if", "b", 2, 3), env) == 2
+        assert self.i.evaluate(("define", "b", True)) == True
+        assert self.i.evaluate(("if", "b", 2, 3)) == 2
 
-    assert evaluate(("define", "c", ("if", False, 2, 3)), env) == 3
-    assert evaluate("c", env) == 3
+        assert self.i.evaluate(("define", "c", ("if", False, 2, 3))) == 3
+        assert self.i.evaluate("c") == 3
 
-def test_evaluate_undefined_variable():
-    env = Environment()
-    with pytest.raises(AssertionError):
-        evaluate("a", env)
+    def test_evaluate_undefined_variable(self):
+        with pytest.raises(AssertionError):
+            self.i.evaluate("a")
 
-def test_evaluate_scope(capsys):
-    env = init_env()
+    def test_evaluate_scope(self, capsys):
+        self.i.evaluate(("define", "a", 2))
+        assert self.i.evaluate("a") == 2
+        assert self.i.evaluate(("scope", "a")) == 2
 
-    evaluate(("define", "a", 2), env)
-    assert evaluate("a", env) == 2
-    assert evaluate(("scope", "a"), env) == 2
+        assert self.i.evaluate(("scope", ("seq", [
+            ("print", ["a"]),
+            ("define", "a", 3),
+            ("print", ["a"]),
+            ("define", "b", 4),
+            ("print", ["b"]),
+            "b"
+        ]))) == 4
+        assert capsys.readouterr().out == "2\n3\n4\n"
 
-    assert evaluate(("scope", ("seq", [
-        ("print", ["a"]),
-        ("define", "a", 3),
-        ("print", ["a"]),
-        ("define", "b", 4),
-        ("print", ["b"]),
-        "b"
-    ])), env) == 4
-    assert capsys.readouterr().out == "2\n3\n4\n"
+        assert self.i.evaluate("a") == 2
 
-    assert evaluate("a", env) == 2
+        with pytest.raises(AssertionError):
+            self.i.evaluate("b")
 
-    with pytest.raises(AssertionError):
-        evaluate("b", env)
+    def test_builtin_functions(self, capsys):
+        assert self.i.evaluate(("add", [2, 3])) == 5
+        assert self.i.evaluate(("sub", [5, 3])) == 2
+        assert self.i.evaluate(("mul", [2, 3])) == 6
 
-def test_builtin_functions(capsys):
-    env = init_env()
+        assert self.i.evaluate(("equal", [2, 2])) is True
+        assert self.i.evaluate(("equal", [2, 3])) is False
 
-    assert evaluate(("add", [2, 3]), env) == 5
-    assert evaluate(("sub", [5, 3]), env) == 2
-    assert evaluate(("mul", [2, 3]), env) == 6
+        assert self.i.evaluate(("add", [2, ("mul", [3, 4])])) == 14
 
-    assert evaluate(("equal", [2, 2]), env) is True
-    assert evaluate(("equal", [2, 3]), env) is False
+        self.i.evaluate(("print", [2, 3]))
+        assert capsys.readouterr().out == "2 3\n"
 
-    assert evaluate(("add", [2, ("mul", [3, 4])]), env) == 14
+        self.i.evaluate(("print", [("add", [5, 5])]))
+        assert capsys.readouterr().out == "10\n"
 
-    evaluate(("print", [2, 3]), env)
-    assert capsys.readouterr().out == "2 3\n"
+    def test_user_func(self):
+        self.i.evaluate(("define", "add2", ("func", ["a"],
+            ("add", ["a", 2])
+        )))
+        assert self.i.evaluate(("add2", [3])) == 5
 
-    evaluate(("print", [("add", [5, 5])]), env)
-    assert capsys.readouterr().out == "10\n"
+        self.i.evaluate(("define", "sum3", ("func",["a", "b", "c"],
+            ("add", ["a", ("add", ["b", "c"])])
+        )))
+        assert self.i.evaluate(("sum3", [2, 3, 4])) == 9
 
-def test_user_func():
-    env = init_env()
+    def test_recursion(self):
+        self.i.evaluate(("define", "fac", ("func",["n"],
+            ("if", ("equal", ["n", 1]),
+                1,
+                ("mul", ["n", ("fac", [("sub", ["n", 1])])])
+            )
+        )))
+        assert self.i.evaluate(("fac", [1])) == 1
+        assert self.i.evaluate(("fac", [3])) == 6
+        assert self.i.evaluate(("fac", [5])) == 120
 
-    evaluate(("define", "add2", ("func", ["a"],
-        ("add", ["a", 2])
-    )), env)
-    assert evaluate(("add2", [3]), env) == 5
+    def test_scope_leak(self):
+        self.i.evaluate(("define", "x", 2))
+        self.i.evaluate(("define", "f", ("func", ["x"], 3)))
+        self.i.evaluate(("f", [4]))
+        assert self.i.evaluate("x") == 2
 
-    evaluate(("define", "sum3", ("func",["a", "b", "c"],
-        ("add", ["a", ("add", ["b", "c"])])
-    )), env)
-    assert evaluate(("sum3", [2, 3, 4]), env) == 9
+    def test_closure(self):
+        self.i.evaluate(("define", "x", 2))
+        self.i.evaluate(("define", "return_x", ("func", [], "x")))
+        assert self.i.evaluate(("return_x", [])) == 2
+        assert self.i.evaluate(("scope", ("seq", [
+            ("define", "x", 3),
+            ("return_x", [])
+        ]))) == 2
+        assert self.i.evaluate("x") == 2
 
-def test_recursion():
-    env = init_env()
+    def test_adder(self):
+        self.i.evaluate(("define", "make_adder", ("func", ["n"],
+            ("func", ["m"], ("add", ["n", "m"]))
+        )))
+        self.i.evaluate(("define", "add2", ("make_adder", [2])))
+        self.i.evaluate(("define", "add3", ("make_adder", [3])))
 
-    evaluate(("define", "fac", ("func",["n"],
-        ("if", ("equal", ["n", 1]),
-            1,
-            ("mul", ["n", ("fac", [("sub", ["n", 1])])])
-        )
-    )), env)
-    assert evaluate(("fac", [1]), env) == 1
-    assert evaluate(("fac", [3]), env) == 6
-    assert evaluate(("fac", [5]), env) == 120
+        assert self.i.evaluate(("add2", [3])) == 5
+        assert self.i.evaluate(("add3", [4])) == 7
 
-def test_scope_leak():
-    env = init_env()
-    evaluate(("define", "x", 2), env)
-    evaluate(("define", "f", ("func", ["x"], 3)), env)
-    evaluate(("f", [4]), env)
-    assert evaluate("x", env) == 2
-
-def test_closure():
-    env = init_env()
-    evaluate(("define", "x", 2), env)
-    evaluate(("define", "return_x", ("func", [], "x")), env)
-    assert evaluate(("return_x", []), env) == 2
-    assert evaluate(("scope", ("seq", [
-        ("define", "x", 3),
-        ("return_x", [])
-    ])), env) == 2
-    assert evaluate("x", env) == 2
-
-def test_adder():
-    env = init_env()
-
-    evaluate(("define", "make_adder", ("func", ["n"],
-        ("func", ["m"], ("add", ["n", "m"]))
-    )), env)
-    evaluate(("define", "add2", ("make_adder", [2])), env)
-    evaluate(("define", "add3", ("make_adder", [3])), env)
-
-    assert evaluate(("add2", [3]), env) == 5
-    assert evaluate(("add3", [4]), env) == 7
-
-def test_shadowing():
-    env = init_env()
-    # クロージャ内のローカル変数が、キャプチャされた変数を隠蔽（シャドーイング）できるか確認
-    evaluate(("define", "make_shadow", ("func", ["x"],
-        ("func", [],
-            ("seq", [
-                ("define", "x", 3),
-                "x"
-            ])
-        )
-    )), env)
-    evaluate(("define", "g", ("make_shadow", [2])), env)
-    assert evaluate(("g", []), env) == 3
+    def test_shadowing(self):
+        self.i.evaluate(("define", "make_shadow", ("func", ["x"],
+            ("func", [],
+                ("seq", [
+                    ("define", "x", 3),
+                    "x"
+                ])
+            )
+        )))
+        self.i.evaluate(("define", "g", ("make_shadow", [2])))
+        assert self.i.evaluate(("g", [])) == 3
