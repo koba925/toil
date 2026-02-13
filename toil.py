@@ -1,24 +1,24 @@
 class Environment:
     def __init__(self, parent=None):
-        self.parent = parent
-        self.vars = {}
+        self._parent = parent
+        self._vars = {}
 
     def __repr__(self):
-        content = "__builtins__" if "__builtins__" in self.vars else \
-                  ", ".join(self.vars)
-        return f"[{content}]" + (f" < {self.parent}" if self.parent else "")
+        content = "__builtins__" if "__builtins__" in self._vars else \
+                  ", ".join(self._vars)
+        return f"[{content}]" + (f" < {self._parent}" if self._parent else "")
 
-def define(env, name, val):
-    env.vars[name] = val
-    return val
+    def define(self, name, val):
+        self._vars[name] = val
+        return val
 
-def lookup(env, name):
-    if name in env.vars:
-        return env.vars[name]
-    elif env.parent is not None:
-        return lookup(env.parent, name)
-    else:
-        assert False, f"Undefined variable @ lookup(): {name}"
+    def lookup(self, name):
+        if name in self._vars:
+            return self._vars[name]
+        elif self._parent is not None:
+            return self._parent.lookup(name)
+        else:
+            assert False, f"Undefined variable @ lookup(): {name}"
 
 
 def evaluate(expr, env):
@@ -26,9 +26,9 @@ def evaluate(expr, env):
         case None | bool() | int():
             return expr
         case str(name):
-            return lookup(env, name)
+            return env.lookup(name)
         case ("define", str(name), val):
-            return define(env, name, evaluate(val, env))
+            return env.define(name, evaluate(val, env))
         case ("seq", exprs):
             return evaluate_seq(exprs, env)
         case ("if", cond_expr, then_expr, else_expr):
@@ -64,7 +64,7 @@ def eval_op(op_expr, args_expr, env):
         case ("closure", params, body, closure_env):
             new_env = Environment(closure_env)
             for param, arg in zip(params, args_val):
-                define(new_env, param, arg)
+                new_env.define(param, arg)
             return evaluate(body, new_env)
         case _:
             assert False, f"Illegal operator @ eval_op(): {op_val}"
@@ -72,12 +72,12 @@ def eval_op(op_expr, args_expr, env):
 def init_env():
     env = Environment()
 
-    define(env, "__builtins__", None)
-    define(env, "add", lambda args: args[0] + args[1])
-    define(env, "sub", lambda args: args[0] - args[1])
-    define(env, "mul", lambda args: args[0] * args[1])
-    define(env, "equal", lambda args: args[0] == args[1])
-    define(env, "print", lambda args: print(*args))
+    env.define("__builtins__", None)
+    env.define("add", lambda args: args[0] + args[1])
+    env.define("sub", lambda args: args[0] - args[1])
+    env.define("mul", lambda args: args[0] * args[1])
+    env.define("equal", lambda args: args[0] == args[1])
+    env.define("print", lambda args: print(*args))
 
     return Environment(env)
 
