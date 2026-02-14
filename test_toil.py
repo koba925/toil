@@ -1,11 +1,35 @@
 import pytest
 from toil import Interpreter
 
-class TestToil:
+
+class TestBase:
     @pytest.fixture(autouse=True)
     def set_interpreter(self):
         self.i = Interpreter().init_env()
 
+class TestScan(TestBase):
+    def test_number(self):
+        assert self.i.scan("""2""") == [2, "$EOF"]
+        assert self.i.scan(""" 3 """) == [3, "$EOF"]
+        assert self.i.scan("""\t4\n5\n""") == [4, 5, "$EOF"]
+        assert self.i.scan(""" """) == ["$EOF"]
+
+        with pytest.raises(AssertionError):
+            self.i.scan("""a""")
+
+class TestParse(TestBase):
+    def test_number(self):
+        assert self.i.parse([2, "$EOF"]) == 2
+
+    def test_no_token(self):
+        with pytest.raises(AssertionError):
+            self.i.parse(["$EOF"])
+
+    def test_extra_token(self):
+        with pytest.raises(AssertionError):
+            self.i.parse([2, 3, "$EOF"])
+
+class TestEvaluate(TestBase):
     def test_evaluate_value(self):
         assert self.i.evaluate(None) is None
         assert self.i.evaluate(5) == 5
@@ -135,3 +159,23 @@ class TestToil:
         )))
         self.i.evaluate(("define", "g", ("make_shadow", [2])))
         assert self.i.evaluate(("g", [])) == 3
+
+class TestGo(TestBase):
+    def test_whitespace(self):
+        assert self.i.go(""" 3""") == 3
+        assert self.i.go("""4 \t""") == 4
+        assert self.i.go("""56\n""") == 56
+
+    def test_number(self):
+        assert self.i.go("""2""") == 2
+
+        with pytest.raises(AssertionError):
+            self.i.go("""a""")
+
+    def test_no_code(self):
+        with pytest.raises(AssertionError):
+            self.i.go(""" """)
+
+    def test_extra_token(self):
+        with pytest.raises(AssertionError):
+            self.i.go("""7 8""")

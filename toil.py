@@ -1,21 +1,30 @@
-class Scanner():
+class Scanner:
     def __init__(self, src):
         self._src = src
         self._pos = 0
-        self._token = ""
+        self._tokens = []
 
-    def next_token(self):
-        self._token = ""
+    def tokenize(self):
+        while True:
+            while self._current_char().isspace():
+                self._advance()
 
-        match self._current_char():
-            case "$EOF": return "$EOF"
-            case c if c.isnumeric():
-                self._append_char()
-                while self._current_char().isnumeric():
-                    self._append_char()
-                return int(self._token)
-            case invalid:
-                assert False, f"Invalid Character @ next_token(): {invalid}"
+            match self._current_char():
+                case "$EOF":
+                    self._tokens.append("$EOF")
+                    break
+                case ch if ch.isnumeric():
+                    self._number()
+                case invalid:
+                    assert False, f"Invalid character @ tokenize(): {invalid}"
+
+        return self._tokens
+
+    def _number(self):
+        start = self._pos
+        while self._current_char().isnumeric():
+            self._advance()
+        self._tokens.append(int(self._src[start:self._pos]))
 
     def _advance(self):
         self._pos += 1
@@ -26,21 +35,31 @@ class Scanner():
         else:
             return "$EOF"
 
-    def _append_char(self):
-        self._token += self._current_char()
-        self._advance()
-
 
 class Parser:
-    def __init__(self, src):
-        self._scanner = Scanner(src)
+    def __init__(self, tokens):
+        self._tokens = tokens
+        self._pos = 0
 
     def parse(self):
-        expr = self._scanner.next_token()
-        assert self._scanner.next_token() == "$EOF", \
-            f"Unexpected token at end @ parse()"
+        expr = self._expression()
+        assert self._current_token() == "$EOF", \
+            f"Extra token @ parse(): {self._current_token()}"
         return expr
 
+    def _expression(self):
+        match self._current_token():
+            case int():
+                return self._advance()
+            case unexpected:
+                assert False, f"Unexpected token @ _expression(): {unexpected} "
+
+    def _advance(self):
+        self._pos += 1
+        return self._tokens[self._pos - 1]
+
+    def _current_token(self):
+        return self._tokens[self._pos]
 
 class Environment:
     def __init__(self, parent=None):
@@ -128,16 +147,37 @@ class Interpreter:
         self._env = Environment(self._env)
         return self
 
+    def scan(self, src):
+        return Scanner(src).tokenize()
+
+    def parse(self, tokens):
+        return Parser(tokens).parse()
+
     def evaluate(self, expr):
         return Evaluator().evaluate(expr, self._env)
 
     def go(self, src):
-        return self.evaluate(Parser(src).parse())
+        tokens = self.scan(src)
+        expr = self.parse(tokens)
+        return self.evaluate(expr)
 
 
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.go("2")) # -> 2
-    print(i.go("23")) # -> 23
-    print(i.go("a")) # -> Error
+    print(i.scan("""2""")) # -> [2, '$EOF']
+    print(i.scan(""" 3 """)) # -> [3, '$EOF']
+    print(i.scan("""\t4\n5\n""")) # -> [4, 5, '$EOF']
+    print(i.scan(""" """)) # -> ['$EOF']
+    # print(i.scan("""a""")) # -> Error
+
+    print(i.parse([2, "$EOF"])) # -> 2
+    # print(i.parse(["$EOF"])) # -> Error
+    # print(i.parse([2, 3, "$EOF"])) # -> Error
+
+    print(i.go("""2""")) # -> 2
+    print(i.go(""" 3""")) # -> 3
+    print(i.go("""4 \t""")) # -> 4
+    print(i.go("""56\n""")) # -> 56
+    # print(i.go("""7 8""")) # -> Error
+    # print(i.go("""a""")) # -> Error
