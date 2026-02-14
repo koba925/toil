@@ -1,3 +1,47 @@
+class Scanner():
+    def __init__(self, src):
+        self._src = src
+        self._pos = 0
+        self._token = ""
+
+    def next_token(self):
+        self._token = ""
+
+        match self._current_char():
+            case "$EOF": return "$EOF"
+            case c if c.isnumeric():
+                self._append_char()
+                while self._current_char().isnumeric():
+                    self._append_char()
+                return int(self._token)
+            case invalid:
+                assert False, f"Invalid Character @ next_token(): {invalid}"
+
+    def _advance(self):
+        self._pos += 1
+
+    def _current_char(self):
+        if self._pos < len(self._src):
+            return self._src[self._pos]
+        else:
+            return "$EOF"
+
+    def _append_char(self):
+        self._token += self._current_char()
+        self._advance()
+
+
+class Parser:
+    def __init__(self, src):
+        self._scanner = Scanner(src)
+
+    def parse(self):
+        expr = self._scanner.next_token()
+        assert self._scanner.next_token() == "$EOF", \
+            f"Unexpected token at end @ parse()"
+        return expr
+
+
 class Environment:
     def __init__(self, parent=None):
         self._parent = parent
@@ -87,32 +131,13 @@ class Interpreter:
     def evaluate(self, expr):
         return Evaluator().evaluate(expr, self._env)
 
+    def go(self, src):
+        return self.evaluate(Parser(src).parse())
+
 
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    i.evaluate(("print", [
-        ("define", "add2", ("func",["a"], ("add", ["a", 2]))
-    )])) # -> ('closure', ...)
-    i.evaluate(("print", [("add2", [3])])) # -> 5
-
-    i.evaluate(("define", "sum3", ("func", ["a", "b", "c"],
-            ("add", ["a", ("add", ["b", "c"])]))
-    ))
-    i.evaluate(("print", [("sum3", [2, 3, 4])])) # -> 9
-
-    i.evaluate(("define", "fac", ("func",["n"],
-        ("if", ("equal", ["n", 1]),
-            1,
-            ("mul", ["n", ("fac", [("sub", ["n", 1])])])
-        )
-    )))
-    i.evaluate(("print", [("fac", [1])])) # -> 1
-    i.evaluate(("print", [("fac", [3])])) # -> 6
-    i.evaluate(("print", [("fac", [5])])) # -> 120
-
-    i.evaluate(("define", "make_adder", ("func", ["x"],
-        ("func", ["y"], ("add", ["x", "y"]))
-    )))
-    i.evaluate(("define", "add10", ("make_adder", [10])))
-    i.evaluate(("print", [("add10", [5])])) # -> 15
+    print(i.go("2")) # -> 2
+    print(i.go("23")) # -> 23
+    print(i.go("a")) # -> Error
