@@ -14,10 +14,16 @@ class TestScan(TestBase):
         assert self.i.scan("""\t4\n5\n""") == [4, 5, "$EOF"]
         assert self.i.scan(""" """) == ["$EOF"]
 
+    def test_add_sub(self):
+        assert self.i.scan("""1 + 2""") == [1, "+", 2, "$EOF"]
+
         with pytest.raises(AssertionError):
             self.i.scan("""a""")
 
 class TestParse(TestBase):
+    def test_add_sub(self):
+        assert self.i.parse([1, "+", 2, "$EOF"]) == ("add", [1, 2])
+
     def test_number(self):
         assert self.i.parse([2, "$EOF"]) == 2
 
@@ -165,6 +171,11 @@ class TestGo(TestBase):
         assert self.i.go(""" 3""") == 3
         assert self.i.go("""4 \t""") == 4
         assert self.i.go("""56\n""") == 56
+
+    def test_add_sub(self):
+        assert self.i.go("""2 + 3""") == 5
+        assert self.i.go("""5 - 3""") == 2
+        assert self.i.go("""2 + 3 - 4 + 5""") == 6
 
     def test_number(self):
         assert self.i.go("""2""") == 2

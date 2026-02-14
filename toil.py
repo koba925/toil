@@ -15,6 +15,9 @@ class Scanner:
                     break
                 case ch if ch.isnumeric():
                     self._number()
+                case ch if ch in "+-":
+                    self._tokens.append(ch)
+                    self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
 
@@ -48,11 +51,20 @@ class Parser:
         return expr
 
     def _expression(self):
+        ops = {"+": "add", "-": "sub"}
+        left = self._primary()
+        while (op := self._current_token()) in ops:
+            self._advance()
+            right = self._primary()
+            left = (ops[op], [left, right])
+        return left
+
+    def _primary(self):
         match self._current_token():
             case int():
                 return self._advance()
             case unexpected:
-                assert False, f"Unexpected token @ _expression(): {unexpected} "
+                assert False, f"Unexpected token @ _primary(): {unexpected}"
 
     def _advance(self):
         self._pos += 1
@@ -165,19 +177,10 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.scan("""2""")) # -> [2, '$EOF']
-    print(i.scan(""" 3 """)) # -> [3, '$EOF']
-    print(i.scan("""\t4\n5\n""")) # -> [4, 5, '$EOF']
-    print(i.scan(""" """)) # -> ['$EOF']
-    # print(i.scan("""a""")) # -> Error
+    print(i.parse(i.scan("""2 + 3"""))) # -> ('add', [2, 3])
+    print(i.parse(i.scan("""5 - 3"""))) # -> ('sub', [5, 3])
+    print(i.parse(i.scan("""2 + 3 - 4 + 5"""))) # -> ('add', [('sub', [('add', [2, 3]), 4]), 5])
 
-    print(i.parse([2, "$EOF"])) # -> 2
-    # print(i.parse(["$EOF"])) # -> Error
-    # print(i.parse([2, 3, "$EOF"])) # -> Error
-
-    print(i.go("""2""")) # -> 2
-    print(i.go(""" 3""")) # -> 3
-    print(i.go("""4 \t""")) # -> 4
-    print(i.go("""56\n""")) # -> 56
-    # print(i.go("""7 8""")) # -> Error
-    # print(i.go("""a""")) # -> Error
+    print(i.go("""2 + 3""")) # -> 5
+    print(i.go("""5 - 3""")) # -> 2
+    print(i.go("""2 + 3 - 4 + 5""")) # -> 6
