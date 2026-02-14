@@ -15,7 +15,7 @@ class Scanner:
                     break
                 case ch if ch.isnumeric():
                     self._number()
-                case ch if ch in "+-":
+                case ch if ch in "+-*/%":
                     self._tokens.append(ch)
                     self._advance()
                 case invalid:
@@ -52,6 +52,15 @@ class Parser:
 
     def _expression(self):
         ops = {"+": "add", "-": "sub"}
+        left = self._mul_div_mod()
+        while (op := self._current_token()) in ops:
+            self._advance()
+            right = self._mul_div_mod()
+            left = (ops[op], [left, right])
+        return left
+
+    def _mul_div_mod(self):
+        ops = {"*": "mul", "/": "div", "%": "mod"}
         left = self._primary()
         while (op := self._current_token()) in ops:
             self._advance()
@@ -153,6 +162,8 @@ class Interpreter:
         self._env.define("add", lambda args: args[0] + args[1])
         self._env.define("sub", lambda args: args[0] - args[1])
         self._env.define("mul", lambda args: args[0] * args[1])
+        self._env.define("div", lambda args: args[0] // args[1])
+        self._env.define("mod", lambda args: args[0] % args[1])
         self._env.define("equal", lambda args: args[0] == args[1])
         self._env.define("print", lambda args: print(*args))
 
@@ -177,10 +188,14 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.parse(i.scan("""2 + 3"""))) # -> ('add', [2, 3])
-    print(i.parse(i.scan("""5 - 3"""))) # -> ('sub', [5, 3])
-    print(i.parse(i.scan("""2 + 3 - 4 + 5"""))) # -> ('add', [('sub', [('add', [2, 3]), 4]), 5])
+    print(i.parse(i.scan("""2 * 3"""))) # -> ('mul', [2, 3])
+    print(i.parse(i.scan("""6 / 3"""))) # -> ('div', [6, 3])
+    print(i.parse(i.scan("""7 % 3"""))) # -> ('mod', [7, 3])
+    print(i.parse(i.scan("""2 * 3 + 4"""))) # -> ('add', [('mul', [2, 3]), 4])
+    print(i.parse(i.scan("""2 + 3 * 4"""))) # -> ('add', [2, ('mul', [3, 4])])
 
-    print(i.go("""2 + 3""")) # -> 5
-    print(i.go("""5 - 3""")) # -> 2
-    print(i.go("""2 + 3 - 4 + 5""")) # -> 6
+    print(i.go("""2 * 3""")) # -> 6
+    print(i.go("""6 / 3""")) # -> 2
+    print(i.go("""7 % 3""")) # -> 1
+    print(i.go("""2 * 3 + 4""")) # -> 10
+    print(i.go("""2 + 3 * 4""")) # -> 14
