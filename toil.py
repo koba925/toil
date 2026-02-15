@@ -15,6 +15,12 @@ class Scanner:
                     break
                 case ch if ch.isnumeric():
                     self._number()
+                case ch if ch in "=!<>":
+                    start = self._pos
+                    self._advance()
+                    if self._current_char() == "=":
+                        self._advance()
+                    self._tokens.append(self._src[start:self._pos])
                 case ch if ch in "+-*/%":
                     self._tokens.append(ch)
                     self._advance()
@@ -51,6 +57,23 @@ class Parser:
         return expr
 
     def _expression(self):
+        return self._comparison()
+
+    def _comparison(self):
+        ops = {
+            "==": "equal", "!=": "not_equal",
+            "<": "less", ">": "greater",
+            "<=": "less_equal", ">=": "greater_equal"
+        }
+
+        left = self._add_sub()
+        while (op := self._current_token()) in ops:
+            self._advance()
+            right = self._add_sub()
+            left = (ops[op], [left, right])
+        return left
+
+    def _add_sub(self):
         ops = {"+": "add", "-": "sub"}
         left = self._mul_div_mod()
         while (op := self._current_token()) in ops:
@@ -159,12 +182,20 @@ class Interpreter:
 
     def init_env(self):
         self._env.define("__builtins__", None)
+
         self._env.define("add", lambda args: args[0] + args[1])
         self._env.define("sub", lambda args: args[0] - args[1])
         self._env.define("mul", lambda args: args[0] * args[1])
         self._env.define("div", lambda args: args[0] // args[1])
         self._env.define("mod", lambda args: args[0] % args[1])
+
         self._env.define("equal", lambda args: args[0] == args[1])
+        self._env.define("not_equal", lambda args: args[0] != args[1])
+        self._env.define("less", lambda args: args[0] < args[1])
+        self._env.define("greater", lambda args: args[0] > args[1])
+        self._env.define("less_equal", lambda args: args[0] <= args[1])
+        self._env.define("greater_equal", lambda args: args[0] >= args[1])
+
         self._env.define("print", lambda args: print(*args))
 
         self._env = Environment(self._env)
@@ -188,14 +219,24 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.parse(i.scan("""2 * 3"""))) # -> ('mul', [2, 3])
-    print(i.parse(i.scan("""6 / 3"""))) # -> ('div', [6, 3])
-    print(i.parse(i.scan("""7 % 3"""))) # -> ('mod', [7, 3])
-    print(i.parse(i.scan("""2 * 3 + 4"""))) # -> ('add', [('mul', [2, 3]), 4])
-    print(i.parse(i.scan("""2 + 3 * 4"""))) # -> ('add', [2, ('mul', [3, 4])])
+    print(i.go("2 + 5 == 3 + 4")) # -> True
+    print(i.go("2 + 3 == 3 + 4")) # -> False
+    print(i.go("2 + 5 != 3 + 4")) # -> False
+    print(i.go("2 + 3 != 3 + 4")) # -> True
 
-    print(i.go("""2 * 3""")) # -> 6
-    print(i.go("""6 / 3""")) # -> 2
-    print(i.go("""7 % 3""")) # -> 1
-    print(i.go("""2 * 3 + 4""")) # -> 10
-    print(i.go("""2 + 3 * 4""")) # -> 14
+    print(i.go("2 + 4 < 3 + 4")) # -> True
+    print(i.go("2 + 5 < 3 + 4")) # -> False
+    print(i.go("2 + 5 < 2 + 4")) # -> False
+    print(i.go("2 + 4 > 3 + 4")) # -> False
+    print(i.go("2 + 5 > 3 + 4")) # -> False
+    print(i.go("2 + 5 > 2 + 4")) # -> True
+
+    print(i.go("2 + 4 <= 3 + 4")) # -> True
+    print(i.go("2 + 5 <= 3 + 4")) # -> True
+    print(i.go("2 + 5 <= 2 + 4")) # -> False
+    print(i.go("2 + 4 >= 3 + 4")) # -> False
+    print(i.go("2 + 5 >= 3 + 4")) # -> True
+    print(i.go("2 + 5 >= 2 + 4")) # -> True
+
+    print(i.parse(i.scan("2 == 3 == 4"))) # -> ('equal', [('equal', [2, 3]), 4])
+    print(i.go("2 == 3 == 4")) # -> False

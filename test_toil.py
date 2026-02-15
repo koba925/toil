@@ -22,20 +22,28 @@ class TestScan(TestBase):
             self.i.scan("""a""")
 
 class TestParse(TestBase):
+    def test_comparison(self):
+        assert self.i.parse(self.i.scan("2 == 3 == 4")) == (
+            "equal", [("equal", [2, 3]), 4]
+        )
+
     def test_add_sub(self):
-        assert self.i.parse([2, "+", 3, "$EOF"]) == ("add", [2, 3])
-        assert self.i.parse([5, "-", 3, "$EOF"]) == ("add", [5, 3])
+        assert self.i.parse(self.i.scan("2 + 3 + 4")) == (
+            ("add", [("add", [2, 3]), 4])
+        )
 
     def test_number(self):
-        assert self.i.parse([2, "$EOF"]) == 2
+        assert self.i.parse(self.i.scan("2")) == (
+            2
+        )
 
     def test_no_token(self):
         with pytest.raises(AssertionError):
-            self.i.parse(["$EOF"])
+            self.i.parse(self.i.scan(""))
 
     def test_extra_token(self):
         with pytest.raises(AssertionError):
-            self.i.parse([2, 3, "$EOF"])
+            self.i.parse(self.i.scan("2 3"))
 
 class TestEvaluate(TestBase):
     def test_evaluate_value(self):
@@ -173,6 +181,28 @@ class TestGo(TestBase):
         assert self.i.go(""" 3""") == 3
         assert self.i.go("""4 \t""") == 4
         assert self.i.go("""56\n""") == 56
+
+    def test_comparison(self):
+        assert self.i.go("2 + 5 == 3 + 4") is True
+        assert self.i.go("2 + 3 == 3 + 4") is False
+        assert self.i.go("2 + 5 != 3 + 4") is False
+        assert self.i.go("2 + 3 != 3 + 4") is True
+
+        assert self.i.go("2 + 4 < 3 + 4") is True
+        assert self.i.go("2 + 5 < 3 + 4") is False
+        assert self.i.go("2 + 5 < 2 + 4") is False
+        assert self.i.go("2 + 4 > 3 + 4") is False
+        assert self.i.go("2 + 5 > 3 + 4") is False
+        assert self.i.go("2 + 5 > 2 + 4") is True
+
+        assert self.i.go("2 + 4 <= 3 + 4") is True
+        assert self.i.go("2 + 5 <= 3 + 4") is True
+        assert self.i.go("2 + 5 <= 2 + 4") is False
+        assert self.i.go("2 + 4 >= 3 + 4") is False
+        assert self.i.go("2 + 5 >= 3 + 4") is True
+        assert self.i.go("2 + 5 >= 2 + 4") is True
+
+        assert self.i.go("2 == 2 == 2") is False
 
     def test_add_sub(self):
         assert self.i.go("""2 + 3""") == 5
