@@ -18,8 +18,11 @@ class TestScan(TestBase):
         assert self.i.scan("""2 + 3""") == [2, "+", 3, "$EOF"]
         assert self.i.scan("""5 - 3""") == [5, "-", 3, "$EOF"]
 
-        with pytest.raises(AssertionError):
-            self.i.scan("""a""")
+    def test_bool_none_ident(self):
+        assert self.i.scan("True") == [True, "$EOF"]
+        assert self.i.scan("False") == [False, "$EOF"]
+        assert self.i.scan("None") == [None, "$EOF"]
+        assert self.i.scan("a") == ["a", "$EOF"]
 
 class TestParse(TestBase):
     def test_comparison(self):
@@ -44,6 +47,11 @@ class TestParse(TestBase):
     def test_extra_token(self):
         with pytest.raises(AssertionError):
             self.i.parse(self.i.scan("2 3"))
+
+    def test_bool_none(self):
+        assert self.i.parse([True, "$EOF"]) is True
+        assert self.i.parse([False, "$EOF"]) is False
+        assert self.i.parse([None, "$EOF"]) is None
 
 class TestEvaluate(TestBase):
     def test_evaluate_value(self):
@@ -221,6 +229,11 @@ class TestGo(TestBase):
 
         with pytest.raises(AssertionError):
             self.i.go("""a""")
+
+    def test_bool_none(self):
+        assert self.i.go("True") is True
+        assert self.i.go("False") is False
+        assert self.i.go("None") is None
 
     def test_no_code(self):
         with pytest.raises(AssertionError):

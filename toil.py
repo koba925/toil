@@ -1,3 +1,7 @@
+def is_name_first(c): return c.isalpha() or c == "_"
+def is_name_rest(c): return c.isalnum() or c == "_"
+def is_name(expr): return isinstance(expr, str) and is_name_first(expr[0])
+
 class Scanner:
     def __init__(self, src):
         self._src = src
@@ -15,6 +19,8 @@ class Scanner:
                     break
                 case ch if ch.isnumeric():
                     self._number()
+                case c if is_name_first(c):
+                    self._name()
                 case ch if ch in "=!<>":
                     start = self._pos
                     self._advance()
@@ -34,6 +40,18 @@ class Scanner:
         while self._current_char().isnumeric():
             self._advance()
         self._tokens.append(int(self._src[start:self._pos]))
+
+    def _name(self):
+        start = self._pos
+        self._advance()
+        while is_name_rest(self._current_char()):
+            self._advance()
+        token = self._src[start:self._pos]
+        match token:
+            case "None": self._tokens.append(None)
+            case "True": self._tokens.append(True)
+            case "False": self._tokens.append(False)
+            case _: self._tokens.append(token)
 
     def _advance(self):
         self._pos += 1
@@ -93,7 +111,7 @@ class Parser:
 
     def _primary(self):
         match self._current_token():
-            case int():
+            case None | bool() | int():
                 return self._advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
@@ -219,24 +237,6 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.go("2 + 5 == 3 + 4")) # -> True
-    print(i.go("2 + 3 == 3 + 4")) # -> False
-    print(i.go("2 + 5 != 3 + 4")) # -> False
-    print(i.go("2 + 3 != 3 + 4")) # -> True
-
-    print(i.go("2 + 4 < 3 + 4")) # -> True
-    print(i.go("2 + 5 < 3 + 4")) # -> False
-    print(i.go("2 + 5 < 2 + 4")) # -> False
-    print(i.go("2 + 4 > 3 + 4")) # -> False
-    print(i.go("2 + 5 > 3 + 4")) # -> False
-    print(i.go("2 + 5 > 2 + 4")) # -> True
-
-    print(i.go("2 + 4 <= 3 + 4")) # -> True
-    print(i.go("2 + 5 <= 3 + 4")) # -> True
-    print(i.go("2 + 5 <= 2 + 4")) # -> False
-    print(i.go("2 + 4 >= 3 + 4")) # -> False
-    print(i.go("2 + 5 >= 3 + 4")) # -> True
-    print(i.go("2 + 5 >= 2 + 4")) # -> True
-
-    print(i.parse(i.scan("2 == 3 == 4"))) # -> ('equal', [('equal', [2, 3]), 4])
-    print(i.go("2 == 3 == 4")) # -> False
+    print(i.go("None")) # -> None
+    print(i.go("True")) # -> True
+    print(i.go("False")) # -> False
