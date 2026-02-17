@@ -27,7 +27,7 @@ class Scanner:
                     if self._current_char() == "=":
                         self._advance()
                     self._tokens.append(self._src[start:self._pos])
-                case ch if ch in "+-*/%":
+                case ch if ch in "+-*/%;":
                     self._tokens.append(ch)
                     self._advance()
                 case invalid:
@@ -75,7 +75,13 @@ class Parser:
         return expr
 
     def _expression(self):
-        return self._comparison()
+        return self._not()
+
+    def _not(self):
+        if self._current_token() != "not":
+            return self._comparison()
+        self._advance()
+        return ("not", [self._not()])
 
     def _comparison(self):
         ops = {
@@ -102,12 +108,18 @@ class Parser:
 
     def _mul_div_mod(self):
         ops = {"*": "mul", "/": "div", "%": "mod"}
-        left = self._primary()
+        left = self._neg()
         while (op := self._current_token()) in ops:
             self._advance()
-            right = self._primary()
+            right = self._neg()
             left = (ops[op], [left, right])
         return left
+
+    def _neg(self):
+        if self._current_token() != "-":
+            return self._primary()
+        self._advance()
+        return ("neg", [self._neg()])
 
     def _primary(self):
         match self._current_token():
@@ -206,6 +218,7 @@ class Interpreter:
         self._env.define("mul", lambda args: args[0] * args[1])
         self._env.define("div", lambda args: args[0] // args[1])
         self._env.define("mod", lambda args: args[0] % args[1])
+        self._env.define("neg", lambda args: -args[0])
 
         self._env.define("equal", lambda args: args[0] == args[1])
         self._env.define("not_equal", lambda args: args[0] != args[1])
@@ -213,6 +226,7 @@ class Interpreter:
         self._env.define("greater", lambda args: args[0] > args[1])
         self._env.define("less_equal", lambda args: args[0] <= args[1])
         self._env.define("greater_equal", lambda args: args[0] >= args[1])
+        self._env.define("not", lambda args: not args[0])
 
         self._env.define("print", lambda args: print(*args))
 
@@ -237,6 +251,20 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.go("None")) # -> None
-    print(i.go("True")) # -> True
-    print(i.go("False")) # -> False
+    print(i.parse(i.scan(("not True")))) # -> ('not', [True])
+    print(i.go("not True")) # -> False
+    print(i.parse(i.scan(("not False")))) # -> ('not', [False])
+    print(i.go("not False")) # -> True
+    print(i.parse(i.scan(("not not False")))) # -> ('not', [('not', [False])])
+    print(i.go("not not False")) # -> False
+
+    print(i.parse(i.scan(("not 2 == 3")))) # -> ('not', [('equal', [2, 3])])
+    print(i.go("not 2 == 3")) # -> True
+
+    print(i.parse(i.scan(("-2")))) # -> ('neg', [2])
+    print(i.go("-2")) # -> -2
+    print(i.parse(i.scan(("--2")))) # -> ('neg', [('neg', [2])])
+    print(i.go("--2")) # -> 2
+
+    print(i.parse(i.scan(("-2 * 3")))) # -> ('mul', [('neg', [2]), 3])
+    print(i.go("-2 * 3")) # -> -6

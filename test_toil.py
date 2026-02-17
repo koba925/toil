@@ -7,6 +7,7 @@ class TestBase:
     def set_interpreter(self):
         self.i = Interpreter().init_env()
 
+
 class TestScan(TestBase):
     def test_number(self):
         assert self.i.scan("""2""") == [2, "$EOF"]
@@ -14,9 +15,10 @@ class TestScan(TestBase):
         assert self.i.scan("""\t4\n5\n""") == [4, 5, "$EOF"]
         assert self.i.scan(""" """) == ["$EOF"]
 
-    def test_add_sub(self):
-        assert self.i.scan("""2 + 3""") == [2, "+", 3, "$EOF"]
-        assert self.i.scan("""5 - 3""") == [5, "-", 3, "$EOF"]
+    def test_operator(self):
+        assert self.i.scan("""1 + 2""") == [1, "+", 2, "$EOF"]
+        assert self.i.scan("""1 * 2""") == [1, "*", 2, "$EOF"]
+        assert self.i.scan("""1 / 2""") == [1, "/", 2, "$EOF"]
 
     def test_bool_none_ident(self):
         assert self.i.scan("True") == [True, "$EOF"]
@@ -26,32 +28,44 @@ class TestScan(TestBase):
 
 class TestParse(TestBase):
     def test_comparison(self):
-        assert self.i.parse(self.i.scan("2 == 3 == 4")) == (
+        assert self.i.parse([2, "==", 3, "==", 4, "$EOF"]) == (
             "equal", [("equal", [2, 3]), 4]
         )
 
     def test_add_sub(self):
-        assert self.i.parse(self.i.scan("2 + 3 + 4")) == (
-            ("add", [("add", [2, 3]), 4])
-        )
+        assert self.i.parse([1, "+", 2, "$EOF"]) == ("add", [1, 2])
+        assert self.i.parse([1, "-", 2, "$EOF"]) == ("sub", [1, 2])
+        assert self.i.parse([1, "+", 2, "*", 3, "$EOF"]) == ("add", [1, ("mul", [2, 3])])
+        assert self.i.parse([1, "*", 2, "+", 3, "$EOF"]) == ("add", [("mul", [1, 2]), 3])
+
+    def test_mul_div(self):
+        assert self.i.parse([1, "*", 2, "$EOF"]) == ("mul", [1, 2])
+        assert self.i.parse([1, "/", 2, "$EOF"]) == ("div", [1, 2])
+        assert self.i.parse([1, "*", 2, "/", 3, "$EOF"]) == ("div", [("mul", [1, 2]), 3])
+
+    def test_not(self):
+        assert self.i.parse(["not", True, "$EOF"]) == ("not", [True])
+        assert self.i.parse(["not", "not", False, "$EOF"]) == ("not", [("not", [False])])
+
+    def test_neg(self):
+        assert self.i.parse(["-", 2, "$EOF"]) == ("neg", [2])
+        assert self.i.parse(["-", "-", 3, "$EOF"]) == ("neg", [("neg", [3])])
 
     def test_number(self):
-        assert self.i.parse(self.i.scan("2")) == (
-            2
-        )
-
-    def test_no_token(self):
-        with pytest.raises(AssertionError):
-            self.i.parse(self.i.scan(""))
-
-    def test_extra_token(self):
-        with pytest.raises(AssertionError):
-            self.i.parse(self.i.scan("2 3"))
+        assert self.i.parse([2, "$EOF"]) == 2
 
     def test_bool_none(self):
         assert self.i.parse([True, "$EOF"]) is True
         assert self.i.parse([False, "$EOF"]) is False
         assert self.i.parse([None, "$EOF"]) is None
+
+    def test_no_token(self):
+        with pytest.raises(AssertionError):
+            self.i.parse(["$EOF"])
+
+    def test_extra_token(self):
+        with pytest.raises(AssertionError):
+            self.i.parse([2, 3, "$EOF"])
 
 class TestEvaluate(TestBase):
     def test_evaluate_value(self):
@@ -221,8 +235,20 @@ class TestGo(TestBase):
         assert self.i.go("""2 * 3""") == 6
         assert self.i.go("""6 / 3""") == 2
         assert self.i.go("""7 % 3""") == 1
+        assert self.i.go("""2 * 3 / 2""") == 3
         assert self.i.go("""2 * 3 + 4""") == 10
         assert self.i.go("""2 + 3 * 4""") == 14
+
+    def test_not(self):
+        assert self.i.go("not True") is False
+        assert self.i.go("not False") is True
+        assert self.i.go("not not True") is True
+        assert self.i.go("not 2 == 3") is True
+
+    def test_neg(self):
+        assert self.i.go("-2") == -2
+        assert self.i.go("--2") == 2
+        assert self.i.go("-2 * 3") == -6
 
     def test_number(self):
         assert self.i.go("""2""") == 2
