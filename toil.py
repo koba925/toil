@@ -27,7 +27,7 @@ class Scanner:
                     if self._current_char() == "=":
                         self._advance()
                     self._tokens.append(self._src[start:self._pos])
-                case ch if ch in "+-*/%;":
+                case ch if ch in "+-*/%();":
                     self._tokens.append(ch)
                     self._advance()
                 case invalid:
@@ -125,15 +125,26 @@ class Parser:
         match self._current_token():
             case None | bool() | int():
                 return self._advance()
+            case "(":
+                self._advance()
+                expr = self._expression()
+                self._consume(")")
+                return expr
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
+
+    def _consume(self, expected):
+        assert self._current_token() == expected, \
+            f"Expected `{expected}` @ consume: `{self._current_token()}"
+        return self._advance()
+
+    def _current_token(self):
+        return self._tokens[self._pos]
 
     def _advance(self):
         self._pos += 1
         return self._tokens[self._pos - 1]
 
-    def _current_token(self):
-        return self._tokens[self._pos]
 
 class Environment:
     def __init__(self, parent=None):
@@ -251,20 +262,8 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.parse(i.scan(("not True")))) # -> ('not', [True])
-    print(i.go("not True")) # -> False
-    print(i.parse(i.scan(("not False")))) # -> ('not', [False])
-    print(i.go("not False")) # -> True
-    print(i.parse(i.scan(("not not False")))) # -> ('not', [('not', [False])])
-    print(i.go("not not False")) # -> False
+    print(i.parse(i.scan(("(2 + 3) * 4")))) # -> ('mul', [('add', [2, 3]), 4])
+    print(i.go("(2 + 3) * 4")) # -> 20
 
-    print(i.parse(i.scan(("not 2 == 3")))) # -> ('not', [('equal', [2, 3])])
-    print(i.go("not 2 == 3")) # -> True
-
-    print(i.parse(i.scan(("-2")))) # -> ('neg', [2])
-    print(i.go("-2")) # -> -2
-    print(i.parse(i.scan(("--2")))) # -> ('neg', [('neg', [2])])
-    print(i.go("--2")) # -> 2
-
-    print(i.parse(i.scan(("-2 * 3")))) # -> ('mul', [('neg', [2]), 3])
-    print(i.go("-2 * 3")) # -> -6
+    print(i.parse(i.scan(("2 * (3 + 4)")))) # -> ('mul', [2, ('add', [3, 4])])
+    print(i.go("2 * (3 + 4)")) # -> 14

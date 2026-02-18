@@ -59,6 +59,10 @@ class TestParse(TestBase):
         assert self.i.parse([False, "$EOF"]) is False
         assert self.i.parse([None, "$EOF"]) is None
 
+    def test_paren(self):
+        assert self.i.parse(["(", 1, "+", 2, ")", "$EOF"]) == ("add", [1, 2])
+        assert self.i.parse(["(", 1, "+", 2, ")", "*", 3, "$EOF"]) == ("mul", [("add", [1, 2]), 3])
+
     def test_no_token(self):
         with pytest.raises(AssertionError):
             self.i.parse(["$EOF"])
@@ -260,6 +264,11 @@ class TestGo(TestBase):
         assert self.i.go("True") is True
         assert self.i.go("False") is False
         assert self.i.go("None") is None
+
+    def test_paren(self):
+        assert self.i.go("(2 + 3) * 4") == 20
+        assert self.i.go("2 * (3 + 4)") == 14
+        assert self.i.go("2 * (3 + 4 * 5)") == 46
 
     def test_no_code(self):
         with pytest.raises(AssertionError):
