@@ -21,7 +21,7 @@ class Scanner:
                     self._number()
                 case c if is_name_first(c):
                     self._name()
-                case ch if ch in "=!<>":
+                case ch if ch in "=!<>:":
                     start = self._pos
                     self._advance()
                     if self._current_char() == "=":
@@ -75,7 +75,14 @@ class Parser:
         return expr
 
     def _expression(self):
-        return self._not()
+        return self._sequence()
+
+    def _sequence(self):
+        exprs = [self._not()]
+        while self._current_token() == ";":
+            self._advance()
+            exprs.append(self._not())
+        return exprs[0] if len(exprs) == 1 else ("seq", exprs)
 
     def _not(self):
         if self._current_token() != "not":
@@ -262,8 +269,11 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.parse(i.scan(("(2 + 3) * 4")))) # -> ('mul', [('add', [2, 3]), 4])
-    print(i.go("(2 + 3) * 4")) # -> 20
+    print(i.parse(i.scan(("2; 3")))) # -> ('seq', [2, 3])
+    print(i.go("2; 3")) # -> 3
 
-    print(i.parse(i.scan(("2 * (3 + 4)")))) # -> ('mul', [2, ('add', [3, 4])])
-    print(i.go("2 * (3 + 4)")) # -> 14
+    print(i.parse(i.scan(("2; 3; 4")))) # -> ('seq', [2, 3, 4])
+    print(i.go("2; 3; 4")) # -> 4
+
+    print(i.parse(i.scan(("True; not True")))) # -> ('seq', [True, ('not', [True])])
+    print(i.go("True; not True")) # -> False
