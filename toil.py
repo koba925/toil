@@ -137,6 +137,15 @@ class Parser:
                 expr = self._expression()
                 self._consume(")")
                 return expr
+            case "if":
+                self._advance()
+                cond_expr = self._expression()
+                self._consume("then")
+                then_expr = self._expression()
+                self._consume("else")
+                else_expr = self._expression()
+                self._consume("end")
+                return ("if", cond_expr, then_expr, else_expr)
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
 
@@ -269,11 +278,8 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.parse(i.scan(("2; 3")))) # -> ('seq', [2, 3])
-    print(i.go("2; 3")) # -> 3
+    print(i.parse(i.scan("if True then 2 else 3 end"))) # -> ('if', True, 2, 3)
+    print(i.go("if True then 2 else 3 end")) # -> 2
 
-    print(i.parse(i.scan(("2; 3; 4")))) # -> ('seq', [2, 3, 4])
-    print(i.go("2; 3; 4")) # -> 4
-
-    print(i.parse(i.scan(("True; not True")))) # -> ('seq', [True, ('not', [True])])
-    print(i.go("True; not True")) # -> False
+    print(i.parse(i.scan("if not True then 2 + 3 else 4; 5 end"))) # -> ('if', ('not', [True]), ('add', [2, 3]), ('seq', [4, 5]))
+    print(i.go("if not True then 2 + 3 else 4; 5 end")) # -> 5
