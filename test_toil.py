@@ -29,6 +29,9 @@ class TestScan(TestBase):
         assert self.i.scan("None") == [None, "$EOF"]
         assert self.i.scan("a") == ["a", "$EOF"]
 
+    def test_define(self):
+        assert self.i.scan("a := 2") == ["a", ":=", 2, "$EOF"]
+
 class TestParse(TestBase):
     def test_comparison(self):
         assert self.parse_from_src("2 == 3 == 4") == (
@@ -75,6 +78,10 @@ class TestParse(TestBase):
             ("if", True, 2, 3)
         assert self.parse_from_src("if not True then 2 + 3 else 4; 5 end") == \
             ("if", ('not', [True]), ('add', [2, 3]), ('seq', [4, 5]))
+
+    def test_define(self):
+        assert self.parse_from_src("a := not True") == ("define", "a", ("not", [True]))
+        assert self.parse_from_src("a := b := 2") == ("define", "a", ("define", "b", 2))
 
     def test_no_token(self):
         with pytest.raises(AssertionError):
@@ -291,6 +298,20 @@ class TestGo(TestBase):
     def test_if(self):
         assert self.i.go("if True then 2 else 3 end") == 2
         assert self.i.go("if not True then 2 + 3 else 4; 5 end") == 5
+
+        with pytest.raises(AssertionError):
+            self.i.go(""" if True then 2 else 3 """)
+        with pytest.raises(AssertionError):
+            self.i.go(""" if True then 2 end """)
+        with pytest.raises(AssertionError):
+            self.i.go(""" if True else 2 end """)
+
+    def test_var_define(self):
+        assert self.i.go("a := not True") == False
+        assert self.i.go("a") == False
+        assert self.i.go("a := b := not False") == True
+        assert self.i.go("a") == True
+        assert self.i.go("b") == True
 
     def test_no_code(self):
         with pytest.raises(AssertionError):

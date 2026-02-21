@@ -78,11 +78,18 @@ class Parser:
         return self._sequence()
 
     def _sequence(self):
-        exprs = [self._not()]
+        exprs = [self._define()]
         while self._current_token() == ";":
             self._advance()
-            exprs.append(self._not())
+            exprs.append(self._define())
         return exprs[0] if len(exprs) == 1 else ("seq", exprs)
+
+    def _define(self):
+        left = self._not()
+        if self._current_token() == ":=":
+            self._advance()
+            return ("define", left, self._define())
+        return left
 
     def _not(self):
         if self._current_token() != "not":
@@ -133,25 +140,33 @@ class Parser:
             case None | bool() | int():
                 return self._advance()
             case "(":
-                self._advance()
-                expr = self._expression()
-                self._consume(")")
-                return expr
+                return self._paren()
             case "if":
-                self._advance()
-                cond_expr = self._expression()
-                self._consume("then")
-                then_expr = self._expression()
-                self._consume("else")
-                else_expr = self._expression()
-                self._consume("end")
-                return ("if", cond_expr, then_expr, else_expr)
+                return self._if()
+            case str(name) if is_name(name):
+                return self._advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
 
+    def _paren(self):
+        self._advance()
+        expr = self._expression()
+        self._consume(")")
+        return expr
+
+    def _if(self):
+        self._advance()
+        cond_expr = self._expression()
+        self._consume("then")
+        then_expr = self._expression()
+        self._consume("else")
+        else_expr = self._expression()
+        self._consume("end")
+        return ("if", cond_expr, then_expr, else_expr)
+
     def _consume(self, expected):
         assert self._current_token() == expected, \
-            f"Expected `{expected}` @ consume: `{self._current_token()}"
+            f"Expected `{expected}` @ consume: {self._current_token()}"
         return self._advance()
 
     def _current_token(self):
@@ -278,8 +293,17 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.parse(i.scan("if True then 2 else 3 end"))) # -> ('if', True, 2, 3)
-    print(i.go("if True then 2 else 3 end")) # -> 2
+    # Error cases for if
 
-    print(i.parse(i.scan("if not True then 2 + 3 else 4; 5 end"))) # -> ('if', ('not', [True]), ('add', [2, 3]), ('seq', [4, 5]))
-    print(i.go("if not True then 2 + 3 else 4; 5 end")) # -> 5
+    # print(i.go(""" if True then 2 else 3 """)) # -> Error
+    # print(i.go(""" if True then 2 end """)) # -> Error
+    # print(i.go(""" if True else 2 end """)) # -> Error
+
+    print(i.parse(i.scan("a := not False"))) # -> ('define', 'a', ('not', [False]))
+    print(i.go("a := not False")) # -> True
+    print(i.go("a")) # -> True
+
+    print(i.parse(i.scan("a := b := not True"))) # -> ('define', 'a', ('define', 'b', ('not', [True])))
+    print(i.go("a := b := not True")) # -> False
+    print(i.go("a")) # -> False
+    print(i.go("b")) # -> False
