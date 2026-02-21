@@ -27,7 +27,7 @@ class Scanner:
                     if self._current_char() == "=":
                         self._advance()
                     self._tokens.append(self._src[start:self._pos])
-                case ch if ch in "+-*/%();":
+                case ch if ch in "+-*/%();,":
                     self._tokens.append(ch)
                     self._advance()
                 case invalid:
@@ -131,9 +131,26 @@ class Parser:
 
     def _neg(self):
         if self._current_token() != "-":
-            return self._primary()
+            return self._call()
         self._advance()
         return ("neg", [self._neg()])
+
+    def _call(self):
+        func = self._primary()
+        while self._current_token() == "(":
+            self._advance()
+            func = (func, self._comma_separated_exprs())
+        return func
+
+    def _comma_separated_exprs(self):
+        cse = []
+        if self._current_token() != ")":
+            cse.append(self._expression())
+            while self._current_token() == ",":
+                self._advance()
+                cse.append(self._expression())
+        self._consume(")")
+        return cse
 
     def _primary(self):
         match self._current_token():
@@ -293,17 +310,15 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    # Error cases for if
+    print(i.parse(i.scan(""" print() """))) # -> ('print', [])
+    i.go(""" print() """) # -> prints newline
 
-    # print(i.go(""" if True then 2 else 3 """)) # -> Error
-    # print(i.go(""" if True then 2 end """)) # -> Error
-    # print(i.go(""" if True else 2 end """)) # -> Error
+    print(i.parse(i.scan(""" neg(2) """))) # -> ('neg', [2])
+    print(i.go(""" neg(2) """)) # -> -2
 
-    print(i.parse(i.scan("a := not False"))) # -> ('define', 'a', ('not', [False]))
-    print(i.go("a := not False")) # -> True
-    print(i.go("a")) # -> True
+    print(i.parse(i.scan(""" add(2, mul(3, 4)) """))) # -> ('add', [2, ('mul', [3, 4])])
+    print(i.go(""" add(2, mul(3, 4)) """)) # -> 14
 
-    print(i.parse(i.scan("a := b := not True"))) # -> ('define', 'a', ('define', 'b', ('not', [True])))
-    print(i.go("a := b := not True")) # -> False
-    print(i.go("a")) # -> False
-    print(i.go("b")) # -> False
+    # print(i.go(""" print( """ )) # -> Error
+    # print(i.go(""" print(2 """ )) # -> Error
+    # print(i.go(""" print(2, """ )) # -> Error

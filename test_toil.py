@@ -83,6 +83,11 @@ class TestParse(TestBase):
         assert self.parse_from_src("a := not True") == ("define", "a", ("not", [True]))
         assert self.parse_from_src("a := b := 2") == ("define", "a", ("define", "b", 2))
 
+    def test_call(self):
+        assert self.parse_from_src("print()") == ("print", [])
+        assert self.parse_from_src("neg(2)") == ("neg", [2])
+        assert self.parse_from_src("add(2, mul(3, 4))") == ("add", [2, ("mul", [3, 4])])
+
     def test_no_token(self):
         with pytest.raises(AssertionError):
             self.parse_from_src("")
@@ -312,6 +317,16 @@ class TestGo(TestBase):
         assert self.i.go("a := b := not False") == True
         assert self.i.go("a") == True
         assert self.i.go("b") == True
+
+    def test_call(self, capsys):
+        assert self.i.go("add(2, 3)") == 5
+        assert self.i.go("add(2, mul(3, 4))") == 14
+        self.i.go("print(5)")
+        assert capsys.readouterr().out == "5\n"
+        self.i.go("print(6, 7)")
+        assert capsys.readouterr().out == "6 7\n"
+        self.i.go("print()")
+        assert capsys.readouterr().out == "\n"
 
     def test_no_code(self):
         with pytest.raises(AssertionError):
