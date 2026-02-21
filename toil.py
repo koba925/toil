@@ -298,13 +298,14 @@ class Interpreter:
     def parse(self, tokens):
         return Parser(tokens).parse()
 
+    def ast(self, src):
+        return self.parse(self.scan(src))
+
     def evaluate(self, expr):
         return Evaluator().evaluate(expr, self._env)
 
     def go(self, src):
-        tokens = self.scan(src)
-        expr = self.parse(tokens)
-        return self.evaluate(expr)
+        return self.evaluate(self.ast(src))
 
 
 if __name__ == "__main__":
