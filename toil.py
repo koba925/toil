@@ -13,6 +13,11 @@ class Scanner:
             while self._current_char().isspace():
                 self._advance()
 
+            if self._current_char() == "#":
+                while self._current_char() not in ("\n", "$EOF"):
+                    self._advance()
+                continue
+
             match self._current_char():
                 case "$EOF":
                     self._tokens.append("$EOF")
@@ -345,29 +350,24 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.ast(""" a = 3 """)) # -> ('assign', 'a', 3)
-    print(i.go(""" a := 2; a = 3 """)) # -> 3
-    print(i.go(""" a """)) # -> 3
-
-    print(i.ast(""" a = b = 3 """)) # -> ('assign', 'a', ('assign', 'b', 3))
-    print(i.go(""" a := b := 2; a = b = 3 """)) # -> 3
-    print(i.go(""" a """)) # -> 3
-    print(i.go(""" b """)) # -> 3
-
-    print(i.ast(""" a := b = c := 3 """)) # -> ('define', 'a', ('assign', 'b', ('define', 'c', 3)))
+    print(i.ast(""" a = 3 # define variable a with value 3 """)) # -> ('assign', 'a', 3)
+    print(i.ast("""
+        # comment in multiline code
+        a = 3
+    """)) # -> ('assign', 'a', 3)
 
     i.go("""
         a := b := 2;
-        print(a, b);
+        print(a, b); # -> 2 2
         scope
-            print(a, b);
+            print(a, b); # -> 2 2
             a := 3;
             b = 4;
-            print(a, b);
+            print(a, b); # -> 3 4
             c := 5;
-            print(a, b, c)
+            print(a, b, c) # -> 3 4 5
         end;
-        print(a, b)
-    """) # -> 2 2, 2 2, 3 4, 3 4 5, 2 4
+        print(a, b) # -> 2 4
+    """)
 
     # i.go(""" c """) # -> Error

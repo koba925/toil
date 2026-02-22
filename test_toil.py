@@ -418,3 +418,6 @@ class TestGo(TestBase):
     def test_extra_token(self):
         with pytest.raises(AssertionError):
             self.i.go(""" 7 8 """)
+
+if __name__ == "__main__":
+    pytest.main([__file__])
