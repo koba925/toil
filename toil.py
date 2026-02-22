@@ -160,6 +160,8 @@ class Parser:
                 return self._scope()
             case "if":
                 return self._if()
+            case "while":
+                return self._while()
             case str(name) if is_name(name):
                 return self._advance()
             case unexpected:
@@ -174,15 +176,15 @@ class Parser:
     def _func(self):
         self._advance()
         params = self._comma_separated_exprs("do")
-        body = self._expression()
+        body_expr = self._expression()
         self._consume("end")
-        return ("func", params, body)
+        return ("func", params, body_expr)
 
     def _scope(self):
         self._advance()
-        body = self._expression()
+        body_expr = self._expression()
         self._consume("end")
-        return ("scope", body)
+        return ("scope", body_expr)
 
     def _if(self):
         self._advance()
@@ -193,6 +195,14 @@ class Parser:
         else_expr = self._expression()
         self._consume("end")
         return ("if", cond_expr, then_expr, else_expr)
+
+    def _while(self):
+        self._advance()
+        cond_expr = self._expression()
+        self._consume("do")
+        body_expr = self._expression()
+        self._consume("end")
+        return ("while", cond_expr, body_expr)
 
     def _comma_separated_exprs(self, terminate):
         cse = []
@@ -268,6 +278,8 @@ class Evaluator:
                 return self._evaluate_seq(exprs, env)
             case ("if", cond_expr, then_expr, else_expr):
                 return self._evaluate_if(cond_expr, then_expr, else_expr, env)
+            case ("while", cond_expr, body_expr):
+                return self._evaluate_while(cond_expr, body_expr, env)
             case ("func", params, body):
                 return ("closure", params, body, env)
             case ("scope", expr):
@@ -288,6 +300,11 @@ class Evaluator:
             return self.evaluate(then_expr, env)
         else:
             return self.evaluate(else_expr, env)
+
+    def _evaluate_while(self, cond_expr, body_expr, env):
+        while self.evaluate(cond_expr, env):
+            self.evaluate(body_expr, env)
+        return None
 
     def _eval_op(self, op_expr, args_expr, env):
         op_val = self.evaluate(op_expr, env)
@@ -350,24 +367,17 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.ast(""" a = 3 # define variable a with value 3 """)) # -> ('assign', 'a', 3)
-    print(i.ast("""
-        # comment in multiline code
-        a = 3
-    """)) # -> ('assign', 'a', 3)
+    print(i.ast(""" while i < 10 do i = i + 1 end """)) # -> ('while', ('less', ['i', 10]), ('assign', 'i', ('add', ['i', 1])))
 
     i.go("""
-        a := b := 2;
-        print(a, b); # -> 2 2
-        scope
-            print(a, b); # -> 2 2
-            a := 3;
-            b = 4;
-            print(a, b); # -> 3 4
-            c := 5;
-            print(a, b, c) # -> 3 4 5
+        sum := i := 0;
+        while i < 10 do
+            sum = sum + i;
+            i = i + 1
         end;
-        print(a, b) # -> 2 4
-    """)
+        print(sum)
+    """) # -> prints 45
 
-    # i.go(""" c """) # -> Error
+    # i.go(""" while do i = i + 1 end """) # -> Error
+    # i.go(""" while i < 10 i = i + 1 end """) # -> Error
+    # i.go(""" while i < 10 do i = i + 1 """) # -> Error

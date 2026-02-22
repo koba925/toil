@@ -87,6 +87,9 @@ class TestParse(TestBase):
         assert self.i.ast(""" a := b = 2 """) == ("define", "a", ("assign", "b", 2))
         assert self.i.ast(""" a := b = c := 3 """) == ("define", "a", ("assign", "b", ("define", "c", 3)))
 
+    def test_while(self):
+        assert self.i.ast(""" while i < 10 do i = i + 1 end """) == ('while', ('less', ['i', 10]), ('assign', 'i', ('add', ['i', 1])))
+
     def test_call(self):
         assert self.i.ast(""" print() """) == ("print", [])
         assert self.i.ast(""" neg(2) """) == ("neg", [2])
@@ -363,6 +366,26 @@ class TestGo(TestBase):
 
         with pytest.raises(AssertionError):
             self.i.go(""" c """)
+
+    def test_while(self):
+        assert self.i.go("""
+            sum := i := 0;
+            while i < 10 do
+                sum = sum + i;
+                i = i + 1
+            end;
+            sum
+        """) == 45
+
+        assert self.i.go(""" while False do 1 end """) is None
+        assert self.i.go(""" i := 0; while False do i = 1 end; i """) == 0
+
+        with pytest.raises(AssertionError): # No condition
+            self.i.go(""" while do i = i + 1 end """)
+        with pytest.raises(AssertionError, match="Expected `do`"):
+            self.i.go(""" while i < 10 i = i + 1 end """)
+        with pytest.raises(AssertionError, match="Expected `end`"):
+            self.i.go(""" while i < 10 do i = i + 1 """)
 
     def test_call(self, capsys):
         assert self.i.go(""" add(2, 3) """) == 5
