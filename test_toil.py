@@ -26,8 +26,9 @@ class TestScan(TestBase):
         assert self.i.scan(""" None """) == [None, "$EOF"]
         assert self.i.scan(""" a """) == ["a", "$EOF"]
 
-    def test_define(self):
+    def test_define_assign(self):
         assert self.i.scan(""" a := 2 """) == ["a", ":=", 2, "$EOF"]
+        assert self.i.scan(""" a = 2 """) == ["a", "=", 2, "$EOF"]
 
 class TestParse(TestBase):
     def test_comparison(self):
@@ -79,6 +80,12 @@ class TestParse(TestBase):
     def test_define(self):
         assert self.i.ast(""" a := not True """) == ("define", "a", ("not", [True]))
         assert self.i.ast(""" a := b := 2 """) == ("define", "a", ("define", "b", 2))
+
+    def test_assign(self):
+        assert self.i.ast(""" a = 1 """) == ("assign", "a", 1)
+        assert self.i.ast(""" a = b = 2 """) == ("assign", "a", ("assign", "b", 2))
+        assert self.i.ast(""" a := b = 2 """) == ("define", "a", ("assign", "b", 2))
+        assert self.i.ast(""" a := b = c := 3 """) == ("define", "a", ("assign", "b", ("define", "c", 3)))
 
     def test_call(self):
         assert self.i.ast(""" print() """) == ("print", [])
@@ -137,6 +144,13 @@ class TestEvaluate(TestBase):
     def test_evaluate_undefined_variable(self):
         with pytest.raises(AssertionError):
             self.i.evaluate("a")
+
+    def test_evaluate_assign(self):
+        self.i.evaluate(("define", "a", 1))
+        assert self.i.evaluate(("assign", "a", 2)) == 2
+        assert self.i.evaluate("a") == 2
+        with pytest.raises(AssertionError):
+            self.i.evaluate(("assign", "b", 2))
 
     def test_evaluate_scope(self, capsys):
         self.i.evaluate(("define", "a", 2))
@@ -324,6 +338,31 @@ class TestGo(TestBase):
         assert self.i.go(""" a := b := not False """) == True
         assert self.i.go(""" a """) == True
         assert self.i.go(""" b """) == True
+
+    def test_assign(self):
+        assert self.i.go(""" a := 1; a = 2; a """) == 2
+        assert self.i.go(""" a := 1; b := 2; a = b = 3; a """) == 3
+        assert self.i.go(""" a := 2; a = 3 """) == 3
+        assert self.i.go(""" a := b := 2; a = b = 3 """) == 3
+
+    def test_scope_assign(self, capsys):
+        self.i.go("""
+            a := b := 2;
+            print(a, b);
+            scope
+                print(a, b);
+                a := 3;
+                b = 4;
+                print(a, b);
+                c := 5;
+                print(a, b, c)
+            end;
+            print(a, b)
+        """)
+        assert capsys.readouterr().out == "2 2\n2 2\n3 4\n3 4 5\n2 4\n"
+
+        with pytest.raises(AssertionError):
+            self.i.go(""" c """)
 
     def test_call(self, capsys):
         assert self.i.go(""" add(2, 3) """) == 5

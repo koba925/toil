@@ -78,17 +78,18 @@ class Parser:
         return self._sequence()
 
     def _sequence(self):
-        exprs = [self._define()]
+        exprs = [self._define_assign()]
         while self._current_token() == ";":
             self._advance()
-            exprs.append(self._define())
+            exprs.append(self._define_assign())
         return exprs[0] if len(exprs) == 1 else ("seq", exprs)
 
-    def _define(self):
+    def _define_assign(self):
+        ops = {":=": "define", "=": "assign"}
         left = self._not()
-        if self._current_token() == ":=":
+        if (op := self._current_token()) in ops:
             self._advance()
-            return ("define", left, self._define())
+            return (ops[op], left, self._define_assign())
         return left
 
     def _not(self):
@@ -150,6 +151,8 @@ class Parser:
                 return self._advance()
             case "func":
                 return self._func()
+            case "scope":
+                return self._scope()
             case "if":
                 return self._if()
             case str(name) if is_name(name):
@@ -169,6 +172,12 @@ class Parser:
         body = self._expression()
         self._consume("end")
         return ("func", params, body)
+
+    def _scope(self):
+        self._advance()
+        body = self._expression()
+        self._consume("end")
+        return ("scope", body)
 
     def _if(self):
         self._advance()
@@ -219,11 +228,21 @@ class Environment:
 
     def lookup(self, name):
         if name in self._vars:
-            return self._vars[name]
+            return self
         elif self._parent is not None:
             return self._parent.lookup(name)
         else:
-            assert False, f"Undefined variable @ lookup(): {name}"
+            return None
+
+    def val(self, name):
+        assert name in self._vars, f"Undefined variable @ val(): {name}"
+        return self._vars[name]
+
+    def set_val(self, name, val):
+        assert name in self._vars, f"Undefined variable @ set_val(): {name}"
+        self._vars[name] = val
+        return val
+
 
 class Evaluator:
     def evaluate(self, expr, env):
@@ -231,9 +250,15 @@ class Evaluator:
             case None | bool() | int():
                 return expr
             case str(name):
-                return env.lookup(name)
+                frame = env.lookup(name)
+                assert frame is not None, f"Undefined variable @ evaluate(): {name}"
+                return frame.val(name)
             case ("define", str(name), val):
                 return env.define(name, self.evaluate(val, env))
+            case ("assign", str(name), val):
+                frame = env.lookup(name)
+                assert frame is not None, f"Assign to undefined variable @ evaluate(): {name}"
+                return frame.set_val(name, self.evaluate(val, env))
             case ("seq", exprs):
                 return self._evaluate_seq(exprs, env)
             case ("if", cond_expr, then_expr, else_expr):
@@ -320,45 +345,29 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.ast(""" func do 2 end """)) # -> ('func', [], 2)
-    print(i.go(""" func do 2 end """)) # -> ('closure', [], 2, ...)
-    print(i.go(""" func do 2 end () """)) # -> 2
+    print(i.ast(""" a = 3 """)) # -> ('assign', 'a', 3)
+    print(i.go(""" a := 2; a = 3 """)) # -> 3
+    print(i.go(""" a """)) # -> 3
 
-    print(i.ast(""" func a do a + 2 end """)) # -> ('func', ['a'], ('add', ['a', 2]))
-    print(i.go(""" func a do a + 2 end """)) # -> ('closure', ['a'], ('add', ['a', 2]), ...)
-    print(i.go(""" func a do a + 2 end (3) """)) # -> 5
+    print(i.ast(""" a = b = 3 """)) # -> ('assign', 'a', ('assign', 'b', 3))
+    print(i.go(""" a := b := 2; a = b = 3 """)) # -> 3
+    print(i.go(""" a """)) # -> 3
+    print(i.go(""" b """)) # -> 3
 
-    # print(i.ast(""" func a 2 end """)) # -> Error
-    # print(i.ast(""" func a do 2 """)) # -> Error
-
-    i.go("""
-        fac := func n do
-            if n == 1 then 1 else n * fac(n - 1) end
-        end;
-        print(fac(5))
-    """) # prints 120
+    print(i.ast(""" a := b = c := 3 """)) # -> ('define', 'a', ('assign', 'b', ('define', 'c', 3)))
 
     i.go("""
-        fib := func n do
-            if n < 2 then n else fib(n - 1) + fib(n - 2) end
+        a := b := 2;
+        print(a, b);
+        scope
+            print(a, b);
+            a := 3;
+            b = 4;
+            print(a, b);
+            c := 5;
+            print(a, b, c)
         end;
-        print(fib(7))
-    """) # prints 13
+        print(a, b)
+    """) # -> 2 2, 2 2, 3 4, 3 4 5, 2 4
 
-    i.go("""
-        gcd := func a, b do
-            if a == 0 then b else gcd(b % a, a) end
-        end;
-        print(gcd(24, 36))
-    """) # prints 12
-
-    i.go("""
-        is_even := func n do
-            if n == 0 then True else is_odd(n - 1) end
-        end;
-        is_odd := func n do
-            if n == 0 then False else is_even(n - 1) end
-        end;
-        print(is_even(10));
-        print(is_odd(10))
-    """) # prints True, then False
+    # i.go(""" c """) # -> Error
