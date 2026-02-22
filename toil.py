@@ -139,25 +139,17 @@ class Parser:
         func = self._primary()
         while self._current_token() == "(":
             self._advance()
-            func = (func, self._comma_separated_exprs())
+            func = (func, self._comma_separated_exprs(")"))
         return func
-
-    def _comma_separated_exprs(self):
-        cse = []
-        if self._current_token() != ")":
-            cse.append(self._expression())
-            while self._current_token() == ",":
-                self._advance()
-                cse.append(self._expression())
-        self._consume(")")
-        return cse
 
     def _primary(self):
         match self._current_token():
-            case None | bool() | int():
-                return self._advance()
             case "(":
                 return self._paren()
+            case None | bool() | int():
+                return self._advance()
+            case "func":
+                return self._func()
             case "if":
                 return self._if()
             case str(name) if is_name(name):
@@ -171,6 +163,13 @@ class Parser:
         self._consume(")")
         return expr
 
+    def _func(self):
+        self._advance()
+        params = self._comma_separated_exprs("do")
+        body = self._expression()
+        self._consume("end")
+        return ("func", params, body)
+
     def _if(self):
         self._advance()
         cond_expr = self._expression()
@@ -180,6 +179,16 @@ class Parser:
         else_expr = self._expression()
         self._consume("end")
         return ("if", cond_expr, then_expr, else_expr)
+
+    def _comma_separated_exprs(self, terminate):
+        cse = []
+        if self._current_token() != terminate:
+            cse.append(self._expression())
+            while self._current_token() == ",":
+                self._advance()
+                cse.append(self._expression())
+        self._consume(terminate)
+        return cse
 
     def _consume(self, expected):
         assert self._current_token() == expected, \
@@ -311,15 +320,45 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.parse(i.scan(""" print() """))) # -> ('print', [])
-    i.go(""" print() """) # -> prints newline
+    print(i.ast(""" func do 2 end """)) # -> ('func', [], 2)
+    print(i.go(""" func do 2 end """)) # -> ('closure', [], 2, ...)
+    print(i.go(""" func do 2 end () """)) # -> 2
 
-    print(i.parse(i.scan(""" neg(2) """))) # -> ('neg', [2])
-    print(i.go(""" neg(2) """)) # -> -2
+    print(i.ast(""" func a do a + 2 end """)) # -> ('func', ['a'], ('add', ['a', 2]))
+    print(i.go(""" func a do a + 2 end """)) # -> ('closure', ['a'], ('add', ['a', 2]), ...)
+    print(i.go(""" func a do a + 2 end (3) """)) # -> 5
 
-    print(i.parse(i.scan(""" add(2, mul(3, 4)) """))) # -> ('add', [2, ('mul', [3, 4])])
-    print(i.go(""" add(2, mul(3, 4)) """)) # -> 14
+    # print(i.ast(""" func a 2 end """)) # -> Error
+    # print(i.ast(""" func a do 2 """)) # -> Error
 
-    # print(i.go(""" print( """ )) # -> Error
-    # print(i.go(""" print(2 """ )) # -> Error
-    # print(i.go(""" print(2, """ )) # -> Error
+    i.go("""
+        fac := func n do
+            if n == 1 then 1 else n * fac(n - 1) end
+        end;
+        print(fac(5))
+    """) # prints 120
+
+    i.go("""
+        fib := func n do
+            if n < 2 then n else fib(n - 1) + fib(n - 2) end
+        end;
+        print(fib(7))
+    """) # prints 13
+
+    i.go("""
+        gcd := func a, b do
+            if a == 0 then b else gcd(b % a, a) end
+        end;
+        print(gcd(24, 36))
+    """) # prints 12
+
+    i.go("""
+        is_even := func n do
+            if n == 0 then True else is_odd(n - 1) end
+        end;
+        is_odd := func n do
+            if n == 0 then False else is_even(n - 1) end
+        end;
+        print(is_even(10));
+        print(is_odd(10))
+    """) # prints True, then False

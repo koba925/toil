@@ -85,6 +85,16 @@ class TestParse(TestBase):
         assert self.i.ast(""" neg(2) """) == ("neg", [2])
         assert self.i.ast(""" add(2, mul(3, 4)) """) == ("add", [2, ("mul", [3, 4])])
 
+    def test_func(self):
+        assert self.i.ast(""" func do 2 end """) == ("func", [], 2)
+        assert self.i.ast(""" func a do a + 2 end """) == ("func", ["a"], ("add", ["a", 2]))
+        assert self.i.ast(""" func a, b do a + b end """) == ("func", ["a", "b"], ("add", ["a", "b"]))
+
+        with pytest.raises(AssertionError, match="Expected `do`"):
+            self.i.ast(""" func a 2 end """)
+        with pytest.raises(AssertionError, match="Expected `end`"):
+            self.i.ast(""" func a do 2 """)
+
     def test_no_token(self):
         with pytest.raises(AssertionError):
             self.i.ast("""  """)
@@ -324,6 +334,43 @@ class TestGo(TestBase):
         assert capsys.readouterr().out == "6 7\n"
         self.i.go(""" print() """)
         assert capsys.readouterr().out == "\n"
+
+    def test_func(self):
+        assert self.i.go(""" func do 2 end () """) == 2
+        assert self.i.go(""" func a do a + 2 end (3) """) == 5
+        assert self.i.go(""" func a, b do a + b end (2, 3) """) == 5
+
+    def test_fac(self):
+        assert self.i.go("""
+            fac := func n do
+                if n == 1 then 1 else n * fac(n - 1) end
+            end;
+            fac(5)
+        """) == 120
+
+    def test_fib(self):
+        assert self.i.go("""
+            fib := func n do
+                if n < 2 then n else fib(n - 1) + fib(n - 2) end
+            end;
+            fib(7)
+        """) == 13
+
+    def test_gcd(self):
+        assert self.i.go("""
+            gcd := func a, b do
+                if a == 0 then b else gcd(b % a, a) end
+            end;
+            gcd(24, 36)
+        """) == 12
+
+    def test_mutual_recursion(self):
+        self.i.go("""
+            is_even := func n do if n == 0 then True else is_odd(n - 1) end end;
+            is_odd := func n do if n == 0 then False else is_even(n - 1) end end
+        """)
+        assert self.i.go(""" is_even(10) """) is True
+        assert self.i.go(""" is_odd(10) """) is False
 
     def test_no_code(self):
         with pytest.raises(AssertionError):
