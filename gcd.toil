@@ -1,0 +1,6 @@
+#! /workspaces/toil/toil.py
+
+gcd := func a, b do
+    if a == 0 then b else gcd(b % a, a) end
+end;
+print(gcd(24, 36))

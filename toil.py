@@ -1,3 +1,5 @@
+#! /usr/bin/env python3
+
 def is_name_first(c): return c.isalpha() or c == "_"
 def is_name_rest(c): return c.isalnum() or c == "_"
 def is_name(expr): return isinstance(expr, str) and is_name_first(expr[0])
@@ -377,9 +379,35 @@ class Interpreter:
 
 
 if __name__ == "__main__":
+    import sys
+
     i = Interpreter().init_env()
 
-    # Basic oparations
+    def repl():
+        while True:
+            print("\nInput source and enter Ctrl+D:")
+            if (src := sys.stdin.read()) == "":
+                exit(0)
+            try:
+                ast = i.ast(src)
+                print("AST:", ast, sep="\n")
+                print("Output:")
+                result = i.evaluate(ast)
+                print("Result:", result, sep="\n")
+            except AssertionError as e:
+                print("Error:", e, sep="\n")
+
+    def run(filename):
+        with open(filename, "r") as f:
+            result = i.go(f.read())
+        exit(result if isinstance(result, int) else 0)
+
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "--repl":
+            repl()
+        else:
+            run(sys.argv[1])
+
     print(i.go(""" True and True """)) # -> True
     print(i.go(""" True and False """)) # -> False
     print(i.go(""" False and True """)) # -> False
