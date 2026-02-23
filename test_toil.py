@@ -84,6 +84,12 @@ class TestParse(TestBase):
         assert self.i.ast(""" if not True then 2 + 3 else 4; 5 end """) == \
             ("if", ('not', [True]), ('add', [2, 3]), ('seq', [4, 5]))
 
+        assert self.i.ast(""" if 1 then 10 end """) == ('if', 1, 10, None)
+        assert self.i.ast(""" if 1 then 10 else 20 end """) == ('if', 1, 10, 20)
+        assert self.i.ast(""" if 1 then 10 elif 2 then 20 end """) == ('if', 1, 10, ('if', 2, 20, None))
+        assert self.i.ast(""" if 1 then 10 elif 2 then 20 else 30 end """) == ('if', 1, 10, ('if', 2, 20, 30))
+        assert self.i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 else 40 end """) == ('if', 1, 10, ('if', 2, 20, ('if', 3, 30, 40)))
+
     def test_define(self):
         assert self.i.ast(""" a := not True """) == ("define", ["a", ("not", [True])])
         assert self.i.ast(""" a := b := 2 """) == ("define", ["a", ("define", ["b", 2])])
@@ -365,12 +371,18 @@ class TestGo(TestBase):
 
     def test_if(self):
         assert self.i.go(""" if True then 2 else 3 end """) == 2
+        assert self.i.go(""" if False then 2 else 3 end """) == 3
+
         assert self.i.go(""" if not True then 2 + 3 else 4; 5 end """) == 5
+
+        assert self.i.go(""" if True then 2 end """) == 2
+        assert self.i.go(""" if False then 2 end """) is None
+
+        assert self.i.go(""" if False then 1 elif True then 3 else 4 end """) == 3
+        assert self.i.go(""" if False then 1 elif False then 3 else 4 end """) == 4
 
         with pytest.raises(AssertionError):
             self.i.go(""" if True then 2 else 3 """)
-        with pytest.raises(AssertionError):
-            self.i.go(""" if True then 2 end """)
         with pytest.raises(AssertionError):
             self.i.go(""" if True else 2 end """)
 
@@ -458,12 +470,18 @@ class TestGo(TestBase):
         """) == 120
 
     def test_fib(self):
-        assert self.i.go("""
+        self.i.go("""
             deffunc fib params n do
-                if n < 2 then n else fib(n - 1) + fib(n - 2) end
-            end;
-            fib(7)
-        """) == 13
+                if n == 0 then 0
+                elif n == 1 then 1
+                else fib(n - 1) + fib(n - 2)
+                end
+            end
+        """)
+        assert self.i.go(""" fib(0) """) == 0
+        assert self.i.go(""" fib(1) """) == 1
+        assert self.i.go(""" fib(7) """) == 13
+        assert self.i.go(""" fib(9) """) == 34
 
     def test_gcd(self):
         assert self.i.go("""

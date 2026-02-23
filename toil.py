@@ -176,9 +176,15 @@ class Parser:
         cond_expr = self._expression()
         self._consume("then")
         then_expr = self._expression()
-        self._consume("else")
-        else_expr = self._expression()
-        self._consume("end")
+        if self._current_token() == "elif":
+            else_expr = self._if()
+        elif self._current_token() == "else":
+            self._advance()
+            else_expr = self._expression()
+            self._consume("end")
+        else:
+            else_expr = None
+            self._consume("end")
         return ("if", cond_expr, then_expr, else_expr)
 
     def _while(self):
@@ -421,45 +427,21 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.ast(""" deffunc two params do 2 end """)) # -> ('define', ['two', ('func', [], 2)])
-    i.go(""" deffunc two params do 2 end """)
-    print(i.go(""" two() """)) # -> 2
-
-    print(i.ast("""
-         deffunc add2 params a do
-            a + 2
-         end
-    """)) # -> ('define', ['add2', ('func', ['a'], ('add', ['a', 2]))])
-    i.go("""
-         deffunc add2 params a do
-            a + 2
-         end
-    """)
-    print(i.go(""" add2(3) """)) # -> 5
-
-    print(i.ast("""
-        deffunc sum params a, b, c do
-            a + b + c
-        end
-    """)) # -> ('define', ['sum', ('func', ['a', 'b', 'c'], ('add', [('add', ['a', 'b']), 'c']))])
-    i.go("""
-        deffunc sum params a, b, c do
-            a + b + c
-        end
-    """)
-    print(i.go(""" sum(2, 3, 4) """)) # -> 9
-
+    print(i.ast(""" if 1 then 10 end """)) # -> ('if', 1, 10, None)
+    print(i.ast(""" if 1 then 10 else 20 end """)) # -> ('if', 1, 10, 20)
+    print(i.ast(""" if 1 then 10 elif 2 then 20 end """)) # -> ('if', 1, 10, ('if', 2, 20, None))
+    print(i.ast(""" if 1 then 10 elif 2 then 20 else 30  end """)) # -> ('if', 1, 10, ('if', 2, 20, 30))
+    print(i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 end """)) # -> ('if', 1, 10, ('if', 2, 20, ('if', 3, 30, None)))
+    print(i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 else 40 end """)) # -> ('if', 1, 10, ('if', 2, 20, ('if', 3, 30, 40)))
 
     i.go("""
         fib := func n do
             if n == 0 then
                 0
+            elif n == 1 then
+                1
             else
-                if n == 1 then
-                    1
-                else
-                    fib(n - 1) + fib(n - 2)
-                end
+                fib(n - 1) + fib(n - 2)
             end
         end;
 
@@ -469,8 +451,3 @@ if __name__ == "__main__":
         print(fib(8)); # -> 21
         print(fib(9)) # -> 34
     """)
-
-    # i.go(""" deffunc add2 a do a + 2 end """) # -> Error
-    # i.go(""" deffunc add2 params a a + 2 end """) # -> Error
-    # i.go(""" deffunc add2 params a do a + 2 """) # -> Error
-    # i.go(""" deffunc 2 params do 3 end """) # -> Error
