@@ -95,9 +95,15 @@ class Parser:
         }, self._and_or)
 
     def _and_or(self):
-        return self._binary_left({
-            "and": "and", "or": "or"
-        }, self._not)
+        left = self._not()
+        while (op := self._current_token()) in ("and", "or"):
+            self._advance()
+            right = self._not()
+            if op == "and":
+                left = ("if", left, right, left)
+            else: # or
+                left = ("if", left, left, right)
+        return left
 
     def _not(self):
         return self._unary({
@@ -286,10 +292,6 @@ class Evaluator:
                 return self._evaluate_if(cond_expr, then_expr, else_expr, env)
             case ("while", cond_expr, body_expr):
                 return self._evaluate_while(cond_expr, body_expr, env)
-            case ("and", [left_expr, right_expr]):
-                return self._evaluate_and(left_expr, right_expr, env)
-            case ("or", [left_expr, right_expr]):
-                return self._evaluate_or(left_expr, right_expr, env)
             case ("func", params, body):
                 return ("closure", params, body, env)
             case ("scope", expr):
@@ -315,22 +317,6 @@ class Evaluator:
         while self.evaluate(cond_expr, env):
             self.evaluate(body_expr, env)
         return None
-
-    def _evaluate_and(self, left_expr, right_expr, env):
-        # return self.evaluate(left_expr, env) and self.evaluate(right_expr, env)
-        left_val = self.evaluate(left_expr, env)
-        if left_val:
-            return self.evaluate(right_expr, env)
-        else:
-            return left_val
-
-    def _evaluate_or(self, left_expr, right_expr, env):
-        # return self.evaluate(left_expr, env) or self.evaluate(right_expr, env)
-        left_val = self.evaluate(left_expr, env)
-        if left_val:
-            return left_val
-        else:
-            return self.evaluate(right_expr, env)
 
     def _eval_op(self, op_expr, args_expr, env):
         op_val = self.evaluate(op_expr, env)
@@ -404,7 +390,7 @@ if __name__ == "__main__":
     print(i.go(""" 0 and 2 / 0 """)) # -> 0
 
     # Precedence
-    print(i.ast(""" a := False and not False """)) # -> ('define', 'a', ('and', [False, ('not', [False])]))
+    print(i.ast(""" a := False and not False """)) # -> ('define', ['a', ('if', False, ('not', [False]), False)])
 
     # Basic oparations
     print(i.go(""" True or True """)) # -> True
@@ -417,4 +403,4 @@ if __name__ == "__main__":
     print(i.go(""" 1 or 2 / 0 """)) # -> 1
 
     # Precedence
-    print(i.ast(""" a := False or not False """)) # -> ('define', ['a', ('or', [False, ('not', [False])])])
+    print(i.ast(""" a := False or not False """)) # -> ('define', ['a', ('if', False, False, ('not', [False]))])

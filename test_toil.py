@@ -52,11 +52,11 @@ class TestParse(TestBase):
         assert self.i.ast(""" not not False """) == ("not", [("not", [False])])
 
     def test_and_or(self):
-        assert self.i.ast(""" True and False """) == ("and", [True, False])
-        assert self.i.ast(""" True or False """) == ("or", [True, False])
-        assert self.i.ast(""" True or False and True """) == ("and", [("or", [True, False]), True])
-        assert self.i.ast(""" a := False and not False """) == ('define', ['a', ('and', [False, ('not', [False])])])
-        assert self.i.ast(""" a := False or not False """) == ('define', ['a', ('or', [False, ('not', [False])])])
+        assert self.i.ast(""" True and False """) == ('if', True, False, True)
+        assert self.i.ast(""" True or False """) == ('if', True, True, False)
+        assert self.i.ast(""" True or False and True """) == ('if', ('if', True, True, False), True, ('if', True, True, False))
+        assert self.i.ast(""" a := False and not False """) == ('define', ['a', ('if', False, ('not', [False]), False)])
+        assert self.i.ast(""" a := False or not False """) == ('define', ['a', ('if', False, False, ('not', [False]))])
 
     def test_neg(self):
         assert self.i.ast(""" -2 """) == ("neg", [2])
