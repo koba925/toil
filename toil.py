@@ -90,65 +90,39 @@ class Parser:
         return exprs[0] if len(exprs) == 1 else ("seq", exprs)
 
     def _define_assign(self):
-        ops = {":=": "define", "=": "assign"}
-        left = self._and_or()
-        if (op := self._current_token()) in ops:
-            self._advance()
-            return (ops[op], left, self._define_assign())
-        return left
+        return self._binary_right({
+            ":=": "define", "=": "assign"
+        }, self._and_or)
 
     def _and_or(self):
-        ops = {"and": "and", "or": "or"}
-        left = self._not()
-        while (op := self._current_token()) in ops:
-            self._advance()
-            right = self._not()
-            left = (ops[op], [left, right])
-        return left
+        return self._binary_left({
+            "and": "and", "or": "or"
+        }, self._not)
 
     def _not(self):
-        if self._current_token() != "not":
-            return self._comparison()
-        self._advance()
-        return ("not", [self._not()])
+        return self._unary({
+            "not": "not"
+        }, self._comparison)
 
     def _comparison(self):
-        ops = {
+        return self._binary_left({
             "==": "equal", "!=": "not_equal",
             "<": "less", ">": "greater",
             "<=": "less_equal", ">=": "greater_equal"
-        }
-
-        left = self._add_sub()
-        while (op := self._current_token()) in ops:
-            self._advance()
-            right = self._add_sub()
-            left = (ops[op], [left, right])
-        return left
+        }, self._add_sub)
 
     def _add_sub(self):
-        ops = {"+": "add", "-": "sub"}
-        left = self._mul_div_mod()
-        while (op := self._current_token()) in ops:
-            self._advance()
-            right = self._mul_div_mod()
-            left = (ops[op], [left, right])
-        return left
+        return self._binary_left({
+            "+": "add", "-": "sub"
+        }, self._mul_div_mod)
 
     def _mul_div_mod(self):
-        ops = {"*": "mul", "/": "div", "%": "mod"}
-        left = self._neg()
-        while (op := self._current_token()) in ops:
-            self._advance()
-            right = self._neg()
-            left = (ops[op], [left, right])
-        return left
+        return self._binary_left({
+            "*": "mul", "/": "div", "%": "mod"
+        }, self._neg)
 
     def _neg(self):
-        if self._current_token() != "-":
-            return self._call()
-        self._advance()
-        return ("neg", [self._neg()])
+        return self._unary({"-": "neg"}, self._call)
 
     def _call(self):
         func = self._primary()
@@ -159,20 +133,13 @@ class Parser:
 
     def _primary(self):
         match self._current_token():
-            case "(":
-                return self._paren()
-            case None | bool() | int():
-                return self._advance()
-            case "func":
-                return self._func()
-            case "scope":
-                return self._scope()
-            case "if":
-                return self._if()
-            case "while":
-                return self._while()
-            case str(name) if is_name(name):
-                return self._advance()
+            case "(": return self._paren()
+            case None | bool() | int(): return self._advance()
+            case "func": return self._func()
+            case "scope": return self._scope()
+            case "if": return self._if()
+            case "while": return self._while()
+            case str(name) if is_name(name): return self._advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
 
@@ -212,6 +179,36 @@ class Parser:
         body_expr = self._expression()
         self._consume("end")
         return ("while", cond_expr, body_expr)
+
+    def _binary_left(self, ops, sub_elem):
+        left = sub_elem()
+        while (op := self._current_token()) in ops:
+            self._advance()
+            right = sub_elem()
+            left = (ops[op], [left, right])
+        return left
+
+    def _binary_right(self, ops, sub_elem):
+        left = sub_elem()
+        if (op := self._current_token()) in ops:
+            self._advance()
+            right = self._binary_right(ops, sub_elem)
+            return (ops[op], [left, right])
+        return left
+
+    def _postfix(self, ops_actions, sub_elem):
+        left = sub_elem()
+        while (op := self._current_token()) in ops_actions:
+            action = ops_actions[op]
+            left = action(left)
+        return left
+
+    def _unary(self, ops, sub_elem):
+        if (op := self._current_token()) in ops:
+            self._advance()
+            return (ops[op], [self._unary(ops, sub_elem)])
+        else:
+            return sub_elem()
 
     def _comma_separated_exprs(self, terminate):
         cse = []
@@ -277,9 +274,9 @@ class Evaluator:
                 frame = env.lookup(name)
                 assert frame is not None, f"Undefined variable @ evaluate(): {name}"
                 return frame.val(name)
-            case ("define", str(name), val):
+            case ("define", [str(name), val]):
                 return env.define(name, self.evaluate(val, env))
-            case ("assign", str(name), val):
+            case ("assign", [str(name), val]):
                 frame = env.lookup(name)
                 assert frame is not None, f"Assign to undefined variable @ evaluate(): {name}"
                 return frame.set_val(name, self.evaluate(val, env))
@@ -420,4 +417,4 @@ if __name__ == "__main__":
     print(i.go(""" 1 or 2 / 0 """)) # -> 1
 
     # Precedence
-    print(i.ast(""" a := False or not False """)) # -> ('define', 'a', ('or', [False, ('not', [False])]))
+    print(i.ast(""" a := False or not False """)) # -> ('define', ['a', ('or', [False, ('not', [False])])])
