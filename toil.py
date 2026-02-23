@@ -147,6 +147,7 @@ class Parser:
             case "scope": return self._scope()
             case "if": return self._if()
             case "while": return self._while()
+            case "deffunc": return self._deffunc()
             case str(name) if is_name(name): return self._advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
@@ -187,6 +188,16 @@ class Parser:
         body_expr = self._expression()
         self._consume("end")
         return ("while", cond_expr, body_expr)
+
+    def _deffunc(self):
+        self._advance()
+        name = self._advance()
+        assert is_name(name), f"Expected function name @ deffunc: {name}"
+        self._consume("params")
+        params = self._comma_separated_exprs("do")
+        body_expr = self._expression()
+        self._consume("end")
+        return ("define", [name, ("func", params, body_expr)])
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
@@ -408,27 +419,58 @@ if __name__ == "__main__":
         else:
             run(sys.argv[1])
 
-    print(i.go(""" True and True """)) # -> True
-    print(i.go(""" True and False """)) # -> False
-    print(i.go(""" False and True """)) # -> False
-    print(i.go(""" False and False """)) # -> False
+    # Example
 
-    # Short Circuit
-    print(i.go(""" True and 2 """)) # -> 2
-    print(i.go(""" 0 and 2 / 0 """)) # -> 0
+    print(i.ast(""" deffunc two params do 2 end """)) # -> ('define', ['two', ('func', [], 2)])
+    i.go(""" deffunc two params do 2 end """)
+    print(i.go(""" two() """)) # -> 2
 
-    # Precedence
-    print(i.ast(""" a := False and not False """)) # -> ('define', ['a', ('if', False, ('not', [False]), False)])
+    print(i.ast("""
+         deffunc add2 params a do
+            a + 2
+         end
+    """)) # -> ('define', ['add2', ('func', ['a'], ('add', ['a', 2]))])
+    i.go("""
+         deffunc add2 params a do
+            a + 2
+         end
+    """)
+    print(i.go(""" add2(3) """)) # -> 5
 
-    # Basic oparations
-    print(i.go(""" True or True """)) # -> True
-    print(i.go(""" True or False """)) # -> True
-    print(i.go(""" False or True """)) # -> True
-    print(i.go(""" False or False """)) # -> False
+    print(i.ast("""
+        deffunc sum params a, b, c do
+            a + b + c
+        end
+    """)) # -> ('define', ['sum', ('func', ['a', 'b', 'c'], ('add', [('add', ['a', 'b']), 'c']))])
+    i.go("""
+        deffunc sum params a, b, c do
+            a + b + c
+        end
+    """)
+    print(i.go(""" sum(2, 3, 4) """)) # -> 9
 
-    # Short Circuit
-    print(i.go(""" False or 2 """)) # -> 2
-    print(i.go(""" 1 or 2 / 0 """)) # -> 1
 
-    # Precedence
-    print(i.ast(""" a := False or not False """)) # -> ('define', ['a', ('if', False, False, ('not', [False]))])
+    i.go("""
+        fib := func n do
+            if n == 0 then
+                0
+            else
+                if n == 1 then
+                    1
+                else
+                    fib(n - 1) + fib(n - 2)
+                end
+            end
+        end;
+
+        print(fib(0)); # -> 0
+        print(fib(1)); # -> 1
+        print(fib(7)); # -> 13
+        print(fib(8)); # -> 21
+        print(fib(9)) # -> 34
+    """)
+
+    # i.go(""" deffunc add2 a do a + 2 end """) # -> Error
+    # i.go(""" deffunc add2 params a a + 2 end """) # -> Error
+    # i.go(""" deffunc add2 params a do a + 2 """) # -> Error
+    # i.go(""" deffunc 2 params do 3 end """) # -> Error

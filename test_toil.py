@@ -112,6 +112,27 @@ class TestParse(TestBase):
         with pytest.raises(AssertionError, match="Expected `end`"):
             self.i.ast(""" func a do 2 """)
 
+    def test_deffunc(self):
+        assert self.i.ast(""" deffunc two params do 2 end """) == \
+            ('define', ['two', ('func', [], 2)])
+        assert self.i.ast("""
+             deffunc add2 params a do
+                a + 2
+             end
+        """) == ('define', ['add2', ('func', ['a'], ('add', ['a', 2]))])
+        assert self.i.ast("""
+            deffunc sum params a, b, c do
+                a + b + c
+            end
+        """) == ('define', ['sum', ('func', ['a', 'b', 'c'], ('add', [('add', ['a', 'b']), 'c']))])
+
+        with pytest.raises(AssertionError):
+            self.i.ast(""" deffunc add2 a do a + 2 end """)
+        with pytest.raises(AssertionError):
+            self.i.ast(""" deffunc add2 params a a + 2 end """)
+        with pytest.raises(AssertionError):
+            self.i.ast(""" deffunc 2 params do 3 end """)
+
     def test_no_token(self):
         with pytest.raises(AssertionError):
             self.i.ast("""  """)
@@ -420,9 +441,17 @@ class TestGo(TestBase):
         assert self.i.go(""" func a do a + 2 end (3) """) == 5
         assert self.i.go(""" func a, b do a + b end (2, 3) """) == 5
 
+    def test_deffunc(self):
+        self.i.go(""" deffunc two params do 2 end """)
+        assert self.i.go(""" two() """) == 2
+        self.i.go(""" deffunc add2 params a do a + 2 end """)
+        assert self.i.go(""" add2(3) """) == 5
+        self.i.go(""" deffunc sum params a, b, c do a + b + c end """)
+        assert self.i.go(""" sum(2, 3, 4) """) == 9
+
     def test_fac(self):
         assert self.i.go("""
-            fac := func n do
+            deffunc fac params n do
                 if n == 1 then 1 else n * fac(n - 1) end
             end;
             fac(5)
@@ -430,7 +459,7 @@ class TestGo(TestBase):
 
     def test_fib(self):
         assert self.i.go("""
-            fib := func n do
+            deffunc fib params n do
                 if n < 2 then n else fib(n - 1) + fib(n - 2) end
             end;
             fib(7)
@@ -438,7 +467,7 @@ class TestGo(TestBase):
 
     def test_gcd(self):
         assert self.i.go("""
-            gcd := func a, b do
+            deffunc gcd params a, b do
                 if a == 0 then b else gcd(b % a, a) end
             end;
             gcd(24, 36)
@@ -446,8 +475,8 @@ class TestGo(TestBase):
 
     def test_mutual_recursion(self):
         self.i.go("""
-            is_even := func n do if n == 0 then True else is_odd(n - 1) end end;
-            is_odd := func n do if n == 0 then False else is_even(n - 1) end end
+            deffunc is_even params n do if n == 0 then True else is_odd(n - 1) end end;
+            deffunc is_odd params n do if n == 0 then False else is_even(n - 1) end end
         """)
         assert self.i.go(""" is_even(10) """) is True
         assert self.i.go(""" is_odd(10) """) is False
