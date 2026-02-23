@@ -51,6 +51,13 @@ class TestParse(TestBase):
         assert self.i.ast(""" not True """) == ("not", [True])
         assert self.i.ast(""" not not False """) == ("not", [("not", [False])])
 
+    def test_and_or(self):
+        assert self.i.ast(""" True and False """) == ("and", [True, False])
+        assert self.i.ast(""" True or False """) == ("or", [True, False])
+        assert self.i.ast(""" True or False and True """) == ("and", [("or", [True, False]), True])
+        assert self.i.ast(""" a := False and not False """) == ('define', 'a', ('and', [False, ('not', [False])]))
+        assert self.i.ast(""" a := False or not False """) == ('define', 'a', ('or', [False, ('not', [False])]))
+
     def test_neg(self):
         assert self.i.ast(""" -2 """) == ("neg", [2])
         assert self.i.ast(""" --3 """) == ("neg", [("neg", [3])])
@@ -297,6 +304,17 @@ class TestGo(TestBase):
         assert self.i.go(""" not False """) is True
         assert self.i.go(""" not not True """) is True
         assert self.i.go(""" not 2 == 3 """) is True
+
+    def test_and_or(self, capsys):
+        assert self.i.go(""" True and False """) is False
+        assert self.i.go(""" True or False """) is True
+        assert self.i.go(""" False and True """) is False
+        assert self.i.go(""" False or True """) is True
+
+        assert self.i.go(""" True and 2 """) == 2
+        assert self.i.go(""" 0 and 2 / 0 """) == 0
+        assert self.i.go(""" False or 2 """) == 2
+        assert self.i.go(""" 1 or 2 / 0 """) == 1
 
     def test_neg(self):
         assert self.i.go(""" -2 """) == -2

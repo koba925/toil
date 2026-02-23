@@ -91,10 +91,19 @@ class Parser:
 
     def _define_assign(self):
         ops = {":=": "define", "=": "assign"}
-        left = self._not()
+        left = self._and_or()
         if (op := self._current_token()) in ops:
             self._advance()
             return (ops[op], left, self._define_assign())
+        return left
+
+    def _and_or(self):
+        ops = {"and": "and", "or": "or"}
+        left = self._not()
+        while (op := self._current_token()) in ops:
+            self._advance()
+            right = self._not()
+            left = (ops[op], [left, right])
         return left
 
     def _not(self):
@@ -280,6 +289,10 @@ class Evaluator:
                 return self._evaluate_if(cond_expr, then_expr, else_expr, env)
             case ("while", cond_expr, body_expr):
                 return self._evaluate_while(cond_expr, body_expr, env)
+            case ("and", [left_expr, right_expr]):
+                return self._evaluate_and(left_expr, right_expr, env)
+            case ("or", [left_expr, right_expr]):
+                return self._evaluate_or(left_expr, right_expr, env)
             case ("func", params, body):
                 return ("closure", params, body, env)
             case ("scope", expr):
@@ -305,6 +318,22 @@ class Evaluator:
         while self.evaluate(cond_expr, env):
             self.evaluate(body_expr, env)
         return None
+
+    def _evaluate_and(self, left_expr, right_expr, env):
+        # return self.evaluate(left_expr, env) and self.evaluate(right_expr, env)
+        left_val = self.evaluate(left_expr, env)
+        if left_val:
+            return self.evaluate(right_expr, env)
+        else:
+            return left_val
+
+    def _evaluate_or(self, left_expr, right_expr, env):
+        # return self.evaluate(left_expr, env) or self.evaluate(right_expr, env)
+        left_val = self.evaluate(left_expr, env)
+        if left_val:
+            return left_val
+        else:
+            return self.evaluate(right_expr, env)
 
     def _eval_op(self, op_expr, args_expr, env):
         op_val = self.evaluate(op_expr, env)
@@ -367,17 +396,28 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    print(i.ast(""" while i < 10 do i = i + 1 end """)) # -> ('while', ('less', ['i', 10]), ('assign', 'i', ('add', ['i', 1])))
+    # Basic oparations
+    print(i.go(""" True and True """)) # -> True
+    print(i.go(""" True and False """)) # -> False
+    print(i.go(""" False and True """)) # -> False
+    print(i.go(""" False and False """)) # -> False
 
-    i.go("""
-        sum := i := 0;
-        while i < 10 do
-            sum = sum + i;
-            i = i + 1
-        end;
-        print(sum)
-    """) # -> prints 45
+    # Short Circuit
+    print(i.go(""" True and 2 """)) # -> 2
+    print(i.go(""" 0 and 2 / 0 """)) # -> 0
 
-    # i.go(""" while do i = i + 1 end """) # -> Error
-    # i.go(""" while i < 10 i = i + 1 end """) # -> Error
-    # i.go(""" while i < 10 do i = i + 1 """) # -> Error
+    # Precedence
+    print(i.ast(""" a := False and not False """)) # -> ('define', 'a', ('and', [False, ('not', [False])]))
+
+    # Basic oparations
+    print(i.go(""" True or True """)) # -> True
+    print(i.go(""" True or False """)) # -> True
+    print(i.go(""" False or True """)) # -> True
+    print(i.go(""" False or False """)) # -> False
+
+    # Short Circuit
+    print(i.go(""" False or 2 """)) # -> 2
+    print(i.go(""" 1 or 2 / 0 """)) # -> 1
+
+    # Precedence
+    print(i.ast(""" a := False or not False """)) # -> ('define', 'a', ('or', [False, ('not', [False])]))
