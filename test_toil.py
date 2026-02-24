@@ -1,5 +1,5 @@
 import pytest
-from toil import Interpreter
+from toil import Interpreter, Sym, Expr
 
 
 class TestBase:
@@ -10,57 +10,57 @@ class TestBase:
 
 class TestScan(TestBase):
     def test_number(self):
-        assert self.i.scan("""2""") == [2, "$EOF"]
-        assert self.i.scan(""" 3 """) == [3, "$EOF"]
-        assert self.i.scan(""" \t4\n5\n """) == [4, 5, "$EOF"]
-        assert self.i.scan("""  """) == ["$EOF"]
+        assert self.i.scan("""2""") == [2, Sym("$EOF")]
+        assert self.i.scan(""" 3 """) == [3, Sym("$EOF")]
+        assert self.i.scan(""" \t4\n5\n """) == [4, 5, Sym("$EOF")]
+        assert self.i.scan("""  """) == [Sym("$EOF")]
 
     def test_operator(self):
-        assert self.i.scan(""" 1 + 2 """) == [1, "+", 2, "$EOF"]
-        assert self.i.scan(""" 1 * 2 """) == [1, "*", 2, "$EOF"]
-        assert self.i.scan(""" 1 / 2 """) == [1, "/", 2, "$EOF"]
+        assert self.i.scan(""" 1 + 2 """) == [1, Sym("+"), 2, Sym("$EOF")]
+        assert self.i.scan(""" 1 * 2 """) == [1, Sym("*"), 2, Sym("$EOF")]
+        assert self.i.scan(""" 1 / 2 """) == [1, Sym("/"), 2, Sym("$EOF")]
 
     def test_bool_none_ident(self):
         assert self.i.scan(""" True """) == [True, "$EOF"]
         assert self.i.scan(""" False """) == [False, "$EOF"]
         assert self.i.scan(""" None """) == [None, "$EOF"]
-        assert self.i.scan(""" a """) == ["a", "$EOF"]
+        assert self.i.scan(""" a """) == [Sym("a"), "$EOF"]
 
     def test_define_assign(self):
-        assert self.i.scan(""" a := 2 """) == ["a", ":=", 2, "$EOF"]
-        assert self.i.scan(""" a = 2 """) == ["a", "=", 2, "$EOF"]
+        assert self.i.scan(""" a := 2 """) == [Sym("a"), Sym(":="), 2, Sym("$EOF")]
+        assert self.i.scan(""" a = 2 """) == [Sym("a"), Sym("="), 2, Sym("$EOF")]
 
 class TestParse(TestBase):
     def test_comparison(self):
-        assert self.i.ast(""" 2 == 3 == 4 """) == (
-            "equal", [("equal", [2, 3]), 4]
-        )
+        assert self.i.ast(""" 2 == 3 == 4 """) == Expr((
+            Sym("equal"), [Expr((Sym("equal"), [2, 3])), 4]
+        ))
 
     def test_add_sub(self):
-        assert self.i.ast(""" 2 + 3 """) == ("add", [2, 3])
-        assert self.i.ast(""" 2 - 3 """) == ("sub", [2, 3])
-        assert self.i.ast(""" 2 + 3 * 4 """) == ("add", [2, ("mul", [3, 4])])
-        assert self.i.ast(""" 2 * 3 + 4 """) == ("add", [("mul", [2, 3]), 4])
+        assert self.i.ast(""" 2 + 3 """) == Expr((Sym("add"), [2, 3]))
+        assert self.i.ast(""" 2 - 3 """) == Expr((Sym("sub"), [2, 3]))
+        assert self.i.ast(""" 2 + 3 * 4 """) == Expr((Sym("add"), [2, Expr((Sym("mul"), [3, 4]))]))
+        assert self.i.ast(""" 2 * 3 + 4 """) == Expr((Sym("add"), [Expr((Sym("mul"), [2, 3])), 4]))
 
     def test_mul_div(self):
-        assert self.i.ast(""" 2 * 3 """) == ("mul", [2, 3])
-        assert self.i.ast(""" 2 / 3 """) == ("div", [2, 3])
-        assert self.i.ast(""" 2 * 3 / 4 """) == ("div", [("mul", [2, 3]), 4])
+        assert self.i.ast(""" 2 * 3 """) == Expr((Sym("mul"), [2, 3]))
+        assert self.i.ast(""" 2 / 3 """) == Expr((Sym("div"), [2, 3]))
+        assert self.i.ast(""" 2 * 3 / 4 """) == Expr((Sym("div"), [Expr((Sym("mul"), [2, 3])), 4]))
 
     def test_not(self):
-        assert self.i.ast(""" not True """) == ("not", [True])
-        assert self.i.ast(""" not not False """) == ("not", [("not", [False])])
+        assert self.i.ast(""" not True """) == Expr((Sym("not"), [True]))
+        assert self.i.ast(""" not not False """) == Expr((Sym("not"), [Expr((Sym("not"), [False]))]))
 
     def test_and_or(self):
-        assert self.i.ast(""" True and False """) == ('if', True, False, True)
-        assert self.i.ast(""" True or False """) == ('if', True, True, False)
-        assert self.i.ast(""" True or False and True """) == ('if', ('if', True, True, False), True, ('if', True, True, False))
-        assert self.i.ast(""" a := False and not False """) == ('define', ['a', ('if', False, ('not', [False]), False)])
-        assert self.i.ast(""" a := False or not False """) == ('define', ['a', ('if', False, False, ('not', [False]))])
+        assert self.i.ast(""" True and False """) == Expr(('if', True, False, True))
+        assert self.i.ast(""" True or False """) == Expr(('if', True, True, False))
+        assert self.i.ast(""" True or False and True """) == Expr(('if', Expr(('if', True, True, False)), True, Expr(('if', True, True, False))))
+        assert self.i.ast(""" a := False and not False """) == Expr((Sym('define'), [Sym('a'), Expr(('if', False, Expr((Sym('not'), [False])), False))]))
+        assert self.i.ast(""" a := False or not False """) == Expr((Sym('define'), [Sym('a'), Expr(('if', False, False, Expr((Sym('not'), [False]))))]))
 
     def test_neg(self):
-        assert self.i.ast(""" -2 """) == ("neg", [2])
-        assert self.i.ast(""" --3 """) == ("neg", [("neg", [3])])
+        assert self.i.ast(""" -2 """) == Expr((Sym("neg"), [2]))
+        assert self.i.ast(""" --3 """) == Expr((Sym("neg"), [Expr((Sym("neg"), [3]))]))
 
     def test_number(self):
         assert self.i.ast(""" 2 """) == 2
@@ -71,47 +71,47 @@ class TestParse(TestBase):
         assert self.i.ast(""" None """) is None
 
     def test_paren(self):
-        assert self.i.ast(""" (1 + 2) """) == ("add", [1, 2])
-        assert self.i.ast(""" (1 + 2) * 3 """) == ("mul", [("add", [1, 2]), 3])
+        assert self.i.ast(""" (1 + 2) """) == Expr((Sym("add"), [1, 2]))
+        assert self.i.ast(""" (1 + 2) * 3 """) == Expr((Sym("mul"), [Expr((Sym("add"), [1, 2])), 3]))
 
     def test_seq(self):
-        assert self.i.ast(""" 2; 3 """) == ("seq", [2, 3])
-        assert self.i.ast(""" not True; False """) == ("seq", [("not", [True]), False])
+        assert self.i.ast(""" 2; 3 """) == Expr((Sym("seq"), [2, 3]))
+        assert self.i.ast(""" not True; False """) == Expr((Sym("seq"), [Expr((Sym("not"), [True])), False]))
 
     def test_if(self):
-        assert self.i.ast(""" if True then 2 else 3 end """) == \
-            ("if", True, 2, 3)
-        assert self.i.ast(""" if not True then 2 + 3 else 4; 5 end """) == \
-            ("if", ('not', [True]), ('add', [2, 3]), ('seq', [4, 5]))
+        assert self.i.ast(""" if True then 2 else 3 end """) == Expr(
+            (Sym("if"), True, 2, 3))
+        assert self.i.ast(""" if not True then 2 + 3 else 4; 5 end """) == Expr(
+            (Sym("if"), Expr((Sym('not'), [True])), Expr((Sym('add'), [2, 3])), Expr((Sym("seq"), [4, 5]))))
 
-        assert self.i.ast(""" if 1 then 10 end """) == ('if', 1, 10, None)
-        assert self.i.ast(""" if 1 then 10 else 20 end """) == ('if', 1, 10, 20)
-        assert self.i.ast(""" if 1 then 10 elif 2 then 20 end """) == ('if', 1, 10, ('if', 2, 20, None))
-        assert self.i.ast(""" if 1 then 10 elif 2 then 20 else 30 end """) == ('if', 1, 10, ('if', 2, 20, 30))
-        assert self.i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 else 40 end """) == ('if', 1, 10, ('if', 2, 20, ('if', 3, 30, 40)))
+        assert self.i.ast(""" if 1 then 10 end """) == Expr(('if', 1, 10, None))
+        assert self.i.ast(""" if 1 then 10 else 20 end """) == Expr(('if', 1, 10, 20))
+        assert self.i.ast(""" if 1 then 10 elif 2 then 20 end """) == Expr(('if', 1, 10, Expr(('if', 2, 20, None))))
+        assert self.i.ast(""" if 1 then 10 elif 2 then 20 else 30 end """) == Expr(('if', 1, 10, Expr(('if', 2, 20, 30))))
+        assert self.i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 else 40 end """) == Expr(('if', 1, 10, Expr(('if', 2, 20, Expr(('if', 3, 30, 40))))))
 
     def test_define(self):
-        assert self.i.ast(""" a := not True """) == ("define", ["a", ("not", [True])])
-        assert self.i.ast(""" a := b := 2 """) == ("define", ["a", ("define", ["b", 2])])
+        assert self.i.ast(""" a := not True """) == Expr((Sym("define"), [Sym("a"), Expr((Sym("not"), [True]))]))
+        assert self.i.ast(""" a := b := 2 """) == Expr((Sym("define"), [Sym("a"), Expr((Sym("define"), [Sym("b"), 2]))]))
 
     def test_assign(self):
-        assert self.i.ast(""" a = 1 """) == ("assign", ["a", 1])
-        assert self.i.ast(""" a = b = 2 """) == ("assign", ["a", ("assign", ["b", 2])])
-        assert self.i.ast(""" a := b = 2 """) == ("define", ["a", ("assign", ["b", 2])])
-        assert self.i.ast(""" a := b = c := 3 """) == ("define", ["a", ("assign", ["b", ("define", ["c", 3])])])
+        assert self.i.ast(""" a = 1 """) == Expr((Sym("assign"), [Sym("a"), 1]))
+        assert self.i.ast(""" a = b = 2 """) == Expr((Sym("assign"), [Sym("a"), Expr((Sym("assign"), [Sym("b"), 2]))]))
+        assert self.i.ast(""" a := b = 2 """) == Expr((Sym("define"), [Sym("a"), Expr((Sym("assign"), [Sym("b"), 2]))]))
+        assert self.i.ast(""" a := b = c := 3 """) == Expr((Sym("define"), [Sym("a"), Expr((Sym("assign"), [Sym("b"), Expr((Sym("define"), [Sym("c"), 3]))]))]))
 
     def test_while(self):
-        assert self.i.ast(""" while i < 10 do i = i + 1 end """) == ('while', ('less', ['i', 10]), ('assign', ['i', ('add', ['i', 1])]))
+        assert self.i.ast(""" while i < 10 do i = i + 1 end """) == Expr(('while', Expr((Sym('less'), [Sym('i'), 10])), Expr((Sym('assign'), [Sym('i'), Expr((Sym('add'), [Sym('i'), 1]))]))))
 
     def test_call(self):
-        assert self.i.ast(""" print() """) == ("print", [])
-        assert self.i.ast(""" neg(2) """) == ("neg", [2])
-        assert self.i.ast(""" add(2, mul(3, 4)) """) == ("add", [2, ("mul", [3, 4])])
+        assert self.i.ast(""" print() """) == Expr((Sym("print"), []))
+        assert self.i.ast(""" neg(2) """) == Expr((Sym("neg"), [2]))
+        assert self.i.ast(""" add(2, mul(3, 4)) """) == Expr((Sym("add"), [2, Expr((Sym("mul"), [3, 4]))]))
 
     def test_func(self):
-        assert self.i.ast(""" func do 2 end """) == ("func", [], 2)
-        assert self.i.ast(""" func a do a + 2 end """) == ("func", ["a"], ("add", ["a", 2]))
-        assert self.i.ast(""" func a, b do a + b end """) == ("func", ["a", "b"], ("add", ["a", "b"]))
+        assert self.i.ast(""" func do 2 end """) == Expr((Sym("func"), [], 2))
+        assert self.i.ast(""" func a do a + 2 end """) == Expr((Sym("func"), [Sym("a")], Expr((Sym("add"), [Sym("a"), 2]))))
+        assert self.i.ast(""" func a, b do a + b end """) == Expr((Sym("func"), [Sym("a"), Sym("b")], Expr((Sym("add"), [Sym("a"), Sym("b")]))))
 
         with pytest.raises(AssertionError, match="Expected `do`"):
             self.i.ast(""" func a 2 end """)
@@ -119,18 +119,18 @@ class TestParse(TestBase):
             self.i.ast(""" func a do 2 """)
 
     def test_deffunc(self):
-        assert self.i.ast(""" deffunc two params do 2 end """) == \
-            ('define', ['two', ('func', [], 2)])
+        assert self.i.ast(""" deffunc two params do 2 end """) == Expr(
+            (Sym('define'), [Sym('two'), Expr(('func', [], 2))]))
         assert self.i.ast("""
              deffunc add2 params a do
                 a + 2
              end
-        """) == ('define', ['add2', ('func', ['a'], ('add', ['a', 2]))])
+        """) == Expr((Sym('define'), [Sym('add2'), Expr(('func', [Sym('a')], Expr((Sym('add'), [Sym('a'), 2]))))]))
         assert self.i.ast("""
             deffunc sum params a, b, c do
                 a + b + c
             end
-        """) == ('define', ['sum', ('func', ['a', 'b', 'c'], ('add', [('add', ['a', 'b']), 'c']))])
+        """) == Expr((Sym('define'), [Sym('sum'), Expr(('func', [Sym('a'), Sym('b'), Sym('c')], Expr((Sym('add'), [Expr((Sym('add'), [Sym('a'), Sym('b')])), Sym('c')]))))]))
 
         with pytest.raises(AssertionError):
             self.i.ast(""" deffunc add2 a do a + 2 end """)
@@ -155,135 +155,135 @@ class TestEvaluate(TestBase):
         assert self.i.evaluate(False) is False
 
     def test_seq(self, capsys):
-        self.i.evaluate(("seq", [
-            ("print", [2]),
-            ("print", [3])
-        ]))
+        self.i.evaluate(Expr((Sym("seq"), [
+            Expr((Sym("print"), [2])),
+            Expr((Sym("print"), [3]))
+        ])))
         assert capsys.readouterr().out == "2\n3\n"
 
     def test_evaluate_if(self):
-        assert self.i.evaluate(("if", True, 2, 3)) == 2
-        assert self.i.evaluate(("if", False, 2, 3)) == 3
-        assert self.i.evaluate(("if", ("if", True, True, False), 2, 3)) == 2
-        assert self.i.evaluate(("if", True, ("if", True, 2, 3), 4)) == 2
-        assert self.i.evaluate(("if", False, 2, ("if", False, 3, 4))) == 4
+        assert self.i.evaluate(Expr((Sym("if"), True, 2, 3))) == 2
+        assert self.i.evaluate(Expr((Sym("if"), False, 2, 3))) == 3
+        assert self.i.evaluate(Expr((Sym("if"), Expr((Sym("if"), True, True, False)), 2, 3))) == 2
+        assert self.i.evaluate(Expr((Sym("if"), True, Expr((Sym("if"), True, 2, 3)), 4))) == 2
+        assert self.i.evaluate(Expr((Sym("if"), False, 2, Expr((Sym("if"), False, 3, 4))))) == 4
 
     def test_evaluate_variable(self):
-        assert self.i.evaluate(("define", ["a", 2])) == 2
-        assert self.i.evaluate("a") == 2
+        assert self.i.evaluate(Expr((Sym("define"), [Sym("a"), 2]))) == 2
+        assert self.i.evaluate(Sym("a")) == 2
 
-        assert self.i.evaluate(("define", ["b", True])) == True
-        assert self.i.evaluate(("if", "b", 2, 3)) == 2
+        assert self.i.evaluate(Expr((Sym("define"), [Sym("b"), True]))) == True
+        assert self.i.evaluate(Expr((Sym("if"), Sym("b"), 2, 3))) == 2
 
-        assert self.i.evaluate(("define", ["c", ("if", False, 2, 3)])) == 3
-        assert self.i.evaluate("c") == 3
+        assert self.i.evaluate(Expr((Sym("define"), [Sym("c"), Expr((Sym("if"), False, 2, 3))]))) == 3
+        assert self.i.evaluate(Sym("c")) == 3
 
     def test_evaluate_undefined_variable(self):
         with pytest.raises(AssertionError):
-            self.i.evaluate("a")
+            self.i.evaluate(Sym("a"))
 
     def test_evaluate_assign(self):
-        self.i.evaluate(("define", ["a", 1]))
-        assert self.i.evaluate(("assign", ["a", 2])) == 2
-        assert self.i.evaluate("a") == 2
+        self.i.evaluate(Expr((Sym("define"), [Sym("a"), 1])))
+        assert self.i.evaluate(Expr((Sym("assign"), [Sym("a"), 2]))) == 2
+        assert self.i.evaluate(Sym("a")) == 2
         with pytest.raises(AssertionError):
-            self.i.evaluate(("assign", ["b", 2]))
+            self.i.evaluate(Expr((Sym("assign"), [Sym("b"), 2])))
 
     def test_evaluate_scope(self, capsys):
-        self.i.evaluate(("define", ["a", 2]))
-        assert self.i.evaluate("a") == 2
-        assert self.i.evaluate(("scope", "a")) == 2
+        self.i.evaluate(Expr((Sym("define"), [Sym("a"), 2])))
+        assert self.i.evaluate(Sym("a")) == 2
+        assert self.i.evaluate(Expr((Sym("scope"), Sym("a")))) == 2
 
-        assert self.i.evaluate(("scope", ("seq", [
-            ("print", ["a"]),
-            ("define", ["a", 3]),
-            ("print", ["a"]),
-            ("define", ["b", 4]),
-            ("print", ["b"]),
-            "b"
-        ]))) == 4
+        assert self.i.evaluate(Expr((Sym("scope"), Expr((Sym("seq"), [
+            Expr((Sym("print"), [Sym("a")])),
+            Expr((Sym("define"), [Sym("a"), 3])),
+            Expr((Sym("print"), [Sym("a")])),
+            Expr((Sym("define"), [Sym("b"), 4])),
+            Expr((Sym("print"), [Sym("b")])),
+            Sym("b")
+        ]))))) == 4
         assert capsys.readouterr().out == "2\n3\n4\n"
 
-        assert self.i.evaluate("a") == 2
+        assert self.i.evaluate(Sym("a")) == 2
 
         with pytest.raises(AssertionError):
-            self.i.evaluate("b")
+            self.i.evaluate(Sym("b"))
 
     def test_builtin_functions(self, capsys):
-        assert self.i.evaluate(("add", [2, 3])) == 5
-        assert self.i.evaluate(("sub", [5, 3])) == 2
-        assert self.i.evaluate(("mul", [2, 3])) == 6
+        assert self.i.evaluate(Expr((Sym("add"), [2, 3]))) == 5
+        assert self.i.evaluate(Expr((Sym("sub"), [5, 3]))) == 2
+        assert self.i.evaluate(Expr((Sym("mul"), [2, 3]))) == 6
 
-        assert self.i.evaluate(("equal", [2, 2])) is True
-        assert self.i.evaluate(("equal", [2, 3])) is False
+        assert self.i.evaluate(Expr((Sym("equal"), [2, 2]))) is True
+        assert self.i.evaluate(Expr((Sym("equal"), [2, 3]))) is False
 
-        assert self.i.evaluate(("add", [2, ("mul", [3, 4])])) == 14
+        assert self.i.evaluate(Expr((Sym("add"), [2, Expr((Sym("mul"), [3, 4]))]))) == 14
 
-        self.i.evaluate(("print", [2, 3]))
+        self.i.evaluate(Expr((Sym("print"), [2, 3])))
         assert capsys.readouterr().out == "2 3\n"
 
-        self.i.evaluate(("print", [("add", [5, 5])]))
+        self.i.evaluate(Expr((Sym("print"), [Expr((Sym("add"), [5, 5]))])))
         assert capsys.readouterr().out == "10\n"
 
     def test_user_func(self):
-        self.i.evaluate(("define", ["add2", ("func", ["a"],
-            ("add", ["a", 2])
-        )]))
-        assert self.i.evaluate(("add2", [3])) == 5
+        self.i.evaluate(Expr((Sym("define"), [Sym("add2"), Expr((Sym("func"), [Sym("a")],
+            Expr((Sym("add"), [Sym("a"), 2]))
+        ))])))
+        assert self.i.evaluate(Expr((Sym("add2"), [3]))) == 5
 
-        self.i.evaluate(("define", ["sum3", ("func",["a", "b", "c"],
-            ("add", ["a", ("add", ["b", "c"])])
-        )]))
-        assert self.i.evaluate(("sum3", [2, 3, 4])) == 9
+        self.i.evaluate(Expr((Sym("define"), [Sym("sum3"), Expr((Sym("func"),[Sym("a"), Sym("b"), Sym("c")],
+            Expr((Sym("add"), [Sym("a"), Expr((Sym("add"), [Sym("b"), Sym("c")]))]))
+        ))])))
+        assert self.i.evaluate(Expr((Sym("sum3"), [2, 3, 4]))) == 9
 
     def test_recursion(self):
-        self.i.evaluate(("define", ["fac", ("func",["n"],
-            ("if", ("equal", ["n", 1]),
+        self.i.evaluate(Expr((Sym("define"), [Sym("fac"), Expr((Sym("func"),[Sym("n")],
+            Expr((Sym("if"), Expr((Sym("equal"), [Sym("n"), 1])),
                 1,
-                ("mul", ["n", ("fac", [("sub", ["n", 1])])])
+                Expr((Sym("mul"), [Sym("n"), Expr((Sym("fac"), [Expr((Sym("sub"), [Sym("n"), 1]))]))]))
             )
-        )]))
-        assert self.i.evaluate(("fac", [1])) == 1
-        assert self.i.evaluate(("fac", [3])) == 6
-        assert self.i.evaluate(("fac", [5])) == 120
+        )))])))
+        assert self.i.evaluate(Expr((Sym("fac"), [1]))) == 1
+        assert self.i.evaluate(Expr((Sym("fac"), [3]))) == 6
+        assert self.i.evaluate(Expr((Sym("fac"), [5]))) == 120
 
     def test_scope_leak(self):
-        self.i.evaluate(("define", ["x", 2]))
-        self.i.evaluate(("define", ["f", ("func", ["x"], 3)]))
-        self.i.evaluate(("f", [4]))
-        assert self.i.evaluate("x") == 2
+        self.i.evaluate(Expr((Sym("define"), [Sym("x"), 2])))
+        self.i.evaluate(Expr((Sym("define"), [Sym("f"), Expr((Sym("func"), [Sym("x")], 3))])))
+        self.i.evaluate(Expr((Sym("f"), [4])))
+        assert self.i.evaluate(Sym("x")) == 2
 
     def test_closure(self):
-        self.i.evaluate(("define", ["x", 2]))
-        self.i.evaluate(("define", ["return_x", ("func", [], "x")]))
-        assert self.i.evaluate(("return_x", [])) == 2
-        assert self.i.evaluate(("scope", ("seq", [
-            ("define", ["x", 3]),
-            ("return_x", [])
-        ]))) == 2
-        assert self.i.evaluate("x") == 2
+        self.i.evaluate(Expr((Sym("define"), [Sym("x"), 2])))
+        self.i.evaluate(Expr((Sym("define"), [Sym("return_x"), Expr((Sym("func"), [], Sym("x")))])))
+        assert self.i.evaluate(Expr((Sym("return_x"), []))) == 2
+        assert self.i.evaluate(Expr((Sym("scope"), Expr((Sym("seq"), [
+            Expr((Sym("define"), [Sym("x"), 3])),
+            Expr((Sym("return_x"), []))
+        ]))))) == 2
+        assert self.i.evaluate(Sym("x")) == 2
 
     def test_adder(self):
-        self.i.evaluate(("define", ["make_adder", ("func", ["n"],
-            ("func", ["m"], ("add", ["n", "m"]))
-        )]))
-        self.i.evaluate(("define", ["add2", ("make_adder", [2])]))
-        self.i.evaluate(("define", ["add3", ("make_adder", [3])]))
+        self.i.evaluate(Expr((Sym("define"), [Sym("make_adder"), Expr((Sym("func"), [Sym("n")],
+            Expr((Sym("func"), [Sym("m")], Expr((Sym("add"), [Sym("n"), Sym("m")]))))
+        ))])))
+        self.i.evaluate(Expr((Sym("define"), [Sym("add2"), Expr((Sym("make_adder"), [2]))])))
+        self.i.evaluate(Expr((Sym("define"), [Sym("add3"), Expr((Sym("make_adder"), [3]))])))
 
-        assert self.i.evaluate(("add2", [3])) == 5
-        assert self.i.evaluate(("add3", [4])) == 7
+        assert self.i.evaluate(Expr((Sym("add2"), [3]))) == 5
+        assert self.i.evaluate(Expr((Sym("add3"), [4]))) == 7
 
     def test_shadowing(self):
-        self.i.evaluate(("define", ["make_shadow", ("func", ["x"],
-            ("func", [],
-                ("seq", [
-                    ("define", ["x", 3]),
-                    "x"
+        self.i.evaluate(Expr((Sym("define"), [Sym("make_shadow"), Expr((Sym("func"), [Sym("x")],
+            Expr((Sym("func"), [],
+                Expr((Sym("seq"), [
+                    Expr((Sym("define"), [Sym("x"), 3])),
+                    Sym("x")
                 ])
             )
-        )]))
-        self.i.evaluate(("define", ["g", ("make_shadow", [2])]))
-        assert self.i.evaluate(("g", [])) == 3
+        ))))])))
+        self.i.evaluate(Expr((Sym("define"), [Sym("g"), Expr((Sym("make_shadow"), [2]))])))
+        assert self.i.evaluate(Expr((Sym("g"), []))) == 3
 
 class TestGo(TestBase):
     def test_whitespace(self):

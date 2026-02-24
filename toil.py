@@ -1,8 +1,18 @@
 #! /usr/bin/env python3
 
+class Sym(str):
+    def __repr__(self):
+        return f"'{self}'"
+
+class Expr(tuple):
+    def __repr__(self):
+        return "{" + " ".join(map(repr, self)) + "}"
+
+
 def is_name_first(c): return c.isalpha() or c == "_"
 def is_name_rest(c): return c.isalnum() or c == "_"
-def is_name(expr): return isinstance(expr, str) and is_name_first(expr[0])
+def is_name(expr): return isinstance(expr, Sym) and is_name_first(expr[0])
+
 
 class Scanner:
     def __init__(self, src):
@@ -16,26 +26,26 @@ class Scanner:
                 self._advance()
 
             if self._current_char() == "#":
-                while self._current_char() not in ("\n", "$EOF"):
+                while self._current_char() not in ("\n", Sym("$EOF")):
                     self._advance()
                 continue
 
             match self._current_char():
-                case "$EOF":
-                    self._tokens.append("$EOF")
+                case Sym("$EOF"):
+                    self._tokens.append(Sym("$EOF"))
                     break
                 case ch if ch.isnumeric():
                     self._number()
                 case c if is_name_first(c):
                     self._name()
-                case ch if ch in "=!<>:":
+                case ("=" | "!" | "<" | ">" | ":") as ch:
                     start = self._pos
                     self._advance()
                     if self._current_char() == "=":
                         self._advance()
-                    self._tokens.append(self._src[start:self._pos])
-                case ch if ch in "+-*/%();,":
-                    self._tokens.append(ch)
+                    self._tokens.append(Sym(self._src[start:self._pos]))
+                case ("+" | "-" | "*" | "/" | "%" | "(" | ")" | ";" | ",") as ch:
+                    self._tokens.append(Sym(ch))
                     self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
@@ -58,7 +68,7 @@ class Scanner:
             case "None": self._tokens.append(None)
             case "True": self._tokens.append(True)
             case "False": self._tokens.append(False)
-            case _: self._tokens.append(token)
+            case _: self._tokens.append(Sym(token))
 
     def _advance(self):
         self._pos += 1
@@ -67,7 +77,7 @@ class Scanner:
         if self._pos < len(self._src):
             return self._src[self._pos]
         else:
-            return "$EOF"
+            return Sym("$EOF")
 
 
 class Parser:
@@ -77,7 +87,7 @@ class Parser:
 
     def parse(self):
         expr = self._expression()
-        assert self._current_token() == "$EOF", \
+        assert self._current_token() == Sym("$EOF"), \
             f"Extra token @ parse(): {self._current_token()}"
         return expr
 
@@ -86,131 +96,131 @@ class Parser:
 
     def _sequence(self):
         exprs = [self._define_assign()]
-        while self._current_token() == ";":
+        while self._current_token() == Sym(";"):
             self._advance()
             exprs.append(self._define_assign())
-        return exprs[0] if len(exprs) == 1 else ("seq", exprs)
+        return exprs[0] if len(exprs) == 1 else Expr((Sym("seq"), exprs))
 
     def _define_assign(self):
         return self._binary_right({
-            ":=": "define", "=": "assign"
+            Sym(":="): Sym("define"), Sym("="): Sym("assign")
         }, self._and_or)
 
     def _and_or(self):
         left = self._not()
-        while (op := self._current_token()) in ("and", "or"):
+        while (op := self._current_token()) in (Sym("and"), Sym("or")):
             self._advance()
             right = self._not()
-            if op == "and":
-                left = ("if", left, right, left)
-            else: # or
-                left = ("if", left, left, right)
+            if op == Sym("and"):
+                left = Expr((Sym("if"), left, right, left))
+            else:
+                left = Expr((Sym("if"), left, left, right))
         return left
 
     def _not(self):
         return self._unary({
-            "not": "not"
+            Sym("not"): Sym("not")
         }, self._comparison)
 
     def _comparison(self):
         return self._binary_left({
-            "==": "equal", "!=": "not_equal",
-            "<": "less", ">": "greater",
-            "<=": "less_equal", ">=": "greater_equal"
+            Sym("=="): Sym("equal"), Sym("!="): Sym("not_equal"),
+            Sym("<"): Sym("less"), Sym(">"): Sym("greater"),
+            Sym("<="): Sym("less_equal"), Sym(">="): Sym("greater_equal")
         }, self._add_sub)
 
     def _add_sub(self):
         return self._binary_left({
-            "+": "add", "-": "sub"
+            Sym("+"): Sym("add"), Sym("-"): Sym("sub")
         }, self._mul_div_mod)
 
     def _mul_div_mod(self):
         return self._binary_left({
-            "*": "mul", "/": "div", "%": "mod"
+            Sym("*"): Sym("mul"), Sym("/"): Sym("div"), Sym("%"): Sym("mod")
         }, self._neg)
 
     def _neg(self):
-        return self._unary({"-": "neg"}, self._call)
+        return self._unary({Sym("-"): Sym("neg")}, self._call)
 
     def _call(self):
         func = self._primary()
-        while self._current_token() == "(":
+        while self._current_token() == Sym("("):
             self._advance()
-            func = (func, self._comma_separated_exprs(")"))
+            func = Expr((func, self._comma_separated_exprs(Sym(")"))))
         return func
 
     def _primary(self):
         match self._current_token():
-            case "(": return self._paren()
+            case Sym("("): return self._paren()
             case None | bool() | int(): return self._advance()
-            case "func": return self._func()
-            case "scope": return self._scope()
-            case "if": return self._if()
-            case "while": return self._while()
-            case "deffunc": return self._deffunc()
-            case str(name) if is_name(name): return self._advance()
+            case Sym("func"): return self._func()
+            case Sym("scope"): return self._scope()
+            case Sym("if"): return self._if()
+            case Sym("while"): return self._while()
+            case Sym("deffunc"): return self._deffunc()
+            case Sym(name) if is_name(name): return self._advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
 
     def _paren(self):
         self._advance()
         expr = self._expression()
-        self._consume(")")
+        self._consume(Sym(")"))
         return expr
 
     def _func(self):
         self._advance()
-        params = self._comma_separated_exprs("do")
+        params = self._comma_separated_exprs(Sym("do"))
         body_expr = self._expression()
-        self._consume("end")
-        return ("func", params, body_expr)
+        self._consume(Sym("end"))
+        return Expr((Sym("func"), params, body_expr))
 
     def _scope(self):
         self._advance()
         body_expr = self._expression()
-        self._consume("end")
-        return ("scope", body_expr)
+        self._consume(Sym("end"))
+        return Expr((Sym("scope"), body_expr))
 
     def _if(self):
         self._advance()
         cond_expr = self._expression()
-        self._consume("then")
+        self._consume(Sym("then"))
         then_expr = self._expression()
-        if self._current_token() == "elif":
+        if self._current_token() == Sym("elif"):
             else_expr = self._if()
-        elif self._current_token() == "else":
+        elif self._current_token() == Sym("else"):
             self._advance()
             else_expr = self._expression()
-            self._consume("end")
+            self._consume(Sym("end"))
         else:
             else_expr = None
-            self._consume("end")
-        return ("if", cond_expr, then_expr, else_expr)
+            self._consume(Sym("end"))
+        return Expr((Sym("if"), cond_expr, then_expr, else_expr))
 
     def _while(self):
         self._advance()
         cond_expr = self._expression()
-        self._consume("do")
+        self._consume(Sym("do"))
         body_expr = self._expression()
-        self._consume("end")
-        return ("while", cond_expr, body_expr)
+        self._consume(Sym("end"))
+        return Expr((Sym("while"), cond_expr, body_expr))
 
     def _deffunc(self):
         self._advance()
         name = self._advance()
         assert is_name(name), f"Expected function name @ deffunc: {name}"
-        self._consume("params")
-        params = self._comma_separated_exprs("do")
+        self._consume(Sym("params"))
+        params = self._comma_separated_exprs(Sym("do"))
         body_expr = self._expression()
-        self._consume("end")
-        return ("define", [name, ("func", params, body_expr)])
+        self._consume(Sym("end"))
+        return Expr((Sym("define"), [name, Expr((Sym("func"), params, body_expr))]))
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
         while (op := self._current_token()) in ops:
             self._advance()
             right = sub_elem()
-            left = (ops[op], [left, right])
+            left = Expr((ops[op], [left, right]))
         return left
 
     def _binary_right(self, ops, sub_elem):
@@ -218,20 +228,13 @@ class Parser:
         if (op := self._current_token()) in ops:
             self._advance()
             right = self._binary_right(ops, sub_elem)
-            return (ops[op], [left, right])
-        return left
-
-    def _postfix(self, ops_actions, sub_elem):
-        left = sub_elem()
-        while (op := self._current_token()) in ops_actions:
-            action = ops_actions[op]
-            left = action(left)
+            return Expr((ops[op], [left, right]))
         return left
 
     def _unary(self, ops, sub_elem):
         if (op := self._current_token()) in ops:
             self._advance()
-            return (ops[op], [self._unary(ops, sub_elem)])
+            return Expr((ops[op], [self._unary(ops, sub_elem)]))
         else:
             return sub_elem()
 
@@ -239,7 +242,7 @@ class Parser:
         cse = []
         if self._current_token() != terminate:
             cse.append(self._expression())
-            while self._current_token() == ",":
+            while self._current_token() == Sym(","):
                 self._advance()
                 cse.append(self._expression())
         self._consume(terminate)
@@ -264,7 +267,7 @@ class Environment:
         self._vars = {}
 
     def __repr__(self):
-        content = "__builtins__" if "__builtins__" in self._vars else \
+        content = "__builtins__" if Sym("__builtins__") in self._vars else \
                   ", ".join(self._vars)
         return f"[{content}]" + (f" < {self._parent}" if self._parent else "")
 
@@ -295,27 +298,27 @@ class Evaluator:
         match expr:
             case None | bool() | int():
                 return expr
-            case str(name):
+            case Sym(name):
                 frame = env.lookup(name)
                 assert frame is not None, f"Undefined variable @ evaluate(): {name}"
                 return frame.val(name)
-            case ("define", [str(name), val]):
+            case Expr((Sym("define"), [Sym(name), val])):
                 return env.define(name, self.evaluate(val, env))
-            case ("assign", [str(name), val]):
+            case Expr((Sym("assign"), [Sym(name), val])):
                 frame = env.lookup(name)
                 assert frame is not None, f"Assign to undefined variable @ evaluate(): {name}"
                 return frame.set_val(name, self.evaluate(val, env))
-            case ("seq", exprs):
+            case Expr((Sym("seq"), exprs)):
                 return self._evaluate_seq(exprs, env)
-            case ("if", cond_expr, then_expr, else_expr):
+            case Expr((Sym("if"), cond_expr, then_expr, else_expr)):
                 return self._evaluate_if(cond_expr, then_expr, else_expr, env)
-            case ("while", cond_expr, body_expr):
+            case Expr((Sym("while"), cond_expr, body_expr)):
                 return self._evaluate_while(cond_expr, body_expr, env)
-            case ("func", params, body):
-                return ("closure", params, body, env)
-            case ("scope", expr):
+            case Expr((Sym("func"), params, body)):
+                return Expr((Sym("closure"), params, body, env))
+            case Expr((Sym("scope"), expr)):
                 return self.evaluate(expr, Environment(env))
-            case (op_expr, args_expr):
+            case Expr((op_expr, args_expr)):
                 return self._eval_op(op_expr, args_expr, env)
             case unexpected:
                 assert False, f"Unexpected expression @ evaluate(): {unexpected}"
@@ -344,7 +347,7 @@ class Evaluator:
         match op_val:
             case c if callable(c):
                 return c(args_val)
-            case ("closure", params, body, closure_env):
+            case Expr((Sym("closure"), params, body, closure_env)):
                 new_env = Environment(closure_env)
                 for param, arg in zip(params, args_val):
                     new_env.define(param, arg)
@@ -357,24 +360,24 @@ class Interpreter:
         self._env = Environment()
 
     def init_env(self):
-        self._env.define("__builtins__", None)
+        self._env.define(Sym("__builtins__"), None)
 
-        self._env.define("add", lambda args: args[0] + args[1])
-        self._env.define("sub", lambda args: args[0] - args[1])
-        self._env.define("mul", lambda args: args[0] * args[1])
-        self._env.define("div", lambda args: args[0] // args[1])
-        self._env.define("mod", lambda args: args[0] % args[1])
-        self._env.define("neg", lambda args: -args[0])
+        self._env.define(Sym("add"), lambda args: args[0] + args[1])
+        self._env.define(Sym("sub"), lambda args: args[0] - args[1])
+        self._env.define(Sym("mul"), lambda args: args[0] * args[1])
+        self._env.define(Sym("div"), lambda args: args[0] // args[1])
+        self._env.define(Sym("mod"), lambda args: args[0] % args[1])
+        self._env.define(Sym("neg"), lambda args: -args[0])
 
-        self._env.define("equal", lambda args: args[0] == args[1])
-        self._env.define("not_equal", lambda args: args[0] != args[1])
-        self._env.define("less", lambda args: args[0] < args[1])
-        self._env.define("greater", lambda args: args[0] > args[1])
-        self._env.define("less_equal", lambda args: args[0] <= args[1])
-        self._env.define("greater_equal", lambda args: args[0] >= args[1])
-        self._env.define("not", lambda args: not args[0])
+        self._env.define(Sym("equal"), lambda args: args[0] == args[1])
+        self._env.define(Sym("not_equal"), lambda args: args[0] != args[1])
+        self._env.define(Sym("less"), lambda args: args[0] < args[1])
+        self._env.define(Sym("greater"), lambda args: args[0] > args[1])
+        self._env.define(Sym("less_equal"), lambda args: args[0] <= args[1])
+        self._env.define(Sym("greater_equal"), lambda args: args[0] >= args[1])
+        self._env.define(Sym("not"), lambda args: not args[0])
 
-        self._env.define("print", lambda args: print(*args))
+        self._env.define(Sym("print"), lambda args: print(*args))
 
         self._env = Environment(self._env)
         return self
@@ -427,15 +430,15 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.ast(""" if 1 then 10 end """)) # -> ('if', 1, 10, None)
-    print(i.ast(""" if 1 then 10 else 20 end """)) # -> ('if', 1, 10, 20)
-    print(i.ast(""" if 1 then 10 elif 2 then 20 end """)) # -> ('if', 1, 10, ('if', 2, 20, None))
-    print(i.ast(""" if 1 then 10 elif 2 then 20 else 30  end """)) # -> ('if', 1, 10, ('if', 2, 20, 30))
-    print(i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 end """)) # -> ('if', 1, 10, ('if', 2, 20, ('if', 3, 30, None)))
-    print(i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 else 40 end """)) # -> ('if', 1, 10, ('if', 2, 20, ('if', 3, 30, 40)))
+    print(i.ast(""" if 1 then 10 end """)) # ->
+    print(i.ast(""" if 1 then 10 else 20 end """)) # ->
+    print(i.ast(""" if 1 then 10 elif 2 then 20 end """)) # ->
+    print(i.ast(""" if 1 then 10 elif 2 then 20 else 30  end """)) # ->
+    print(i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 end """)) # ->
+    print(i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 else 40 end """)) # ->
 
     i.go("""
-        fib := func n do
+        deffunc fib params n do
             if n == 0 then
                 0
             elif n == 1 then
