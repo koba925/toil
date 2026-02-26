@@ -1,8 +1,7 @@
 #! /usr/bin/env python3
 
 class Sym(str):
-    def __repr__(self):
-        return f"'{self}'"
+    def __repr__(self): return self
 
 class Expr(tuple):
     def __repr__(self):
@@ -44,7 +43,7 @@ class Scanner:
                     if self._current_char() == "=":
                         self._advance()
                     self._tokens.append(Sym(self._src[start:self._pos]))
-                case ("+" | "-" | "*" | "/" | "%" | "(" | ")" | ";" | ",") as ch:
+                case ("+" | "-" | "*" | "/" | "%" | "(" | ")" | "[" | "]" | ";" | ",") as ch:
                     self._tokens.append(Sym(ch))
                     self._advance()
                 case invalid:
@@ -140,14 +139,21 @@ class Parser:
         }, self._neg)
 
     def _neg(self):
-        return self._unary({Sym("-"): Sym("neg")}, self._call)
+        return self._unary({Sym("-"): Sym("neg")}, self._call_index)
 
-    def _call(self):
-        func = self._primary()
-        while self._current_token() == Sym("("):
-            self._advance()
-            func = Expr((func, self._comma_separated_exprs(Sym(")"))))
-        return func
+    def _call_index(self):
+        target = self._primary()
+        while self._current_token() in (Sym("("), Sym("[")):
+            match self._current_token():
+                case Sym("("):
+                    self._advance()
+                    target = Expr((target, self._comma_separated_exprs(Sym(")"))))
+                case Sym("["):
+                    self._advance()
+                    index = self._expression()
+                    self._consume(Sym("]"))
+                    target = Expr((Sym("index"), [target, index]))
+        return target
 
     def _primary(self):
         match self._current_token():
@@ -304,10 +310,8 @@ class Evaluator:
                 return frame.val(name)
             case Expr((Sym("define"), [Sym(name), val])):
                 return env.define(name, self.evaluate(val, env))
-            case Expr((Sym("assign"), [Sym(name), val])):
-                frame = env.lookup(name)
-                assert frame is not None, f"Assign to undefined variable @ evaluate(): {name}"
-                return frame.set_val(name, self.evaluate(val, env))
+            case Expr((Sym("assign"), [left_expr, right_expr])):
+                return self._evaluate_assign(left_expr, right_expr, env)
             case Expr((Sym("seq"), exprs)):
                 return self._evaluate_seq(exprs, env)
             case Expr((Sym("if"), cond_expr, then_expr, else_expr)):
@@ -322,6 +326,26 @@ class Evaluator:
                 return self._eval_op(op_expr, args_expr, env)
             case unexpected:
                 assert False, f"Unexpected expression @ evaluate(): {unexpected}"
+
+    def _evaluate_assign(self, left_expr, right_expr, env):
+        right_val = self.evaluate(right_expr, env)
+        match left_expr:
+            case Sym(name):
+                frame = env.lookup(name)
+                assert frame is not None, \
+                    f"Undefined variable @ _evaluate_assign(): {name}"
+                return frame.set_val(name, right_val)
+            case Expr((Sym("index"), [coll_expr, index_expr])):
+                coll_val = self.evaluate(coll_expr, env)
+                index_val = self.evaluate(index_expr, env)
+                assert isinstance(coll_val, list), \
+                    f"Index target not array @ _evaluate_assign(): {coll_val}"
+                assert isinstance(index_val, int), \
+                    f"Index not int @ _evaluate_assign(): {index_val}"
+                coll_val[index_val] = right_val
+                return right_val
+            case unexpected:
+                assert False, f"Illegal assign target @ _evaluate_assign(): {unexpected}"
 
     def _evaluate_seq(self, exprs, env):
         val = None
@@ -377,6 +401,13 @@ class Interpreter:
         self._env.define(Sym("greater_equal"), lambda args: args[0] >= args[1])
         self._env.define(Sym("not"), lambda args: not args[0])
 
+        self._env.define(Sym("arr"), lambda args: args)
+        self._env.define(Sym("len"), lambda args: len(args[0]))
+        self._env.define(Sym("index"), lambda args: args[0][args[1]])
+        self._env.define(Sym("slice"), lambda args: args[0][args[1]:args[2]])
+        self._env.define(Sym("push"), lambda args: args[0].append(args[1]))
+        self._env.define(Sym("pop"), lambda args: args[0].pop())
+
         self._env.define(Sym("print"), lambda args: print(*args))
 
         self._env = Environment(self._env)
@@ -430,27 +461,70 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.ast(""" if 1 then 10 end """)) # ->
-    print(i.ast(""" if 1 then 10 else 20 end """)) # ->
-    print(i.ast(""" if 1 then 10 elif 2 then 20 end """)) # ->
-    print(i.ast(""" if 1 then 10 elif 2 then 20 else 30  end """)) # ->
-    print(i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 end """)) # ->
-    print(i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 else 40 end """)) # ->
+    print(i.ast(""" arr() """)) # -> {arr []}
+    print(i.go(""" arr() """)) # -> []
 
-    i.go("""
-        deffunc fib params n do
-            if n == 0 then
-                0
-            elif n == 1 then
-                1
-            else
-                fib(n - 1) + fib(n - 2)
-            end
+    print(i.ast(""" arr(2) """)) # -> {arr [2]}
+    print(i.go(""" arr(2) """)) # -> [2]
+    print(i.go(""" arr(2)[0] """)) # -> 2
+
+    print(i.ast(""" arr(2, 3, arr(4, 5)) """)) # -> {arr [2, 3, {arr [4, 5]}]}
+    print(i.go(""" arr(2, 3, arr(4, 5)) """)) # -> [2, 3, [4, 5]]
+
+    i.go(""" a := arr(2, 3, arr(4, 5)) """)
+    print(i.ast(""" a[2][0] """)) # -> {index [{index [a, 2]}, 0]}
+    print(i.go(""" a[2][0] """)) # -> 4
+    print(i.go(""" a[2][-1] """)) # -> 5
+
+    i.go(""" b := arr(2, 3, arr(4, 5)) """)
+    print(i.ast(""" b[0] = 6 """)) # -> {assign [{index [b, 0]}, 6]}
+    i.go(""" b[0] = 6 """)
+    print(i.ast(""" b[2][1] = 7 """)) # -> {assign [{index [{index [b, 2]}, 1]}, 7]}
+    i.go(""" b[2][1] = 7 """)
+    print(i.go(""" b """)) # -> [6, 3, [4, 7]]
+
+    i.go(""" c := func do arr(add, sub) end """)
+    print(i.ast(""" c()[0](2, 3) """)) # ->{{index [{c []}, 0]} [2, 3]}
+    print(i.go(""" c()[0](2, 3) """)) # -> 5
+
+    i.go(""" d := arr(2, 3, 4) """)
+    print(i.go(""" len(d) """)) # -> 3
+    print(i.go(""" slice(d, 1, None) """)) # -> [3, 4]
+    print(i.go(""" slice(d, 1, 2) """)) # -> [3]
+    print(i.go(""" slice(d, None, 2) """)) # -> [2, 3]
+    print(i.go(""" slice(d, None, None) """)) # -> [2, 3, 4]
+    print(i.go(""" push(d, 5) """)) # -> None
+    print(i.go(""" d """)) # -> [2, 3, 4, 5]
+    print(i.go(""" pop(d) """)) # -> 5
+    print(i.go(""" d """)) # -> [2, 3, 4]
+
+    print(i.go(""" arr(2, 3) + arr(4, 5) """)) # -> [2, 3, 4, 5]
+    print(i.go(""" arr(2, 3) * 3 """)) # -> [2, 3, 2, 3, 2, 3]
+
+    print(i.go("""
+        sieve := arr(False, False) + arr(True) * 98;
+        i := 2; while i * i < 100 do
+            if sieve[i] then
+                j := i * i; while j < 100 do
+                    sieve[j] = False;
+                    j = j + i
+                end
+            end;
+            i = i + 1
         end;
 
-        print(fib(0)); # -> 0
-        print(fib(1)); # -> 1
-        print(fib(7)); # -> 13
-        print(fib(8)); # -> 21
-        print(fib(9)) # -> 34
-    """)
+        primes := arr();
+        i := 0; while i < 100 do
+            if sieve[i] then
+                push(primes, i)
+            end;
+            i = i + 1
+        end;
+
+        primes
+    """)) # -> [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]
+
+    # i.go(""" 2[3] """) # -> Error
+    # i.go(""" 2 = 3 """) # -> Error
+    # i.go(""" d[None] = 2 """) # -> Error
+    # i.go(""" None[2] = 3 """) # -> Error

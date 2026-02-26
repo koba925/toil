@@ -100,6 +100,11 @@ class TestParse(TestBase):
         assert self.i.ast(""" a := b = 2 """) == Expr((Sym("define"), [Sym("a"), Expr((Sym("assign"), [Sym("b"), 2]))]))
         assert self.i.ast(""" a := b = c := 3 """) == Expr((Sym("define"), [Sym("a"), Expr((Sym("assign"), [Sym("b"), Expr((Sym("define"), [Sym("c"), 3]))]))]))
 
+    def test_array_assign(self):
+        assert self.i.ast(""" a[0] = 1 """) == Expr((Sym("assign"), [Expr((Sym("index"), [Sym("a"), 0])), 1]))
+        assert self.i.ast(""" a[1][2] = 3 """) == Expr((Sym("assign"), [Expr((Sym("index"), [Expr((Sym("index"), [Sym("a"), 1])), 2])), 3]))
+        assert self.i.ast(""" a[0] = b[1] = 2 """) == Expr((Sym("assign"), [Expr((Sym("index"), [Sym("a"), 0])), Expr((Sym("assign"), [Expr((Sym("index"), [Sym("b"), 1])), 2]))]))
+
     def test_while(self):
         assert self.i.ast(""" while i < 10 do i = i + 1 end """) == Expr(('while', Expr((Sym('less'), [Sym('i'), 10])), Expr((Sym('assign'), [Sym('i'), Expr((Sym('add'), [Sym('i'), 1]))]))))
 
@@ -107,6 +112,10 @@ class TestParse(TestBase):
         assert self.i.ast(""" print() """) == Expr((Sym("print"), []))
         assert self.i.ast(""" neg(2) """) == Expr((Sym("neg"), [2]))
         assert self.i.ast(""" add(2, mul(3, 4)) """) == Expr((Sym("add"), [2, Expr((Sym("mul"), [3, 4]))]))
+
+    def test_index(self):
+        assert self.i.ast(""" a[0] """) == Expr((Sym("index"), [Sym("a"), 0]))
+        assert self.i.ast(""" a[1][2] """) == Expr((Sym("index"), [Expr((Sym("index"), [Sym("a"), 1])), 2]))
 
     def test_func(self):
         assert self.i.ast(""" func do 2 end """) == Expr((Sym("func"), [], 2))
@@ -284,6 +293,50 @@ class TestEvaluate(TestBase):
         ))))])))
         self.i.evaluate(Expr((Sym("define"), [Sym("g"), Expr((Sym("make_shadow"), [2]))])))
         assert self.i.evaluate(Expr((Sym("g"), []))) == 3
+
+    def test_array(self):
+        self.i.evaluate(Expr((Sym("define"), [Sym("a"), Expr((Sym("arr"), [1, 2, 3]))])))
+        assert self.i.evaluate(Sym("a")) == [1, 2, 3]
+        assert self.i.evaluate(Expr((Sym("index"), [Sym("a"), 0]))) == 1
+        assert self.i.evaluate(Expr((Sym("index"), [Sym("a"), 2]))) == 3
+
+        self.i.evaluate(Expr((Sym("assign"), [Expr((Sym("index"), [Sym("a"), 1])), 4])))
+        assert self.i.evaluate(Sym("a")) == [1, 4, 3]
+
+    def test_array_nested(self):
+        self.i.evaluate(Expr((Sym("define"), [Sym("a"), Expr((Sym("arr"), [
+            Expr((Sym("arr"), [1, 2])),
+            Expr((Sym("arr"), [3, 4]))
+        ]))])))
+        assert self.i.evaluate(Expr((Sym("index"), [Expr((Sym("index"), [Sym("a"), 0])), 1]))) == 2
+        assert self.i.evaluate(Expr((Sym("index"), [Expr((Sym("index"), [Sym("a"), 1])), 0]))) == 3
+
+        self.i.evaluate(Expr((Sym("assign"), [Expr((Sym("index"), [Expr((Sym("index"), [Sym("a"), 1])), 0])), 5])))
+        assert self.i.evaluate(Expr((Sym("index"), [Expr((Sym("index"), [Sym("a"), 1])), 0]))) == 5
+
+    def test_array_push_pop(self):
+        self.i.evaluate(Expr((Sym("define"), [Sym("a"), Expr((Sym("arr"), [1, 2]))])))
+        self.i.evaluate(Expr((Sym("push"), [Sym("a"), 3])))
+        assert self.i.evaluate(Sym("a")) == [1, 2, 3]
+        assert self.i.evaluate(Expr((Sym("pop"), [Sym("a")]))) == 3
+        assert self.i.evaluate(Sym("a")) == [1, 2]
+
+    def test_array_funcs(self):
+        self.i.evaluate(Expr((Sym("define"), [Sym("a"), Expr((Sym("arr"), [1, 2, 3]))])))
+        assert self.i.evaluate(Expr((Sym("len"), [Sym("a")]))) == 3
+        assert self.i.evaluate(Expr((Sym("slice"), [Sym("a"), 1, None]))) == [2, 3]
+        assert self.i.evaluate(Expr((Sym("slice"), [Sym("a"), 1, 2]))) == [2]
+        assert self.i.evaluate(Expr((Sym("slice"), [Sym("a"), None, 2]))) == [1, 2]
+        assert self.i.evaluate(Expr((Sym("slice"), [Sym("a"), None, None]))) == [1, 2, 3]
+
+    def test_array_error(self):
+        self.i.evaluate(Expr((Sym("define"), [Sym("a"), Expr((Sym("arr"), [1, 2]))])))
+
+        with pytest.raises(AssertionError, match="Index target not array"):
+            self.i.evaluate(Expr((Sym("assign"), [Expr((Sym("index"), [None, 0])), 1])))
+
+        with pytest.raises(AssertionError, match="Index not int"):
+            self.i.evaluate(Expr((Sym("assign"), [Expr((Sym("index"), [Sym("a"), None])), 1])))
 
 class TestGo(TestBase):
     def test_whitespace(self):
@@ -506,6 +559,71 @@ class TestGo(TestBase):
     def test_extra_token(self):
         with pytest.raises(AssertionError):
             self.i.go(""" 7 8 """)
+
+    def test_array(self):
+        assert self.i.go(""" arr() """) == []
+        assert self.i.go(""" arr(2) """) == [2]
+        assert self.i.go(""" arr(2)[0] """) == 2
+        assert self.i.go(""" arr(2, 3, arr(4, 5)) """) == [2, 3, [4, 5]]
+
+        self.i.go(""" a := arr(2, 3, arr(4, 5)) """)
+        assert self.i.go(""" a[2][0] """) == 4
+        assert self.i.go(""" a[2][-1] """) == 5
+
+        self.i.go(""" b := arr(2, 3, arr(4, 5)) """)
+        self.i.go(""" b[0] = 6 """)
+        assert self.i.go(""" b[0] """) == 6
+        self.i.go(""" b[2][1] = 7 """)
+        assert self.i.go(""" b[2][1] """) == 7
+        assert self.i.go(""" b """) == [6, 3, [4, 7]]
+
+        self.i.go(""" c := func do arr(add, sub) end """)
+        assert self.i.go(""" c()[0](2, 3) """) == 5
+
+        self.i.go(""" d := arr(2, 3, 4) """)
+        assert self.i.go(""" len(d) """) == 3
+        assert self.i.go(""" slice(d, 1, None) """) == [3, 4]
+        assert self.i.go(""" slice(d, 1, 2) """) == [3]
+        assert self.i.go(""" slice(d, None, 2) """) == [2, 3]
+        assert self.i.go(""" slice(d, None, None) """) == [2, 3, 4]
+        assert self.i.go(""" push(d, 5) """) is None
+        assert self.i.go(""" d """) == [2, 3, 4, 5]
+        assert self.i.go(""" pop(d) """) == 5
+        assert self.i.go(""" d """) == [2, 3, 4]
+
+        assert self.i.go(""" arr(2, 3) + arr(4, 5) """) == [2, 3, 4, 5]
+        assert self.i.go(""" arr(2, 3) * 3 """) == [2, 3, 2, 3, 2, 3]
+
+        self.i.go(""" e := arr(1) """)
+        with pytest.raises(AssertionError):
+            self.i.go(""" e[None] = 2 """)
+        with pytest.raises(AssertionError):
+            self.i.go(""" None[2] = 3 """)
+
+    def test_array_sieve(self):
+        assert self.i.go("""
+            sieve := arr(False, False) + arr(True) * 98;
+            i := 2; while i * i < 100 do
+                if sieve[i] then
+                    j := i * i; while j < 100 do
+                        sieve[j] = False;
+                        j = j + i
+                    end
+                end;
+                i = i + 1
+            end;
+
+            primes := arr();
+            i := 0; while i < 100 do
+                if sieve[i] then
+                    push(primes, i)
+                end;
+                i = i + 1
+            end;
+
+            primes
+        """) == [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]
+
 
 if __name__ == "__main__":
     pytest.main([__file__])
