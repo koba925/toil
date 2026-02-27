@@ -5,7 +5,7 @@ from toil import Interpreter, Sym, Expr
 class TestBase:
     @pytest.fixture(autouse=True)
     def set_interpreter(self):
-        self.i = Interpreter().init_env()
+        self.i = Interpreter().init_env().stdlib()
 
 
 class TestScan(TestBase):
@@ -600,6 +600,18 @@ class TestGo(TestBase):
         with pytest.raises(AssertionError):
             self.i.go(""" None[2] = 3 """)
 
+    def test_stdlib(self):
+        assert self.i.go(""" a := range(2, 10) """) == [2, 3, 4, 5, 6, 7, 8, 9]
+        assert self.i.go(""" first(a) """) == 2
+        assert self.i.go(""" rest(a) """) == [3, 4, 5, 6, 7, 8, 9]
+        assert self.i.go(""" last(a) """) == 9
+        assert self.i.go(""" map(a, func n do n * 2 end) """) == [4, 6, 8, 10, 12, 14, 16, 18]
+        assert self.i.go(""" filter(a, func n do n % 2 == 0 end) """) == [2, 4, 6, 8]
+        assert self.i.go(""" reduce(a, add, 0) """) == 44
+        assert self.i.go(""" reverse(a) """) == [9, 8, 7, 6, 5, 4, 3, 2]
+        assert self.i.go(""" zip(a, arr(4, 5, 6)) """) == [[2, 4], [3, 5], [4, 6]]
+        assert self.i.go(""" enumerate(a) """) == [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
+
     def test_array_sieve(self):
         assert self.i.go("""
             sieve := arr(False, False) + arr(True) * 98;
@@ -613,15 +625,7 @@ class TestGo(TestBase):
                 i = i + 1
             end;
 
-            primes := arr();
-            i := 0; while i < 100 do
-                if sieve[i] then
-                    push(primes, i)
-                end;
-                i = i + 1
-            end;
-
-            primes
+            map(filter(enumerate(sieve), last), first)
         """) == [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]
 
 

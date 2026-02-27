@@ -413,6 +413,80 @@ class Interpreter:
         self._env = Environment(self._env)
         return self
 
+    def stdlib(self):
+        self.go("""
+            deffunc first params a do a[0] end;
+            deffunc rest params a do slice(a, 1, None) end;
+            deffunc last params a do a[-1] end
+        """)
+        self.go("""
+            deffunc map params a, f do
+                b := arr(); l := len(a);
+                i := 0; while i < l do
+                    push(b, f(a[i]));
+                    i = i + 1
+                end;
+                b
+            end
+        """)
+        self.go("""
+            deffunc filter params a, f do
+                b := arr(); l := len(a);
+                i := 0; while i < l do
+                    if f(a[i]) then push(b, a[i]) end;
+                    i = i + 1
+                end;
+                b
+            end
+        """)
+        self.go("""
+            deffunc zip params a, b do
+                z := arr(); la := len(a); lb := len(b);
+                i := 0; while i < la and i < lb do
+                    push(z, arr(a[i], b[i]));
+                    i = i + 1
+                end;
+                z
+            end
+        """)
+        self.go("""
+            deffunc reduce params a, f, init do
+                acc := init; l := len(a);
+                i := 0; while i < l do
+                    acc = f(acc, a[i]);
+                    i = i + 1
+                end;
+                acc
+            end
+        """)
+        self.go("""
+            deffunc reverse params a do
+                b := arr(); i := len(a) - 1;
+                while i >= 0 do
+                    push(b, a[i]);
+                    i = i - 1
+                end;
+                b
+            end
+        """)
+        self.go("""
+            deffunc range params start, stop do
+                b := arr();
+                i := start; while i < stop do
+                    push(b, i);
+                    i = i + 1
+                end;
+                b
+            end
+        """)
+        self.go("""
+            deffunc enumerate params a do
+                zip(range(0, len(a)), a)
+            end
+        """)
+
+        return self
+
     def scan(self, src):
         return Scanner(src).tokenize()
 
@@ -432,7 +506,7 @@ class Interpreter:
 if __name__ == "__main__":
     import sys
 
-    i = Interpreter().init_env()
+    i = Interpreter().init_env().stdlib()
 
     def repl():
         while True:
@@ -461,45 +535,16 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.ast(""" arr() """)) # -> {arr []}
-    print(i.go(""" arr() """)) # -> []
-
-    print(i.ast(""" arr(2) """)) # -> {arr [2]}
-    print(i.go(""" arr(2) """)) # -> [2]
-    print(i.go(""" arr(2)[0] """)) # -> 2
-
-    print(i.ast(""" arr(2, 3, arr(4, 5)) """)) # -> {arr [2, 3, {arr [4, 5]}]}
-    print(i.go(""" arr(2, 3, arr(4, 5)) """)) # -> [2, 3, [4, 5]]
-
-    i.go(""" a := arr(2, 3, arr(4, 5)) """)
-    print(i.ast(""" a[2][0] """)) # -> {index [{index [a, 2]}, 0]}
-    print(i.go(""" a[2][0] """)) # -> 4
-    print(i.go(""" a[2][-1] """)) # -> 5
-
-    i.go(""" b := arr(2, 3, arr(4, 5)) """)
-    print(i.ast(""" b[0] = 6 """)) # -> {assign [{index [b, 0]}, 6]}
-    i.go(""" b[0] = 6 """)
-    print(i.ast(""" b[2][1] = 7 """)) # -> {assign [{index [{index [b, 2]}, 1]}, 7]}
-    i.go(""" b[2][1] = 7 """)
-    print(i.go(""" b """)) # -> [6, 3, [4, 7]]
-
-    i.go(""" c := func do arr(add, sub) end """)
-    print(i.ast(""" c()[0](2, 3) """)) # ->{{index [{c []}, 0]} [2, 3]}
-    print(i.go(""" c()[0](2, 3) """)) # -> 5
-
-    i.go(""" d := arr(2, 3, 4) """)
-    print(i.go(""" len(d) """)) # -> 3
-    print(i.go(""" slice(d, 1, None) """)) # -> [3, 4]
-    print(i.go(""" slice(d, 1, 2) """)) # -> [3]
-    print(i.go(""" slice(d, None, 2) """)) # -> [2, 3]
-    print(i.go(""" slice(d, None, None) """)) # -> [2, 3, 4]
-    print(i.go(""" push(d, 5) """)) # -> None
-    print(i.go(""" d """)) # -> [2, 3, 4, 5]
-    print(i.go(""" pop(d) """)) # -> 5
-    print(i.go(""" d """)) # -> [2, 3, 4]
-
-    print(i.go(""" arr(2, 3) + arr(4, 5) """)) # -> [2, 3, 4, 5]
-    print(i.go(""" arr(2, 3) * 3 """)) # -> [2, 3, 2, 3, 2, 3]
+    print(i.go(""" a := range(2, 10) """)) # -> [2, 3, 4, 5, 6, 7, 8, 9]
+    print(i.go(""" first(a) """)) # -> 2
+    print(i.go(""" rest(a) """)) # -> [3, 4, 5, 6, 7, 8, 9]
+    print(i.go(""" last(a) """)) # -> 9
+    print(i.go(""" map(a, func n do n * 2 end) """)) # -> [4, 6, 8, 10, 12, 14, 16, 18]
+    print(i.go(""" filter(a, func n do n % 2 == 0 end) """)) # -> [2, 4, 6, 8]
+    print(i.go(""" reduce(a, add, 0) """)) # -> 44
+    print(i.go(""" reverse(a) """)) # -> [9, 8, 7, 6, 5, 4, 3, 2]
+    print(i.go(""" zip(a, arr(4, 5, 6)) """)) # -> [[2, 4], [3, 5], [4, 6]]
+    print(i.go(""" enumerate(a) """)) # -> [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
 
     print(i.go("""
         sieve := arr(False, False) + arr(True) * 98;
@@ -513,18 +558,5 @@ if __name__ == "__main__":
             i = i + 1
         end;
 
-        primes := arr();
-        i := 0; while i < 100 do
-            if sieve[i] then
-                push(primes, i)
-            end;
-            i = i + 1
-        end;
-
-        primes
+        map(filter(enumerate(sieve), last), first)
     """)) # -> [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]
-
-    # i.go(""" 2[3] """) # -> Error
-    # i.go(""" 2 = 3 """) # -> Error
-    # i.go(""" d[None] = 2 """) # -> Error
-    # i.go(""" None[2] = 3 """) # -> Error
