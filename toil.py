@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 
 class Sym(str):
-    def __repr__(self): return self
+    def __str__(self): return f"'{super().__str__()}"
 
 class Expr(tuple):
     def __repr__(self):
@@ -35,6 +35,10 @@ class Scanner:
                     break
                 case ch if ch.isnumeric():
                     self._number()
+                case "'":
+                    self._raw_string()
+                case "\"":
+                    self._string()
                 case c if is_name_first(c):
                     self._name()
                 case ("=" | "!" | "<" | ">" | ":") as ch:
@@ -56,6 +60,33 @@ class Scanner:
         while self._current_char().isnumeric():
             self._advance()
         self._tokens.append(int(self._src[start:self._pos]))
+
+    def _raw_string(self):
+        self._advance()
+        start = self._pos
+        while (c := self._current_char()) != "'":
+            assert c != "$EOF", f"Unterminated string @ _raw_string()"
+            self._advance()
+        self._tokens.append(self._src[start:self._pos])
+        self._advance()
+
+    def _string(self):
+        self._advance()
+        s = []
+        while (c := self._current_char()) != "\"":
+            assert c != "$EOF", f"Unterminated string @ _string()"
+            if c == "\\":
+                self._advance()
+                c = self._current_char()
+                assert c != "$EOF", f"Unterminated string @ _string()"
+                match c:
+                    case "n": s.append("\n")
+                    case _: s.append(c)
+            else:
+                s.append(c)
+            self._advance()
+        self._advance()
+        return self._tokens.append("".join(s))
 
     def _name(self):
         start = self._pos
@@ -159,6 +190,7 @@ class Parser:
         match self._current_token():
             case Sym("("): return self._paren()
             case None | bool() | int(): return self._advance()
+            case s if type(s) == str: return self._advance()
             case Sym("func"): return self._func()
             case Sym("scope"): return self._scope()
             case Sym("if"): return self._if()
@@ -256,7 +288,7 @@ class Parser:
 
     def _consume(self, expected):
         assert self._current_token() == expected, \
-            f"Expected `{expected}` @ consume: {self._current_token()}"
+            f"Expected {expected} @ consume: {self._current_token()}"
         return self._advance()
 
     def _current_token(self):
@@ -304,6 +336,8 @@ class Evaluator:
         match expr:
             case None | bool() | int():
                 return expr
+            case s if type(s) is str:
+                return s
             case Sym(name):
                 frame = env.lookup(name)
                 assert frame is not None, f"Undefined variable @ evaluate(): {name}"
@@ -407,6 +441,12 @@ class Interpreter:
         self._env.define(Sym("slice"), lambda args: args[0][args[1]:args[2]])
         self._env.define(Sym("push"), lambda args: args[0].append(args[1]))
         self._env.define(Sym("pop"), lambda args: args[0].pop())
+
+        self._env.define(Sym("str"), lambda args: str(args[0]))
+        self._env.define(Sym("int"), lambda args: int(args[0]))
+        self._env.define(Sym("chr"), lambda args: chr(args[0]))
+        self._env.define(Sym("ord"), lambda args: ord(args[0]))
+        self._env.define(Sym("join"), lambda args: str(args[1]).join(map(str, args[0])))
 
         self._env.define(Sym("print"), lambda args: print(*args))
 
@@ -535,28 +575,27 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.go(""" a := range(2, 10) """)) # -> [2, 3, 4, 5, 6, 7, 8, 9]
-    print(i.go(""" first(a) """)) # -> 2
-    print(i.go(""" rest(a) """)) # -> [3, 4, 5, 6, 7, 8, 9]
-    print(i.go(""" last(a) """)) # -> 9
-    print(i.go(""" map(a, func n do n * 2 end) """)) # -> [4, 6, 8, 10, 12, 14, 16, 18]
-    print(i.go(""" filter(a, func n do n % 2 == 0 end) """)) # -> [2, 4, 6, 8]
-    print(i.go(""" reduce(a, add, 0) """)) # -> 44
-    print(i.go(""" reverse(a) """)) # -> [9, 8, 7, 6, 5, 4, 3, 2]
-    print(i.go(""" zip(a, arr(4, 5, 6)) """)) # -> [[2, 4], [3, 5], [4, 6]]
-    print(i.go(""" enumerate(a) """)) # -> [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
+    print(i.ast(""" 'Hello, world!' """)) # -> 'Hello, world!'
+    print(i.go(""" 'Hello, world!' """)) # -> Hello, world!
+    print(i.go(""" '
+multi
+line
+text
+' """)) # -> \nmulti\nline\ntext\n
+    print(i.go(""" "Hello, world!" """)) # -> Hello, world!
+    print(i.go(r""" "Hello,\nworld!" """)) # -> Hello,<newline>world!
+    print(i.go(r""" "Hello,\\world!" """)) # -> Hello,\world!
+    print(i.go(r""" "Hello,\"world!" """)) # -> Hello,"world!
 
-    print(i.go("""
-        sieve := arr(False, False) + arr(True) * 98;
-        i := 2; while i * i < 100 do
-            if sieve[i] then
-                j := i * i; while j < 100 do
-                    sieve[j] = False;
-                    j = j + i
-                end
-            end;
-            i = i + 1
-        end;
+    print(i.go(""" 'Hello, world!'[1] """)) # -> e
+    print(i.go(""" 'Hello, ' + 'world!' """)) # -> Hello, world!
+    print(i.go(""" 'Hello, ' * 3 """)) # -> Hello, Hello, Hello,
 
-        map(filter(enumerate(sieve), last), first)
-    """)) # -> [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]
+    print(i.go(""" len('Hello, world!') """)) # -> 13
+    print(i.go(""" first('Hello, world!') """)) # -> H
+    print(i.go(""" rest('Hello, world!') """)) # -> ello, world!
+    print(i.go(""" last('Hello, world!') """)) # -> !
+
+    print(i.go(""" join(arr('H', 'e', 'l', 'l', 'o'), ' ') """)) # -> 'H e l l o'
+    print(i.go(""" ord('A') """)) # -> 65
+    print(i.go(""" chr(65) """)) # -> A

@@ -21,14 +21,19 @@ class TestScan(TestBase):
         assert self.i.scan(""" 1 / 2 """) == [1, Sym("/"), 2, Sym("$EOF")]
 
     def test_bool_none_ident(self):
-        assert self.i.scan(""" True """) == [True, "$EOF"]
-        assert self.i.scan(""" False """) == [False, "$EOF"]
-        assert self.i.scan(""" None """) == [None, "$EOF"]
-        assert self.i.scan(""" a """) == [Sym("a"), "$EOF"]
+        assert self.i.scan(""" True """) == [True, Sym("$EOF")]
+        assert self.i.scan(""" False """) == [False, Sym("$EOF")]
+        assert self.i.scan(""" None """) == [None, Sym("$EOF")]
+        assert self.i.scan(""" a """) == [Sym("a"), Sym("$EOF")]
 
     def test_define_assign(self):
         assert self.i.scan(""" a := 2 """) == [Sym("a"), Sym(":="), 2, Sym("$EOF")]
         assert self.i.scan(""" a = 2 """) == [Sym("a"), Sym("="), 2, Sym("$EOF")]
+
+    def test_string(self):
+        assert self.i.scan(""" 'hello' """) == ["hello", Sym("$EOF")]
+        assert self.i.scan(""" "hello" """) == ["hello", Sym("$EOF")]
+        assert self.i.scan(r""" "a\nb" """) == ["a\nb", Sym("$EOF")]
 
 class TestParse(TestBase):
     def test_comparison(self):
@@ -52,11 +57,11 @@ class TestParse(TestBase):
         assert self.i.ast(""" not not False """) == Expr((Sym("not"), [Expr((Sym("not"), [False]))]))
 
     def test_and_or(self):
-        assert self.i.ast(""" True and False """) == Expr(('if', True, False, True))
-        assert self.i.ast(""" True or False """) == Expr(('if', True, True, False))
-        assert self.i.ast(""" True or False and True """) == Expr(('if', Expr(('if', True, True, False)), True, Expr(('if', True, True, False))))
-        assert self.i.ast(""" a := False and not False """) == Expr((Sym('define'), [Sym('a'), Expr(('if', False, Expr((Sym('not'), [False])), False))]))
-        assert self.i.ast(""" a := False or not False """) == Expr((Sym('define'), [Sym('a'), Expr(('if', False, False, Expr((Sym('not'), [False]))))]))
+        assert self.i.ast(""" True and False """) == Expr((Sym('if'), True, False, True))
+        assert self.i.ast(""" True or False """) == Expr((Sym('if'), True, True, False))
+        assert self.i.ast(""" True or False and True """) == Expr((Sym('if'), Expr((Sym('if'), True, True, False)), True, Expr((Sym('if'), True, True, False))))
+        assert self.i.ast(""" a := False and not False """) == Expr((Sym('define'), [Sym('a'), Expr((Sym('if'), False, Expr((Sym('not'), [False])), False))]))
+        assert self.i.ast(""" a := False or not False """) == Expr((Sym('define'), [Sym('a'), Expr((Sym('if'), False, False, Expr((Sym('not'), [False]))))]))
 
     def test_neg(self):
         assert self.i.ast(""" -2 """) == Expr((Sym("neg"), [2]))
@@ -74,6 +79,11 @@ class TestParse(TestBase):
         assert self.i.ast(""" (1 + 2) """) == Expr((Sym("add"), [1, 2]))
         assert self.i.ast(""" (1 + 2) * 3 """) == Expr((Sym("mul"), [Expr((Sym("add"), [1, 2])), 3]))
 
+    def test_string(self):
+        assert self.i.ast(""" 'hello' """) == "hello"
+        assert self.i.ast(""" "hello" """) == "hello"
+        assert self.i.ast(r""" "a\nb" """) == "a\nb"
+
     def test_seq(self):
         assert self.i.ast(""" 2; 3 """) == Expr((Sym("seq"), [2, 3]))
         assert self.i.ast(""" not True; False """) == Expr((Sym("seq"), [Expr((Sym("not"), [True])), False]))
@@ -84,11 +94,11 @@ class TestParse(TestBase):
         assert self.i.ast(""" if not True then 2 + 3 else 4; 5 end """) == Expr(
             (Sym("if"), Expr((Sym('not'), [True])), Expr((Sym('add'), [2, 3])), Expr((Sym("seq"), [4, 5]))))
 
-        assert self.i.ast(""" if 1 then 10 end """) == Expr(('if', 1, 10, None))
-        assert self.i.ast(""" if 1 then 10 else 20 end """) == Expr(('if', 1, 10, 20))
-        assert self.i.ast(""" if 1 then 10 elif 2 then 20 end """) == Expr(('if', 1, 10, Expr(('if', 2, 20, None))))
-        assert self.i.ast(""" if 1 then 10 elif 2 then 20 else 30 end """) == Expr(('if', 1, 10, Expr(('if', 2, 20, 30))))
-        assert self.i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 else 40 end """) == Expr(('if', 1, 10, Expr(('if', 2, 20, Expr(('if', 3, 30, 40))))))
+        assert self.i.ast(""" if 1 then 10 end """) == Expr((Sym('if'), 1, 10, None))
+        assert self.i.ast(""" if 1 then 10 else 20 end """) == Expr((Sym('if'), 1, 10, 20))
+        assert self.i.ast(""" if 1 then 10 elif 2 then 20 end """) == Expr((Sym('if'), 1, 10, Expr((Sym('if'), 2, 20, None))))
+        assert self.i.ast(""" if 1 then 10 elif 2 then 20 else 30 end """) == Expr((Sym('if'), 1, 10, Expr((Sym('if'), 2, 20, 30))))
+        assert self.i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 else 40 end """) == Expr((Sym('if'), 1, 10, Expr((Sym('if'), 2, 20, Expr((Sym('if'), 3, 30, 40))))))
 
     def test_define(self):
         assert self.i.ast(""" a := not True """) == Expr((Sym("define"), [Sym("a"), Expr((Sym("not"), [True]))]))
@@ -106,7 +116,7 @@ class TestParse(TestBase):
         assert self.i.ast(""" a[0] = b[1] = 2 """) == Expr((Sym("assign"), [Expr((Sym("index"), [Sym("a"), 0])), Expr((Sym("assign"), [Expr((Sym("index"), [Sym("b"), 1])), 2]))]))
 
     def test_while(self):
-        assert self.i.ast(""" while i < 10 do i = i + 1 end """) == Expr(('while', Expr((Sym('less'), [Sym('i'), 10])), Expr((Sym('assign'), [Sym('i'), Expr((Sym('add'), [Sym('i'), 1]))]))))
+        assert self.i.ast(""" while i < 10 do i = i + 1 end """) == Expr((Sym('while'), Expr((Sym('less'), [Sym('i'), 10])), Expr((Sym('assign'), [Sym('i'), Expr((Sym('add'), [Sym('i'), 1]))]))))
 
     def test_call(self):
         assert self.i.ast(""" print() """) == Expr((Sym("print"), []))
@@ -122,24 +132,24 @@ class TestParse(TestBase):
         assert self.i.ast(""" func a do a + 2 end """) == Expr((Sym("func"), [Sym("a")], Expr((Sym("add"), [Sym("a"), 2]))))
         assert self.i.ast(""" func a, b do a + b end """) == Expr((Sym("func"), [Sym("a"), Sym("b")], Expr((Sym("add"), [Sym("a"), Sym("b")]))))
 
-        with pytest.raises(AssertionError, match="Expected `do`"):
+        with pytest.raises(AssertionError):
             self.i.ast(""" func a 2 end """)
-        with pytest.raises(AssertionError, match="Expected `end`"):
+        with pytest.raises(AssertionError):
             self.i.ast(""" func a do 2 """)
 
     def test_deffunc(self):
         assert self.i.ast(""" deffunc two params do 2 end """) == Expr(
-            (Sym('define'), [Sym('two'), Expr(('func', [], 2))]))
+            (Sym('define'), [Sym('two'), Expr((Sym('func'), [], 2))]))
         assert self.i.ast("""
              deffunc add2 params a do
                 a + 2
              end
-        """) == Expr((Sym('define'), [Sym('add2'), Expr(('func', [Sym('a')], Expr((Sym('add'), [Sym('a'), 2]))))]))
+        """) == Expr((Sym('define'), [Sym('add2'), Expr((Sym('func'), [Sym('a')], Expr((Sym('add'), [Sym('a'), 2]))))]))
         assert self.i.ast("""
             deffunc sum params a, b, c do
                 a + b + c
             end
-        """) == Expr((Sym('define'), [Sym('sum'), Expr(('func', [Sym('a'), Sym('b'), Sym('c')], Expr((Sym('add'), [Expr((Sym('add'), [Sym('a'), Sym('b')])), Sym('c')]))))]))
+        """) == Expr((Sym('define'), [Sym('sum'), Expr((Sym('func'), [Sym('a'), Sym('b'), Sym('c')], Expr((Sym('add'), [Expr((Sym('add'), [Sym('a'), Sym('b')])), Sym('c')]))))]))
 
         with pytest.raises(AssertionError):
             self.i.ast(""" deffunc add2 a do a + 2 end """)
@@ -484,11 +494,11 @@ class TestGo(TestBase):
         assert self.i.go(""" while False do 1 end """) is None
         assert self.i.go(""" i := 0; while False do i = 1 end; i """) == 0
 
-        with pytest.raises(AssertionError): # No condition
+        with pytest.raises(AssertionError):
             self.i.go(""" while do i = i + 1 end """)
-        with pytest.raises(AssertionError, match="Expected `do`"):
+        with pytest.raises(AssertionError):
             self.i.go(""" while i < 10 i = i + 1 end """)
-        with pytest.raises(AssertionError, match="Expected `end`"):
+        with pytest.raises(AssertionError):
             self.i.go(""" while i < 10 do i = i + 1 """)
 
     def test_call(self, capsys):
@@ -628,6 +638,30 @@ class TestGo(TestBase):
             map(filter(enumerate(sieve), last), first)
         """) == [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]
 
+    def test_string(self):
+        assert self.i.go(""" 'Hello, world!' """) == "Hello, world!"
+        assert self.i.go(""" '
+multi
+line
+text
+'       """) == "\nmulti\nline\ntext\n"
+        assert self.i.go(""" 'Hello, world!'[1] """) == "e"
+        assert self.i.go(""" 'Hello, ' + 'world!' """) == "Hello, world!"
+        assert self.i.go(""" 'Hello, ' * 3 """) == "Hello, Hello, Hello, "
+
+        assert self.i.go(""" len('Hello, world!') """) == 13
+        assert self.i.go(""" first('Hello, world!') """) == "H"
+        assert self.i.go(""" rest('Hello, world!') """) == "ello, world!"
+        assert self.i.go(""" last('Hello, world!') """) == "!"
+
+        assert self.i.go(""" join(arr('H', 'e', 'l', 'l', 'o'), ' ') """) == "H e l l o"
+        assert self.i.go(""" ord('A') """) == 65
+        assert self.i.go(""" chr(65) """) == "A"
+
+        assert self.i.go(""" "Hello, world!" """) == "Hello, world!"
+        assert self.i.go(r""" "Hello,\nworld!" """) == "Hello,\nworld!"
+        assert self.i.go(r""" "Hello,\\world!" """) == "Hello,\\world!"
+        assert self.i.go(r""" "Hello,\"world!" """) == 'Hello,"world!'
 
 if __name__ == "__main__":
     pytest.main([__file__])
