@@ -315,19 +315,21 @@ class Environment:
 
     def lookup(self, name):
         if name in self._vars:
-            return self
+            return self._vars
         elif self._parent is not None:
             return self._parent.lookup(name)
         else:
             return None
 
     def val(self, name):
-        assert name in self._vars, f"Undefined variable @ val(): {name}"
-        return self._vars[name]
+        vars = self.lookup(name)
+        assert vars is not None, f"Undefined variable @ val(): {name}"
+        return vars[name]
 
     def set_val(self, name, val):
-        assert name in self._vars, f"Undefined variable @ set_val(): {name}"
-        self._vars[name] = val
+        vars = self.lookup(name)
+        assert vars is not None, f"Undefined variable @ set_val(): {name}"
+        vars[name] = val
         return val
 
 
@@ -339,9 +341,7 @@ class Evaluator:
             case s if type(s) is str:
                 return s
             case Sym(name):
-                frame = env.lookup(name)
-                assert frame is not None, f"Undefined variable @ evaluate(): {name}"
-                return frame.val(name)
+                return env.val(name)
             case Expr((Sym("define"), [Sym(name), val])):
                 return env.define(name, self.evaluate(val, env))
             case Expr((Sym("assign"), [left_expr, right_expr])):
@@ -365,10 +365,7 @@ class Evaluator:
         right_val = self.evaluate(right_expr, env)
         match left_expr:
             case Sym(name):
-                frame = env.lookup(name)
-                assert frame is not None, \
-                    f"Undefined variable @ _evaluate_assign(): {name}"
-                return frame.set_val(name, right_val)
+                return env.set_val(name, right_val)
             case Expr((Sym("index"), [coll_expr, index_expr])):
                 coll_val = self.evaluate(coll_expr, env)
                 index_val = self.evaluate(index_expr, env)
