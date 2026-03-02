@@ -167,10 +167,10 @@ class Parser:
     def _mul_div_mod(self):
         return self._binary_left({
             Sym("*"): Sym("mul"), Sym("/"): Sym("div"), Sym("%"): Sym("mod")
-        }, self._neg)
+        }, self._unaries)
 
-    def _neg(self):
-        return self._unary({Sym("-"): Sym("neg")}, self._call_index)
+    def _unaries(self):
+        return self._unary({Sym("-"): Sym("neg"), Sym("*"): Sym("*")}, self._call_index)
 
     def _call_index(self):
         target = self._primary()
@@ -189,6 +189,7 @@ class Parser:
     def _primary(self):
         match self._current_token():
             case Sym("("): return self._paren()
+            case Sym("["): return self._array()
             case None | bool() | int(): return self._advance()
             case s if type(s) == str: return self._advance()
             case Sym("func"): return self._func()
@@ -205,6 +206,11 @@ class Parser:
         expr = self._expression()
         self._consume(Sym(")"))
         return expr
+
+    def _array(self):
+        self._advance()
+        array = self._comma_separated_exprs(Sym("]"))
+        return array
 
     def _func(self):
         self._advance()
@@ -338,12 +344,14 @@ class Evaluator:
         match expr:
             case None | bool() | int():
                 return expr
-            case s if type(s) is str:
-                return s
+            case val if type(val) is str:
+                return val
+            case arr_exprs if type(arr_exprs) is list:
+                return [self.evaluate(expr, env) for expr in arr_exprs]
             case Sym(name):
                 return env.val(name)
-            case Expr((Sym("define"), [Sym(name), val])):
-                return env.define(name, self.evaluate(val, env))
+            case Expr((Sym("define"), [left_expr, right_expr])):
+                return self._evaluate_define(left_expr, right_expr, env)
             case Expr((Sym("assign"), [left_expr, right_expr])):
                 return self._evaluate_assign(left_expr, right_expr, env)
             case Expr((Sym("seq"), exprs)):
@@ -360,6 +368,31 @@ class Evaluator:
                 return self._eval_op(op_expr, args_expr, env)
             case unexpected:
                 assert False, f"Unexpected expression @ evaluate(): {unexpected}"
+
+    def _evaluate_define(self, left_expr, right_expr, env):
+        right_val = self.evaluate(right_expr, env)
+        if self._match_pattern(left_expr, right_val, env):
+            return right_val
+        assert False, f"Doesn't match @ _evaluate_define(): {left_expr}, {right_val}"
+
+    def _match_pattern(self, pattern, value, env):
+        match pattern:
+            case Sym(name):
+                env.define(name, value)
+                return True
+            case [Expr((Sym("*"), [Sym(name)]))]:
+                env.define(name, value)
+                return True
+            case sub_patterns if isinstance(sub_patterns, list):
+                if not isinstance(value, list): return False
+                if sub_patterns == [] and value == []: return True
+                if sub_patterns == [] or value == []: return False
+                sub_pattern, *rest_sub_patterns = sub_patterns
+                val, *rest_vals = value
+                return self._match_pattern(sub_pattern, val, env) and \
+                    self._match_pattern(rest_sub_patterns, rest_vals, env)
+            case _:
+                return False
 
     def _evaluate_assign(self, left_expr, right_expr, env):
         right_val = self.evaluate(right_expr, env)
@@ -543,7 +576,8 @@ class Interpreter:
 if __name__ == "__main__":
     import sys
 
-    i = Interpreter().init_env().stdlib()
+    c = Interpreter().init_env()
+    i = c.stdlib()
 
     def repl():
         while True:
@@ -572,27 +606,36 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.ast(""" 'Hello, world!' """)) # -> 'Hello, world!'
-    print(i.go(""" 'Hello, world!' """)) # -> Hello, world!
-    print(i.go(""" '
-multi
-line
-text
-' """)) # -> \nmulti\nline\ntext\n
-    print(i.go(""" "Hello, world!" """)) # -> Hello, world!
-    print(i.go(r""" "Hello,\nworld!" """)) # -> Hello,<newline>world!
-    print(i.go(r""" "Hello,\\world!" """)) # -> Hello,\world!
-    print(i.go(r""" "Hello,\"world!" """)) # -> Hello,"world!
+    print(c.ast(""" a := 2 """)) # ->
+    print(c.go(""" a := 2 """)) # ->
+    print(c.go(""" a """)) # ->
 
-    print(i.go(""" 'Hello, world!'[1] """)) # -> e
-    print(i.go(""" 'Hello, ' + 'world!' """)) # -> Hello, world!
-    print(i.go(""" 'Hello, ' * 3 """)) # -> Hello, Hello, Hello,
+    print(c.ast(""" [a, b] := [2, 3] """)) # ->
+    print(c.go(""" [a, b] := [2, 3] """)) # ->
+    print(c.go(""" a """)) # ->
+    print(c.go(""" b """)) # ->
 
-    print(i.go(""" len('Hello, world!') """)) # -> 13
-    print(i.go(""" first('Hello, world!') """)) # -> H
-    print(i.go(""" rest('Hello, world!') """)) # -> ello, world!
-    print(i.go(""" last('Hello, world!') """)) # -> !
+    print(c.ast(""" [a, [b, c]] := [2, [3, 4]] """)) # ->
+    print(c.go(""" [a, [b, c]] := [2, [3, 4]] """)) # ->
+    print(c.go(""" a """)) # ->
+    print(c.go(""" b """)) # ->
+    print(c.go(""" c """)) # ->
 
-    print(i.go(""" join(arr('H', 'e', 'l', 'l', 'o'), ' ') """)) # -> 'H e l l o'
-    print(i.go(""" ord('A') """)) # -> 65
-    print(i.go(""" chr(65) """)) # -> A
+    print(c.ast(""" [a, *b] := [2] """)) # ->
+    print(c.go(""" [a, *b] := [2] """)) # ->
+    print(c.go(""" a """)) # ->
+    print(c.go(""" b """)) # ->
+    print(c.go(""" [a, *b] := [2, 3] """)) # ->
+    print(c.go(""" a """)) # ->
+    print(c.go(""" b """)) # ->
+    print(c.go(""" [a, *b] := [2, 3, 4] """)) # ->
+    print(c.go(""" a """)) # ->
+    print(c.go(""" b """)) # ->
+    print(c.go(""" [*a] := [2, 3] """)) # ->
+    print(c.go(""" a """)) # ->
+
+    # print(c.go(""" [a, [b, c]] := 2 """)) # -> Error
+    # print(c.go(""" [a, [b, c]] := [2, 3] """)) # -> Error
+    # print(c.go(""" [a, b] := [2, 3, 4] """)) # -> Error
+    # print(c.go(""" [a, b, c] := [2, 3] """)) # -> Error
+    # print(c.go(""" [*b, a] := [2] """)) # -> Error

@@ -572,25 +572,30 @@ class TestGo(TestBase):
 
     def test_array(self):
         assert self.i.go(""" arr() """) == []
-        assert self.i.go(""" arr(2) """) == [2]
+        assert self.i.go(""" arr(2 + 3) """) == [5]
         assert self.i.go(""" arr(2)[0] """) == 2
         assert self.i.go(""" arr(2, 3, arr(4, 5)) """) == [2, 3, [4, 5]]
 
-        self.i.go(""" a := arr(2, 3, arr(4, 5)) """)
+        assert self.i.go(""" [] """) == []
+        assert self.i.go(""" [2 + 3] """) == [5]
+        assert self.i.go(""" [2][0] """) == 2
+        assert self.i.go(""" [2, 3, [4, 5]] """) == [2, 3, [4, 5]]
+
+        self.i.go(""" a := [2, 3, [4, 5]] """)
         assert self.i.go(""" a[2][0] """) == 4
         assert self.i.go(""" a[2][-1] """) == 5
 
-        self.i.go(""" b := arr(2, 3, arr(4, 5)) """)
+        self.i.go(""" b := [2, 3, [4, 5]] """)
         self.i.go(""" b[0] = 6 """)
         assert self.i.go(""" b[0] """) == 6
         self.i.go(""" b[2][1] = 7 """)
         assert self.i.go(""" b[2][1] """) == 7
         assert self.i.go(""" b """) == [6, 3, [4, 7]]
 
-        self.i.go(""" c := func do arr(add, sub) end """)
+        self.i.go(""" c := func do [add, sub] end """)
         assert self.i.go(""" c()[0](2, 3) """) == 5
 
-        self.i.go(""" d := arr(2, 3, 4) """)
+        self.i.go(""" d := [2, 3, 4] """)
         assert self.i.go(""" len(d) """) == 3
         assert self.i.go(""" slice(d, 1, None) """) == [3, 4]
         assert self.i.go(""" slice(d, 1, 2) """) == [3]
@@ -601,10 +606,10 @@ class TestGo(TestBase):
         assert self.i.go(""" pop(d) """) == 5
         assert self.i.go(""" d """) == [2, 3, 4]
 
-        assert self.i.go(""" arr(2, 3) + arr(4, 5) """) == [2, 3, 4, 5]
-        assert self.i.go(""" arr(2, 3) * 3 """) == [2, 3, 2, 3, 2, 3]
+        assert self.i.go(""" [2, 3] + [4, 5] """) == [2, 3, 4, 5]
+        assert self.i.go(""" [2, 3] * 3 """) == [2, 3, 2, 3, 2, 3]
 
-        self.i.go(""" e := arr(1) """)
+        self.i.go(""" e := [1] """)
         with pytest.raises(AssertionError):
             self.i.go(""" e[None] = 2 """)
         with pytest.raises(AssertionError):
@@ -624,7 +629,7 @@ class TestGo(TestBase):
 
     def test_array_sieve(self):
         assert self.i.go("""
-            sieve := arr(False, False) + arr(True) * 98;
+            sieve := [False, False] + [True] * 98;
             i := 2; while i * i < 100 do
                 if sieve[i] then
                     j := i * i; while j < 100 do
@@ -662,6 +667,30 @@ text
         assert self.i.go(r""" "Hello,\nworld!" """) == "Hello,\nworld!"
         assert self.i.go(r""" "Hello,\\world!" """) == "Hello,\\world!"
         assert self.i.go(r""" "Hello,\"world!" """) == 'Hello,"world!'
+
+    def test_destructuring_assignment(self):
+        self.i.go(""" [a, b] := [2, 3] """)
+        assert self.i.go(""" a """) == 2
+        assert self.i.go(""" b """) == 3
+
+        self.i.go(""" [a, [b, c]] := [2, [3, 4]] """)
+        assert self.i.go(""" a """) == 2
+        assert self.i.go(""" b """) == 3
+        assert self.i.go(""" c """) == 4
+
+        self.i.go(""" [a, *b] := [2] """)
+        assert self.i.go(""" a """) == 2
+        assert self.i.go(""" b """) == []
+
+        self.i.go(""" [a, *b] := [2, 3, 4] """)
+        assert self.i.go(""" a """) == 2
+        assert self.i.go(""" b """) == [3, 4]
+
+        self.i.go(""" [*a] := [2, 3] """)
+        assert self.i.go(""" a """) == [2, 3]
+
+        with pytest.raises(AssertionError):
+            self.i.go(""" [*b, a] := [2] """)
 
 if __name__ == "__main__":
     pytest.main([__file__])
