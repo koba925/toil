@@ -692,5 +692,24 @@ text
         with pytest.raises(AssertionError):
             self.i.go(""" [*b, a] := [2] """)
 
+    def test_argument_destructuring(self, capsys):
+        self.i.go(""" deffunc f params a, [b, c] do [a, b, c] end """)
+        assert self.i.go(""" f(2, [3, 4]) """) == [2, 3, 4]
+
+        self.i.go(""" deffunc g params *a do a end""")
+        assert self.i.go(""" g() """) == []
+        assert self.i.go(""" g(2 + 3) """) == [5]
+        assert self.i.go(""" g(2, 3, 4) """) == [2, 3, 4]
+
+        self.i.go(""" deffunc h params a, *b do [a, b] end """)
+        assert self.i.go(""" h(2 + 3) """) == [5, []]
+        assert self.i.go(""" h(2, 3, 4) """) == [2, [3, 4]]
+        with pytest.raises(AssertionError):
+            self.i.go(""" h() """)
+
+        self.i.go(""" deffunc i params *a, b do [a, b] end """)
+        with pytest.raises(AssertionError):
+            self.i.go(""" i(2, 3, 4) """)
+
 if __name__ == "__main__":
     pytest.main([__file__])

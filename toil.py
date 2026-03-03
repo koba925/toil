@@ -1,11 +1,11 @@
 #! /usr/bin/env python3
 
 class Sym(str):
-    def __str__(self): return f"'{super().__str__()}"
+    def __repr__(self): return super().__repr__()[1:-1]
 
 class Expr(tuple):
     def __repr__(self):
-        return "{" + " ".join(map(repr, self)) + "}"
+        return "{" + ", ".join(map(repr, self)) + "}"
 
 
 def is_name_first(c): return c.isalpha() or c == "_"
@@ -375,25 +375,6 @@ class Evaluator:
             return right_val
         assert False, f"Doesn't match @ _evaluate_define(): {left_expr}, {right_val}"
 
-    def _match_pattern(self, pattern, value, env):
-        match pattern:
-            case Sym(name):
-                env.define(name, value)
-                return True
-            case [Expr((Sym("*"), [Sym(name)]))]:
-                env.define(name, value)
-                return True
-            case sub_patterns if isinstance(sub_patterns, list):
-                if not isinstance(value, list): return False
-                if sub_patterns == [] and value == []: return True
-                if sub_patterns == [] or value == []: return False
-                sub_pattern, *rest_sub_patterns = sub_patterns
-                val, *rest_vals = value
-                return self._match_pattern(sub_pattern, val, env) and \
-                    self._match_pattern(rest_sub_patterns, rest_vals, env)
-            case _:
-                return False
-
     def _evaluate_assign(self, left_expr, right_expr, env):
         right_val = self.evaluate(right_expr, env)
         match left_expr:
@@ -437,11 +418,30 @@ class Evaluator:
                 return c(args_val)
             case Expr((Sym("closure"), params, body, closure_env)):
                 new_env = Environment(closure_env)
-                for param, arg in zip(params, args_val):
-                    new_env.define(param, arg)
-                return self.evaluate(body, new_env)
+                if self._match_pattern(params, args_val, new_env):
+                    return self.evaluate(body, new_env)
+                assert False, f"Argument mismatch @ _eval_op(): {params}, {args_val}"
             case _:
                 assert False, f"Illegal operator @ eval_op(): {op_val}"
+
+    def _match_pattern(self, pattern, value, env):
+        match pattern:
+            case Sym(name):
+                env.define(name, value)
+                return True
+            case [Expr((Sym("*"), [Sym(name)]))]:
+                env.define(name, value)
+                return True
+            case sub_patterns if isinstance(sub_patterns, list):
+                if not isinstance(value, list): return False
+                if sub_patterns == [] and value == []: return True
+                if sub_patterns == [] or value == []: return False
+                sub_pattern, *rest_sub_patterns = sub_patterns
+                val, *rest_vals = value
+                return self._match_pattern(sub_pattern, val, env) and \
+                    self._match_pattern(rest_sub_patterns, rest_vals, env)
+            case _:
+                return False
 
 class Interpreter:
     def __init__(self):
@@ -606,36 +606,25 @@ if __name__ == "__main__":
 
     # Example
 
-    print(c.ast(""" a := 2 """)) # ->
-    print(c.go(""" a := 2 """)) # ->
-    print(c.go(""" a """)) # ->
 
-    print(c.ast(""" [a, b] := [2, 3] """)) # ->
-    print(c.go(""" [a, b] := [2, 3] """)) # ->
-    print(c.go(""" a """)) # ->
-    print(c.go(""" b """)) # ->
+    print(c.ast(""" f := func a, [b, c] do [a, b, c] end """)) # -> {define 'f' {func ['a', ['b', 'c']] ['a', 'b', 'c']}}
+    c.go(""" f := func a, [b, c] do [a, b, c] end """)
+    print(c.go(""" f(2, [3, 4]) """)) # -> [2, 3, 4]
 
-    print(c.ast(""" [a, [b, c]] := [2, [3, 4]] """)) # ->
-    print(c.go(""" [a, [b, c]] := [2, [3, 4]] """)) # ->
-    print(c.go(""" a """)) # ->
-    print(c.go(""" b """)) # ->
-    print(c.go(""" c """)) # ->
+    print(c.ast(""" deffunc f params a, [b, c] do [a, b, c, "a"] end """)) # -> {define 'f' {func ['a', ['b', 'c']] ['a', 'b', 'c']}}
+    c.go(""" deffunc f params a, [b, c] do [a, b, c] end """)
+    print(c.go(""" f(2, [3, 4]) """)) # -> [2, 3, 4]
 
-    print(c.ast(""" [a, *b] := [2] """)) # ->
-    print(c.go(""" [a, *b] := [2] """)) # ->
-    print(c.go(""" a """)) # ->
-    print(c.go(""" b """)) # ->
-    print(c.go(""" [a, *b] := [2, 3] """)) # ->
-    print(c.go(""" a """)) # ->
-    print(c.go(""" b """)) # ->
-    print(c.go(""" [a, *b] := [2, 3, 4] """)) # ->
-    print(c.go(""" a """)) # ->
-    print(c.go(""" b """)) # ->
-    print(c.go(""" [*a] := [2, 3] """)) # ->
-    print(c.go(""" a """)) # ->
+    c.go(""" deffunc f params *a do a end""")
+    print(c.go(""" f() """)) # -> []
+    print(c.go(""" f(2 + 3) """)) # -> [5]
+    print(c.go(""" f(2, 3, 4) """)) # -> [2, 3, 4]
 
-    # print(c.go(""" [a, [b, c]] := 2 """)) # -> Error
-    # print(c.go(""" [a, [b, c]] := [2, 3] """)) # -> Error
-    # print(c.go(""" [a, b] := [2, 3, 4] """)) # -> Error
-    # print(c.go(""" [a, b, c] := [2, 3] """)) # -> Error
-    # print(c.go(""" [*b, a] := [2] """)) # -> Error
+    print(c.ast(""" deffunc f params a, *b do [a, b] end """)) # -> {define 'f' {func ['a', {* 'b'}] ['a', 'b']}}
+    c.go(""" f := func a, *b do [a, b] end """)
+    # print(c.go(""" f() """)) # -> Error
+    print(c.go(""" f(2 + 3) """)) # -> [5, []]
+    print(c.go(""" f(2, 3, 4) """)) # -> [2, [3, 4]]
+
+    c.go(""" deffunc f params *a, b do [a, b] end """)
+    # print(c.go(""" f(2, 3, 4) """)) # -> Error
