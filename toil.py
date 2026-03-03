@@ -3,10 +3,6 @@
 class Sym(str):
     def __repr__(self): return super().__repr__()[1:-1]
 
-class Expr(tuple):
-    def __repr__(self):
-        return "{" + ", ".join(map(repr, self)) + "}"
-
 
 def is_name_first(c): return c.isalpha() or c == "_"
 def is_name_rest(c): return c.isalnum() or c == "_"
@@ -129,7 +125,7 @@ class Parser:
         while self._current_token() == Sym(";"):
             self._advance()
             exprs.append(self._define_assign())
-        return exprs[0] if len(exprs) == 1 else Expr((Sym("seq"), exprs))
+        return exprs[0] if len(exprs) == 1 else (Sym("seq"), exprs)
 
     def _define_assign(self):
         return self._binary_right({
@@ -142,9 +138,9 @@ class Parser:
             self._advance()
             right = self._not()
             if op == Sym("and"):
-                left = Expr((Sym("if"), left, right, left))
+                left = (Sym("if"), left, right, left)
             else:
-                left = Expr((Sym("if"), left, left, right))
+                left = (Sym("if"), left, left, right)
         return left
 
     def _not(self):
@@ -178,12 +174,12 @@ class Parser:
             match self._current_token():
                 case Sym("("):
                     self._advance()
-                    target = Expr((target, self._comma_separated_exprs(Sym(")"))))
+                    target = (target, self._comma_separated_exprs(Sym(")")))
                 case Sym("["):
                     self._advance()
                     index = self._expression()
                     self._consume(Sym("]"))
-                    target = Expr((Sym("index"), [target, index]))
+                    target = (Sym("index"), [target, index])
         return target
 
     def _primary(self):
@@ -217,13 +213,13 @@ class Parser:
         params = self._comma_separated_exprs(Sym("do"))
         body_expr = self._expression()
         self._consume(Sym("end"))
-        return Expr((Sym("func"), params, body_expr))
+        return (Sym("func"), params, body_expr)
 
     def _scope(self):
         self._advance()
         body_expr = self._expression()
         self._consume(Sym("end"))
-        return Expr((Sym("scope"), body_expr))
+        return (Sym("scope"), body_expr)
 
     def _if(self):
         self._advance()
@@ -239,7 +235,7 @@ class Parser:
         else:
             else_expr = None
             self._consume(Sym("end"))
-        return Expr((Sym("if"), cond_expr, then_expr, else_expr))
+        return (Sym("if"), cond_expr, then_expr, else_expr)
 
     def _while(self):
         self._advance()
@@ -247,7 +243,7 @@ class Parser:
         self._consume(Sym("do"))
         body_expr = self._expression()
         self._consume(Sym("end"))
-        return Expr((Sym("while"), cond_expr, body_expr))
+        return (Sym("while"), cond_expr, body_expr)
 
     def _deffunc(self):
         self._advance()
@@ -257,14 +253,14 @@ class Parser:
         params = self._comma_separated_exprs(Sym("do"))
         body_expr = self._expression()
         self._consume(Sym("end"))
-        return Expr((Sym("define"), [name, Expr((Sym("func"), params, body_expr))]))
+        return (Sym("define"), [name, (Sym("func"), params, body_expr)])
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
         while (op := self._current_token()) in ops:
             self._advance()
             right = sub_elem()
-            left = Expr((ops[op], [left, right]))
+            left = (ops[op], [left, right])
         return left
 
     def _binary_right(self, ops, sub_elem):
@@ -272,13 +268,13 @@ class Parser:
         if (op := self._current_token()) in ops:
             self._advance()
             right = self._binary_right(ops, sub_elem)
-            return Expr((ops[op], [left, right]))
+            return (ops[op], [left, right])
         return left
 
     def _unary(self, ops, sub_elem):
         if (op := self._current_token()) in ops:
             self._advance()
-            return Expr((ops[op], [self._unary(ops, sub_elem)]))
+            return (ops[op], [self._unary(ops, sub_elem)])
         else:
             return sub_elem()
 
@@ -344,27 +340,27 @@ class Evaluator:
         match expr:
             case None | bool() | int():
                 return expr
-            case val if type(val) is str:
-                return val
-            case arr_exprs if type(arr_exprs) is list:
-                return [self.evaluate(expr, env) for expr in arr_exprs]
+            case s if type(s) is str:
+                return s
+            case exprs if type(exprs) is list:
+                return [self.evaluate(expr, env) for expr in exprs]
             case Sym(name):
                 return env.val(name)
-            case Expr((Sym("define"), [left_expr, right_expr])):
+            case (Sym("define"), [left_expr, right_expr]):
                 return self._evaluate_define(left_expr, right_expr, env)
-            case Expr((Sym("assign"), [left_expr, right_expr])):
+            case (Sym("assign"), [left_expr, right_expr]):
                 return self._evaluate_assign(left_expr, right_expr, env)
-            case Expr((Sym("seq"), exprs)):
+            case (Sym("seq"), exprs):
                 return self._evaluate_seq(exprs, env)
-            case Expr((Sym("if"), cond_expr, then_expr, else_expr)):
+            case (Sym("if"), cond_expr, then_expr, else_expr):
                 return self._evaluate_if(cond_expr, then_expr, else_expr, env)
-            case Expr((Sym("while"), cond_expr, body_expr)):
+            case (Sym("while"), cond_expr, body_expr):
                 return self._evaluate_while(cond_expr, body_expr, env)
-            case Expr((Sym("func"), params, body)):
-                return Expr((Sym("closure"), params, body, env))
-            case Expr((Sym("scope"), expr)):
+            case (Sym("func"), params, body):
+                return (Sym("closure"), params, body, env)
+            case (Sym("scope"), expr):
                 return self.evaluate(expr, Environment(env))
-            case Expr((op_expr, args_expr)):
+            case (op_expr, args_expr) if isinstance(expr, tuple):
                 return self._eval_op(op_expr, args_expr, env)
             case unexpected:
                 assert False, f"Unexpected expression @ evaluate(): {unexpected}"
@@ -380,7 +376,7 @@ class Evaluator:
         match left_expr:
             case Sym(name):
                 return env.set_val(name, right_val)
-            case Expr((Sym("index"), [coll_expr, index_expr])):
+            case (Sym("index"), [coll_expr, index_expr]):
                 coll_val = self.evaluate(coll_expr, env)
                 index_val = self.evaluate(index_expr, env)
                 assert isinstance(coll_val, list), \
@@ -416,7 +412,7 @@ class Evaluator:
         match op_val:
             case c if callable(c):
                 return c(args_val)
-            case Expr((Sym("closure"), params, body, closure_env)):
+            case (Sym("closure"), params, body, closure_env):
                 new_env = Environment(closure_env)
                 if self._match_pattern(params, args_val, new_env):
                     return self.evaluate(body, new_env)
@@ -429,7 +425,7 @@ class Evaluator:
             case Sym(name):
                 env.define(name, value)
                 return True
-            case [Expr((Sym("*"), [Sym(name)]))]:
+            case [(Sym("*"), [Sym(name)])]:
                 env.define(name, value)
                 return True
             case sub_patterns if isinstance(sub_patterns, list):
@@ -607,11 +603,11 @@ if __name__ == "__main__":
     # Example
 
 
-    print(c.ast(""" f := func a, [b, c] do [a, b, c] end """)) # -> {define 'f' {func ['a', ['b', 'c']] ['a', 'b', 'c']}}
+    print(c.ast(""" f := func a, [b, c] do [a, b, c] end """)) # -> ('define', ['f', ('func', ['a', ['b', 'c']], ['a', 'b', 'c'])])
     c.go(""" f := func a, [b, c] do [a, b, c] end """)
     print(c.go(""" f(2, [3, 4]) """)) # -> [2, 3, 4]
 
-    print(c.ast(""" deffunc f params a, [b, c] do [a, b, c, "a"] end """)) # -> {define 'f' {func ['a', ['b', 'c']] ['a', 'b', 'c']}}
+    print(c.ast(""" deffunc f params a, [b, c] do [a, b, c, "a"] end """)) # -> ('define', ['f', ('func', ['a', ['b', 'c']], ['a', 'b', 'c', 'a'])])
     c.go(""" deffunc f params a, [b, c] do [a, b, c] end """)
     print(c.go(""" f(2, [3, 4]) """)) # -> [2, 3, 4]
 
@@ -620,7 +616,7 @@ if __name__ == "__main__":
     print(c.go(""" f(2 + 3) """)) # -> [5]
     print(c.go(""" f(2, 3, 4) """)) # -> [2, 3, 4]
 
-    print(c.ast(""" deffunc f params a, *b do [a, b] end """)) # -> {define 'f' {func ['a', {* 'b'}] ['a', 'b']}}
+    print(c.ast(""" deffunc f params a, *b do [a, b] end """)) # -> ('define', ['f', ('func', ['a', ('*', ['b'])], ['a', 'b'])])
     c.go(""" f := func a, *b do [a, b] end """)
     # print(c.go(""" f() """)) # -> Error
     print(c.go(""" f(2 + 3) """)) # -> [5, []]
