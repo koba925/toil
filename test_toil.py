@@ -305,7 +305,7 @@ class TestEvaluate(TestBase):
         assert self.i.evaluate((Sym("g"), [])) == 3
 
     def test_array(self):
-        self.i.evaluate((Sym("define"), [Sym("a"), (Sym("arr"), [1, 2, 3])]))
+        self.i.evaluate((Sym("define"), [Sym("a"), [1, 2, 3]]))
         assert self.i.evaluate(Sym("a")) == [1, 2, 3]
         assert self.i.evaluate((Sym("index"), [Sym("a"), 0])) == 1
         assert self.i.evaluate((Sym("index"), [Sym("a"), 2])) == 3
@@ -314,10 +314,10 @@ class TestEvaluate(TestBase):
         assert self.i.evaluate(Sym("a")) == [1, 4, 3]
 
     def test_array_nested(self):
-        self.i.evaluate((Sym("define"), [Sym("a"), (Sym("arr"), [
-            (Sym("arr"), [1, 2]),
-            (Sym("arr"), [3, 4])
-        ])]))
+        self.i.evaluate((Sym("define"), [Sym("a"), [
+            [1, 2],
+            [3, 4]
+        ]]))
         assert self.i.evaluate((Sym("index"), [(Sym("index"), [Sym("a"), 0]), 1])) == 2
         assert self.i.evaluate((Sym("index"), [(Sym("index"), [Sym("a"), 1]), 0])) == 3
 
@@ -325,14 +325,14 @@ class TestEvaluate(TestBase):
         assert self.i.evaluate((Sym("index"), [(Sym("index"), [Sym("a"), 1]), 0])) == 5
 
     def test_array_push_pop(self):
-        self.i.evaluate((Sym("define"), [Sym("a"), (Sym("arr"), [1, 2])]))
+        self.i.evaluate((Sym("define"), [Sym("a"), [1, 2]]))
         self.i.evaluate((Sym("push"), [Sym("a"), 3]))
         assert self.i.evaluate(Sym("a")) == [1, 2, 3]
         assert self.i.evaluate((Sym("pop"), [Sym("a")])) == 3
         assert self.i.evaluate(Sym("a")) == [1, 2]
 
     def test_array_funcs(self):
-        self.i.evaluate((Sym("define"), [Sym("a"), (Sym("arr"), [1, 2, 3])]))
+        self.i.evaluate((Sym("define"), [Sym("a"), [1, 2, 3]]))
         assert self.i.evaluate((Sym("len"), [Sym("a")])) == 3
         assert self.i.evaluate((Sym("slice"), [Sym("a"), 1, None])) == [2, 3]
         assert self.i.evaluate((Sym("slice"), [Sym("a"), 1, 2])) == [2]
@@ -340,7 +340,7 @@ class TestEvaluate(TestBase):
         assert self.i.evaluate((Sym("slice"), [Sym("a"), None, None])) == [1, 2, 3]
 
     def test_array_error(self):
-        self.i.evaluate((Sym("define"), [Sym("a"), (Sym("arr"), [1, 2])]))
+        self.i.evaluate((Sym("define"), [Sym("a"), [1, 2]]))
 
         with pytest.raises(AssertionError, match="Index target not array"):
             self.i.evaluate((Sym("assign"), [(Sym("index"), [None, 0]), 1]))
@@ -571,11 +571,6 @@ class TestGo(TestBase):
             self.i.go(""" 7 8 """)
 
     def test_array(self):
-        assert self.i.go(""" arr() """) == []
-        assert self.i.go(""" arr(2 + 3) """) == [5]
-        assert self.i.go(""" arr(2)[0] """) == 2
-        assert self.i.go(""" arr(2, 3, arr(4, 5)) """) == [2, 3, [4, 5]]
-
         assert self.i.go(""" [] """) == []
         assert self.i.go(""" [2 + 3] """) == [5]
         assert self.i.go(""" [2][0] """) == 2
@@ -624,7 +619,7 @@ class TestGo(TestBase):
         assert self.i.go(""" filter(a, func n do n % 2 == 0 end) """) == [2, 4, 6, 8]
         assert self.i.go(""" reduce(a, add, 0) """) == 44
         assert self.i.go(""" reverse(a) """) == [9, 8, 7, 6, 5, 4, 3, 2]
-        assert self.i.go(""" zip(a, arr(4, 5, 6)) """) == [[2, 4], [3, 5], [4, 6]]
+        assert self.i.go(""" zip(a, [4, 5, 6]) """) == [[2, 4], [3, 5], [4, 6]]
         assert self.i.go(""" enumerate(a) """) == [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
 
     def test_array_sieve(self):
@@ -659,7 +654,7 @@ text
         assert self.i.go(""" rest('Hello, world!') """) == "ello, world!"
         assert self.i.go(""" last('Hello, world!') """) == "!"
 
-        assert self.i.go(""" join(arr('H', 'e', 'l', 'l', 'o'), ' ') """) == "H e l l o"
+        assert self.i.go(""" join(['H', 'e', 'l', 'l', 'o'], ' ') """) == "H e l l o"
         assert self.i.go(""" ord('A') """) == 65
         assert self.i.go(""" chr(65) """) == "A"
 

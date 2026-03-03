@@ -461,7 +461,6 @@ class Interpreter:
         self._env.define(Sym("greater_equal"), lambda args: args[0] >= args[1])
         self._env.define(Sym("not"), lambda args: not args[0])
 
-        self._env.define(Sym("arr"), lambda args: args)
         self._env.define(Sym("len"), lambda args: len(args[0]))
         self._env.define(Sym("index"), lambda args: args[0][args[1]])
         self._env.define(Sym("slice"), lambda args: args[0][args[1]:args[2]])
@@ -487,7 +486,7 @@ class Interpreter:
         """)
         self.go("""
             deffunc map params a, f do
-                b := arr(); l := len(a);
+                b := []; l := len(a);
                 i := 0; while i < l do
                     push(b, f(a[i]));
                     i = i + 1
@@ -497,7 +496,7 @@ class Interpreter:
         """)
         self.go("""
             deffunc filter params a, f do
-                b := arr(); l := len(a);
+                b := []; l := len(a);
                 i := 0; while i < l do
                     if f(a[i]) then push(b, a[i]) end;
                     i = i + 1
@@ -507,9 +506,9 @@ class Interpreter:
         """)
         self.go("""
             deffunc zip params a, b do
-                z := arr(); la := len(a); lb := len(b);
+                z := []; la := len(a); lb := len(b);
                 i := 0; while i < la and i < lb do
-                    push(z, arr(a[i], b[i]));
+                    push(z, [a[i], b[i]]);
                     i = i + 1
                 end;
                 z
@@ -527,7 +526,7 @@ class Interpreter:
         """)
         self.go("""
             deffunc reverse params a do
-                b := arr(); i := len(a) - 1;
+                b := []; i := len(a) - 1;
                 while i >= 0 do
                     push(b, a[i]);
                     i = i - 1
@@ -537,7 +536,7 @@ class Interpreter:
         """)
         self.go("""
             deffunc range params start, stop do
-                b := arr();
+                b := [];
                 i := start; while i < stop do
                     push(b, i);
                     i = i + 1
