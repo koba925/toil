@@ -706,5 +706,32 @@ text
         with pytest.raises(AssertionError):
             self.i.go(""" i(2, 3, 4) """)
 
+    def test_match(self):
+        self.i.go("""
+            f := func val do
+                match val
+                    case 2 then "two"
+                    case "two" then 3
+                    case [a] then a
+                    case [a, 3] then -a
+                    case [a, [3, b]] then (a + b) * 2
+                    case [a, [b, c]] then a + b + c
+                    case [a, b] then a + b
+                    case _ then "not match"
+                end
+            end
+        """)
+        assert self.i.go(""" f(2) """) == "two"
+        assert self.i.go(""" f("two") """) == 3
+        assert self.i.go(""" f([2]) """) == 2
+        assert self.i.go(""" f([2, 3]) """) == -2
+        assert self.i.go(""" f([2, [3, 4]]) """) == 12
+        assert self.i.go(""" f([2, [2, 4]]) """) == 8
+        assert self.i.go(""" f([2, 4]) """) == 6
+        assert self.i.go(""" f([2, 3, 4]) """) == "not match"
+
+        with pytest.raises(AssertionError):
+            self.i.go(""" a """)
+
 if __name__ == "__main__":
     pytest.main([__file__])

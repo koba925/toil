@@ -193,6 +193,7 @@ class Parser:
             case Sym("if"): return self._if()
             case Sym("while"): return self._while()
             case Sym("deffunc"): return self._deffunc()
+            case Sym("match"): return self._match()
             case Sym(name) if is_name(name): return self._advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
@@ -254,6 +255,19 @@ class Parser:
         body_expr = self._expression()
         self._consume(Sym("end"))
         return (Sym("define"), [name, (Sym("func"), params, body_expr)])
+
+    def _match(self):
+        self._advance()
+        val_expr = self._expression()
+        cases = []
+        while self._current_token() == Sym("case"):
+            self._advance()
+            pattern = self._expression()
+            self._consume(Sym("then"))
+            body_expr = self._expression()
+            cases.append((pattern, body_expr))
+        self._consume(Sym("end"))
+        return (Sym("match"), val_expr, cases)
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
@@ -354,6 +368,8 @@ class Evaluator:
                 return self._evaluate_seq(exprs, env)
             case (Sym("if"), cond_expr, then_expr, else_expr):
                 return self._evaluate_if(cond_expr, then_expr, else_expr, env)
+            case (Sym("match"), val_expr, cases):
+                return self._evaluate_match(val_expr, cases, env)
             case (Sym("while"), cond_expr, body_expr):
                 return self._evaluate_while(cond_expr, body_expr, env)
             case (Sym("func"), params, body):
@@ -400,6 +416,14 @@ class Evaluator:
         else:
             return self.evaluate(else_expr, env)
 
+    def _evaluate_match(self, val_expr, cases, env):
+        val = self.evaluate(val_expr, env)
+        for pattern, body_expr in cases:
+            new_env = Environment(env)
+            if self._match_pattern(pattern, val, new_env):
+                return self.evaluate(body_expr, new_env)
+        return None
+
     def _evaluate_while(self, cond_expr, body_expr, env):
         while self.evaluate(cond_expr, env):
             self.evaluate(body_expr, env)
@@ -422,6 +446,8 @@ class Evaluator:
 
     def _match_pattern(self, pattern, value, env):
         match pattern:
+            case Sym("_"):
+                return True
             case Sym(name):
                 env.define(name, value)
                 return True
@@ -437,7 +463,7 @@ class Evaluator:
                 return self._match_pattern(sub_pattern, val, env) and \
                     self._match_pattern(rest_sub_patterns, rest_vals, env)
             case _:
-                return False
+                return pattern == value
 
 class Interpreter:
     def __init__(self):
@@ -601,25 +627,48 @@ if __name__ == "__main__":
 
     # Example
 
+    print(c.ast("""
+        match [2 + 3, 4, 5] end
+    """)) # -> (match, [(add, [2, 3]), 4, 5], [])
+    print(c.go("""
+        match [2 + 3, 4, 5] end
+    """)) # -> None
 
-    print(c.ast(""" f := func a, [b, c] do [a, b, c] end """)) # -> ('define', ['f', ('func', ['a', ['b', 'c']], ['a', 'b', 'c'])])
-    c.go(""" f := func a, [b, c] do [a, b, c] end """)
-    print(c.go(""" f(2, [3, 4]) """)) # -> [2, 3, 4]
-
-    print(c.ast(""" deffunc f params a, [b, c] do [a, b, c, "a"] end """)) # -> ('define', ['f', ('func', ['a', ['b', 'c']], ['a', 'b', 'c', 'a'])])
-    c.go(""" deffunc f params a, [b, c] do [a, b, c] end """)
-    print(c.go(""" f(2, [3, 4]) """)) # -> [2, 3, 4]
-
-    c.go(""" deffunc f params *a do a end""")
-    print(c.go(""" f() """)) # -> []
-    print(c.go(""" f(2 + 3) """)) # -> [5]
-    print(c.go(""" f(2, 3, 4) """)) # -> [2, 3, 4]
-
-    print(c.ast(""" deffunc f params a, *b do [a, b] end """)) # -> ('define', ['f', ('func', ['a', ('*', ['b'])], ['a', 'b'])])
-    c.go(""" f := func a, *b do [a, b] end """)
-    # print(c.go(""" f() """)) # -> Error
-    print(c.go(""" f(2 + 3) """)) # -> [5, []]
-    print(c.go(""" f(2, 3, 4) """)) # -> [2, [3, 4]]
-
-    c.go(""" deffunc f params *a, b do [a, b] end """)
-    # print(c.go(""" f(2, 3, 4) """)) # -> Error
+    print(c.ast("""
+        f := func val do
+            match val
+                case 2 then "two"
+                case "two" then 3
+                case [a] then a
+                case [a, 3] then -a
+                case [a, [3, b]] then (a + b) * 2
+                case [a, [b, c]] then a + b + c
+                case [a, b] then a + b
+                case _ then "not match"
+            end
+        end
+    """))
+    # -> (define, [f, (func, [val], (match, val, [(2, 'two'), ('two', 3), ([a], a), ([a, 3], (neg, [a])), ([a, [3, b]], (mul, [(add, [a, b]), 3])), ([a, [b, c]], (add, [(add, [a, b]), c])), ([a, b], (add, [a, b])), (_, 'not match')]))])
+    c.go("""
+        f := func val do
+            match val
+                case 2 then "two"
+                case "two" then 3
+                case [a] then a
+                case [a, 3] then -a
+                case [a, [3, b]] then (a + b) * 2
+                case [a, [b, c]] then a + b + c
+                case [a, b] then a + b
+                case _ then "not match"
+            end
+        end
+    """)
+    print(c.go(""" f(2) """)) # -> two
+    print(c.go(""" f("two") """)) # -> 3
+    print(c.go(""" f([2]) """)) # -> 2
+    print(c.go(""" f([2, 3]) """)) # -> -2
+    print(c.go(""" f([2, [3, 4]]) """)) # -> 12
+    print(c.go(""" f([2, [2, 4]]) """)) # -> 8
+    print(c.go(""" f([2, 4]) """)) # -> 6
+    # print(c.go(""" a """)) # -> Error
+    print(c.go(""" f([2, 3, 4]) """)) # -> not match
