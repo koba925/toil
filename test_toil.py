@@ -546,7 +546,7 @@ class TestGo(TestBase):
         assert self.i.go(""" fib(7) """) == 13
         assert self.i.go(""" fib(9) """) == 34
 
-    def test_gcd(self):
+    def test_gcd_recursive(self):
         assert self.i.go("""
             deffunc gcd params a, b do
                 if a == 0 then b else gcd(b % a, a) end
@@ -561,6 +561,17 @@ class TestGo(TestBase):
         """)
         assert self.i.go(""" is_even(10) """) is True
         assert self.i.go(""" is_odd(10) """) is False
+
+    def test_gcd_iterative(self):
+        assert self.i.go("""
+            deffunc gcd params a, b do
+                while a != 0 do
+                    [a, b] := [b % a, a]
+                end;
+                b
+            end;
+            gcd(24, 36)
+        """) == 12
 
     def test_no_code(self):
         with pytest.raises(AssertionError):
@@ -814,6 +825,29 @@ text
 
         with pytest.raises(AssertionError, match="Return from top level"):
             self.i.go(""" return() """)
+
+
+    def test_import(self, tmp_path):
+        self.i.go(""" fib := import("lib/fib.toil") """)
+        assert self.i.go(""" fib(9) """) == 34
+
+        self.i.go(""" [gcd_recur, gcd_iter] := import("lib/gcd.toil") """)
+        assert self.i.go(""" gcd_recur(24, 36) """) == 12
+        assert self.i.go(""" gcd_iter(24, 36) """) == 12
+
+    def test_import_isolation(self, tmp_path):
+        mod_a_path = tmp_path / "mod_a.toil"
+        mod_a_path.write_text("a_private := 100; func do a_private end")
+
+        self.i.go(f""" f := import("{mod_a_path}") """)
+        assert self.i.go("f()") == 100
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            self.i.go("a_private")
+
+        mod_b_path = tmp_path / "mod_b.toil"
+        mod_b_path.write_text("b_private := 200; a_private")
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            self.i.go(f""" import("{mod_b_path}") """)
 
 if __name__ == "__main__":
     pytest.main([__file__])

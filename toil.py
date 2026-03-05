@@ -491,8 +491,16 @@ class Interpreter:
     def __init__(self):
         self._env = Environment()
 
+    def _import(self, path):
+        with open(path, "r") as f: src = f.read()
+        module_env = Environment(self._env)
+        ast = self.parse(self.scan(src))
+        return Evaluator().evaluate(ast, module_env)
+
     def init_env(self):
         self._env.define(Sym("__builtins__"), None)
+
+        self._env.define(Sym("import"), lambda args: self._import(args[0]))
 
         self._env.define(Sym("add"), lambda args: args[0] + args[1])
         self._env.define(Sym("sub"), lambda args: args[0] - args[1])
@@ -620,6 +628,7 @@ class Interpreter:
         return self.evaluate(self.ast(src))
 
 
+
 if __name__ == "__main__":
     import sys
 
@@ -652,31 +661,9 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.ast("""
-        return(); return(2 + 3)
-    """)) # -> (seq, [(return, []), (return, [(add, [2, 3])])])
+    i.go(""" fib := import("lib/fib.toil") """)
+    print(i.go(""" fib(9) """))
 
-    i.go("""
-        deffunc f params a do
-            if a == 2 then return(3) end;
-            4
-        end
-    """)
-
-    print(i.go(""" f(2) """)) # -> 3
-    print(i.go(""" f(3) """)) # -> 4
-
-    i.go("""
-        deffunc fib params n do
-            if n == 0 then return(0) end;
-            if n == 1 then return(1) end;
-            fib(n - 1) + fib(n - 2)
-        end
-    """)
-    print(i.go(""" fib(0) """)) # -> 0
-    print(i.go(""" fib(1) """)) # -> 1
-    print(i.go(""" fib(7) """)) # -> 13
-    print(i.go(""" fib(9) """)) # -> 34
-
-    # i.go(""" func do return(2, 3) end () """) # -> Error
-    # i.go(""" return() """) # -> Error
+    i.go(""" [gcd_recur, gcd_iter] := import("lib/gcd.toil") """)
+    print(i.go(""" gcd_recur(24, 36) """))
+    print(i.go(""" gcd_iter(24, 36) """))
