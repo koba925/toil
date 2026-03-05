@@ -191,9 +191,9 @@ class Parser:
             case Sym("func"): return self._func()
             case Sym("scope"): return self._scope()
             case Sym("if"): return self._if()
+            case Sym("match"): return self._match()
             case Sym("while"): return self._while()
             case Sym("deffunc"): return self._deffunc()
-            case Sym("match"): return self._match()
             case Sym(name) if is_name(name): return self._advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
@@ -349,6 +349,11 @@ class Environment:
         return val
 
 
+class BreakException(Exception):
+    def __init__(self, val=None): self.val = val
+
+class ContinueException(Exception): pass
+
 class Evaluator:
     def evaluate(self, expr, env):
         match expr:
@@ -372,6 +377,12 @@ class Evaluator:
                 return self._evaluate_match(val_expr, cases, env)
             case (Sym("while"), cond_expr, body_expr):
                 return self._evaluate_while(cond_expr, body_expr, env)
+            case (Sym("break"), args):
+                assert len(args) <= 1, f"Break takes zero or one argument @ evaluate(): {args}"
+                raise BreakException(self.evaluate(args[0], env) if args else None)
+            case (Sym("continue"), args):
+                assert len(args) == 0, f"Continue takes no arguments @ evaluate(): {args}"
+                raise ContinueException()
             case (Sym("func"), params, body):
                 return (Sym("closure"), params, body, env)
             case (Sym("scope"), expr):
@@ -426,7 +437,10 @@ class Evaluator:
 
     def _evaluate_while(self, cond_expr, body_expr, env):
         while self.evaluate(cond_expr, env):
-            self.evaluate(body_expr, env)
+            try:
+                self.evaluate(body_expr, env)
+            except ContinueException: continue
+            except BreakException as e: return e.val
         return None
 
     def _eval_op(self, op_expr, args_expr, env):
@@ -588,7 +602,10 @@ class Interpreter:
         return self.parse(self.scan(src))
 
     def evaluate(self, expr):
-        return Evaluator().evaluate(expr, self._env)
+        try:
+            return Evaluator().evaluate(expr, self._env)
+        except ContinueException: assert False, "Continue at top level @ evaluate()"
+        except BreakException: assert False, "Break at top level @ evaluate()"
 
     def go(self, src):
         return self.evaluate(self.ast(src))
@@ -597,8 +614,7 @@ class Interpreter:
 if __name__ == "__main__":
     import sys
 
-    c = Interpreter().init_env()
-    i = c.stdlib()
+    i = Interpreter().init_env()#.stdlib()
 
     def repl():
         while True:
@@ -627,48 +643,60 @@ if __name__ == "__main__":
 
     # Example
 
-    print(c.ast("""
-        match [2 + 3, 4, 5] end
-    """)) # -> (match, [(add, [2, 3]), 4, 5], [])
-    print(c.go("""
-        match [2 + 3, 4, 5] end
-    """)) # -> None
+    print(i.ast("""
+        while true do break; continue end
+    """)) # -> (while, true, (seq, [(break,), (continue,)]))
 
-    print(c.ast("""
-        f := func val do
-            match val
-                case 2 then "two"
-                case "two" then 3
-                case [a] then a
-                case [a, 3] then -a
-                case [a, [3, b]] then (a + b) * 2
-                case [a, [b, c]] then a + b + c
-                case [a, b] then a + b
-                case _ then "not match"
-            end
-        end
-    """))
-    # -> (define, [f, (func, [val], (match, val, [(2, 'two'), ('two', 3), ([a], a), ([a, 3], (neg, [a])), ([a, [3, b]], (mul, [(add, [a, b]), 3])), ([a, [b, c]], (add, [(add, [a, b]), c])), ([a, b], (add, [a, b])), (_, 'not match')]))])
-    c.go("""
-        f := func val do
-            match val
-                case 2 then "two"
-                case "two" then 3
-                case [a] then a
-                case [a, 3] then -a
-                case [a, [3, b]] then (a + b) * 2
-                case [a, [b, c]] then a + b + c
-                case [a, b] then a + b
-                case _ then "not match"
-            end
-        end
-    """)
-    print(c.go(""" f(2) """)) # -> two
-    print(c.go(""" f("two") """)) # -> 3
-    print(c.go(""" f([2]) """)) # -> 2
-    print(c.go(""" f([2, 3]) """)) # -> -2
-    print(c.go(""" f([2, [3, 4]]) """)) # -> 12
-    print(c.go(""" f([2, [2, 4]]) """)) # -> 8
-    print(c.go(""" f([2, 4]) """)) # -> 6
-    # print(c.go(""" a """)) # -> Error
-    print(c.go(""" f([2, 3, 4]) """)) # -> not match
+    print(i.go("""
+        a := [];
+        i := 0; while i < 5 do
+            i = i + 1;
+            if i == 3 then continue(); 1 / 0 end;
+            push(a, i)
+        end;
+        a
+    """)) # -> [1, 2, 4, 5]
+
+    print(i.go("""
+        a := [];
+        i := 0; while i < 2 do
+            j := 0; while j < 3 do
+                j = j + 1;
+                if j == 2 then continue() end;
+                push(a, [i, j])
+            end;
+            i = i + 1
+        end;
+        a
+    """)) # -> [[0, 1], [0, 3], [1, 1], [1, 3]]
+
+    print(i.go(""" while True do break() end """)) # -> None
+    print(i.go(""" while True do break(2 + 3) end """)) # -> 5
+    # print(i.go(""" while True do break(2, 3) end """)) # -> Error
+    # print(i.go(""" while True do continue(2) end """)) # -> Error
+
+    print(i.go("""
+        a := [];
+        i := 0; while i < 5 do
+            if i == 3 then break(); 1 / 0 end;
+            push(a, i);
+            i = i + 1
+        end;
+        a
+    """)) # -> [0, 1, 2]
+
+    print(i.go("""
+        a := [];
+        i := 0; while i < 2 do
+            j := 0; while j < 3 do
+                if j == 2 then break() end;
+                push(a, [i, j]);
+                j = j + 1
+            end;
+            i = i + 1
+        end;
+        a
+    """)) # -> [[0, 0], [0, 1], [1, 0], [1, 1]]
+
+    # i.go(""" continue """) # -> Error
+    # i.go(""" break """) # -> Error

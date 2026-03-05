@@ -733,5 +733,59 @@ text
         with pytest.raises(AssertionError):
             self.i.go(""" a """)
 
+    def test_continue(self):
+        assert self.i.go("""
+            a := [];
+            i := 0; while i < 5 do
+                i = i + 1;
+                if i == 3 then continue() end;
+                push(a, i)
+            end;
+            a
+        """) == [1, 2, 4, 5]
+
+        assert self.i.go("""
+            a := []; i := 0; while i < 2 do
+                j := 0; while j < 3 do
+                    j = j + 1; if j == 2 then continue() end; push(a, [i, j])
+                end; i = i + 1
+            end;
+            a
+        """) == [[0, 1], [0, 3], [1, 1], [1, 3]]
+
+        with pytest.raises(AssertionError, match="Continue takes no arguments"):
+            self.i.go(""" while True do continue(2) end """)
+
+        with pytest.raises(AssertionError, match="Continue at top level"):
+            self.i.go(""" continue() """)
+
+    def test_break(self):
+        assert self.i.go("""
+            a := [];
+            i := 0; while i < 5 do
+                if i == 3 then break() end;
+                push(a, i);
+                i = i + 1
+            end;
+            a
+        """) == [0, 1, 2]
+
+        assert self.i.go("""
+            a := []; i := 0; while i < 2 do
+                j := 0; while j < 3 do
+                    if j == 2 then break() end; push(a, [i, j]); j = j + 1
+                end; i = i + 1
+            end; a
+        """) == [[0, 0], [0, 1], [1, 0], [1, 1]]
+
+        assert self.i.go(""" while True do break() end """) == None
+        assert self.i.go(""" while True do break(2 + 3) end """) == 5
+
+        with pytest.raises(AssertionError, match="Break takes zero or one argument"):
+            self.i.go(""" while True do break(2, 3) end """)
+
+        with pytest.raises(AssertionError, match="Break at top level"):
+            self.i.go(""" break() """)
+
 if __name__ == "__main__":
     pytest.main([__file__])
