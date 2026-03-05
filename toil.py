@@ -474,7 +474,8 @@ class Evaluator:
                 env.define(name, value)
                 return True
             case [(Sym("*"), [Sym(name)])]:
-                env.define(name, value)
+                if not isinstance(value, list): return False
+                env.define(name, list(value))
                 return True
             case sub_patterns if isinstance(sub_patterns, list):
                 if not isinstance(value, list): return False
@@ -627,8 +628,6 @@ class Interpreter:
     def go(self, src):
         return self.evaluate(self.ast(src))
 
-
-
 if __name__ == "__main__":
     import sys
 
@@ -661,9 +660,40 @@ if __name__ == "__main__":
 
     # Example
 
-    i.go(""" fib := import("lib/fib.toil") """)
-    print(i.go(""" fib(9) """))
+    print("Python")
+    a = [2, 3, 4]
+    match a:
+        case elems: elems[0] = 5; print(elems)
+    print(a)
 
-    i.go(""" [gcd_recur, gcd_iter] := import("lib/gcd.toil") """)
-    print(i.go(""" gcd_recur(24, 36) """))
-    print(i.go(""" gcd_iter(24, 36) """))
+    a = [2, 3, 4]
+    match a:
+        case [*elems]: elems[0] = 5; print(elems)
+    print(a)
+
+    a = [2, 3, 4]
+    match a:
+        case [first, *rest]: rest[0] = 5; print(first, rest)
+    print(a)
+
+    i.go("""
+        print("Toil");
+
+        a := [2, 3, 4];
+        match a
+            case elems then elems[0] = 5; print(elems)
+        end;
+        print(a);
+
+        a := [2, 3, 4];
+        match a
+            case [*elems] then elems[0] = 5; print(elems)
+        end;
+        print(a);
+
+        a := [2, 3, 4];
+        match a
+            case [first, *rest] then rest[0] = 5; print(first, rest)
+        end;
+        print(a)
+    """)

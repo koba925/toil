@@ -744,6 +744,23 @@ text
         with pytest.raises(AssertionError):
             self.i.go(""" a """)
 
+    def test_match_copy(self):
+        assert self.i.go("""
+            a := [2, 3, 4];
+            match a
+                case b then b[0] = 5
+            end;
+            a
+        """) == [5, 3, 4]
+
+        assert self.i.go("""
+            a := [2, 3, 4];
+            match a
+                case [*b] then b[0] = 5
+            end;
+            a
+        """) == [2, 3, 4]
+
     def test_continue(self):
         assert self.i.go("""
             a := [];
