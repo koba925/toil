@@ -787,5 +787,33 @@ text
         with pytest.raises(AssertionError, match="Break at top level"):
             self.i.go(""" break() """)
 
+    def test_return(self):
+        self.i.go("""
+            deffunc f params a do
+                if a == 2 then return(3) end;
+                4
+            end
+        """)
+        assert self.i.go(""" f(2) """) == 3
+        assert self.i.go(""" f(3) """) == 4
+
+        self.i.go("""
+            deffunc fib params n do
+                if n == 0 then return(0) end;
+                if n == 1 then return(1) end;
+                fib(n - 1) + fib(n - 2)
+            end
+        """)
+        assert self.i.go(""" fib(0) """) == 0
+        assert self.i.go(""" fib(1) """) == 1
+        assert self.i.go(""" fib(7) """) == 13
+        assert self.i.go(""" fib(9) """) == 34
+
+        with pytest.raises(AssertionError, match="Return takes zero or one argument"):
+            self.i.go(""" func do return(2, 3) end () """)
+
+        with pytest.raises(AssertionError, match="Return from top level"):
+            self.i.go(""" return() """)
+
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -349,6 +349,9 @@ class Environment:
         return val
 
 
+class ReturnException(Exception):
+    def __init__(self, val=None): self.val = val
+
 class BreakException(Exception):
     def __init__(self, val=None): self.val = val
 
@@ -385,6 +388,9 @@ class Evaluator:
                 raise ContinueException()
             case (Sym("func"), params, body):
                 return (Sym("closure"), params, body, env)
+            case (Sym("return"), args):
+                assert len(args) <= 1, f"Return takes zero or one argument @ evaluate(): {args}"
+                raise ReturnException(self.evaluate(args[0], env) if args else None)
             case (Sym("scope"), expr):
                 return self.evaluate(expr, Environment(env))
             case (op_expr, args_expr) if isinstance(expr, tuple):
@@ -453,7 +459,9 @@ class Evaluator:
             case (Sym("closure"), params, body, closure_env):
                 new_env = Environment(closure_env)
                 if self._match_pattern(params, args_val, new_env):
-                    return self.evaluate(body, new_env)
+                    try:
+                        return self.evaluate(body, new_env)
+                    except ReturnException as e: return e.val
                 assert False, f"Argument mismatch @ _eval_op(): {params}, {args_val}"
             case _:
                 assert False, f"Illegal operator @ eval_op(): {op_val}"
@@ -604,6 +612,7 @@ class Interpreter:
     def evaluate(self, expr):
         try:
             return Evaluator().evaluate(expr, self._env)
+        except ReturnException: assert False, "Return from top level @ evaluate()"
         except ContinueException: assert False, "Continue at top level @ evaluate()"
         except BreakException: assert False, "Break at top level @ evaluate()"
 
@@ -644,59 +653,30 @@ if __name__ == "__main__":
     # Example
 
     print(i.ast("""
-        while true do break; continue end
-    """)) # -> (while, true, (seq, [(break,), (continue,)]))
+        return(); return(2 + 3)
+    """)) # -> (seq, [(return, []), (return, [(add, [2, 3])])])
 
-    print(i.go("""
-        a := [];
-        i := 0; while i < 5 do
-            i = i + 1;
-            if i == 3 then continue(); 1 / 0 end;
-            push(a, i)
-        end;
-        a
-    """)) # -> [1, 2, 4, 5]
+    i.go("""
+        deffunc f params a do
+            if a == 2 then return(3) end;
+            4
+        end
+    """)
 
-    print(i.go("""
-        a := [];
-        i := 0; while i < 2 do
-            j := 0; while j < 3 do
-                j = j + 1;
-                if j == 2 then continue() end;
-                push(a, [i, j])
-            end;
-            i = i + 1
-        end;
-        a
-    """)) # -> [[0, 1], [0, 3], [1, 1], [1, 3]]
+    print(i.go(""" f(2) """)) # -> 3
+    print(i.go(""" f(3) """)) # -> 4
 
-    print(i.go(""" while True do break() end """)) # -> None
-    print(i.go(""" while True do break(2 + 3) end """)) # -> 5
-    # print(i.go(""" while True do break(2, 3) end """)) # -> Error
-    # print(i.go(""" while True do continue(2) end """)) # -> Error
+    i.go("""
+        deffunc fib params n do
+            if n == 0 then return(0) end;
+            if n == 1 then return(1) end;
+            fib(n - 1) + fib(n - 2)
+        end
+    """)
+    print(i.go(""" fib(0) """)) # -> 0
+    print(i.go(""" fib(1) """)) # -> 1
+    print(i.go(""" fib(7) """)) # -> 13
+    print(i.go(""" fib(9) """)) # -> 34
 
-    print(i.go("""
-        a := [];
-        i := 0; while i < 5 do
-            if i == 3 then break(); 1 / 0 end;
-            push(a, i);
-            i = i + 1
-        end;
-        a
-    """)) # -> [0, 1, 2]
-
-    print(i.go("""
-        a := [];
-        i := 0; while i < 2 do
-            j := 0; while j < 3 do
-                if j == 2 then break() end;
-                push(a, [i, j]);
-                j = j + 1
-            end;
-            i = i + 1
-        end;
-        a
-    """)) # -> [[0, 0], [0, 1], [1, 0], [1, 1]]
-
-    # i.go(""" continue """) # -> Error
-    # i.go(""" break """) # -> Error
+    # i.go(""" func do return(2, 3) end () """) # -> Error
+    # i.go(""" return() """) # -> Error
