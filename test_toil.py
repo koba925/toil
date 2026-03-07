@@ -342,10 +342,10 @@ class TestEvaluate(TestBase):
     def test_array_error(self):
         self.i.evaluate((Sym("define"), [Sym("a"), [1, 2]]))
 
-        with pytest.raises(AssertionError, match="Index target not array"):
+        with pytest.raises(AssertionError, match="Illegal indexing"):
             self.i.evaluate((Sym("assign"), [(Sym("index"), [None, 0]), 1]))
 
-        with pytest.raises(AssertionError, match="Index not int"):
+        with pytest.raises(AssertionError, match="Illegal indexing"):
             self.i.evaluate((Sym("assign"), [(Sym("index"), [Sym("a"), None]), 1]))
 
 class TestGo(TestBase):

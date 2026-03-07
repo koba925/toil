@@ -43,7 +43,7 @@ class Scanner:
                     if self._current_char() == "=":
                         self._advance()
                     self._tokens.append(Sym(self._src[start:self._pos]))
-                case ("+" | "-" | "*" | "/" | "%" | "(" | ")" | "[" | "]" | ";" | ",") as ch:
+                case ("+" | "-" | "*" | "/" | "%" | "(" | ")" | "[" | "]" | "{" | "}" | "." | ";" | ",") as ch:
                     self._tokens.append(Sym(ch))
                     self._advance()
                 case invalid:
@@ -166,11 +166,13 @@ class Parser:
         }, self._unaries)
 
     def _unaries(self):
-        return self._unary({Sym("-"): Sym("neg"), Sym("*"): Sym("*")}, self._call_index)
+        return self._unary({
+            Sym("-"): Sym("neg"), Sym("*"): Sym("*")
+        }, self._call_index_dot)
 
-    def _call_index(self):
+    def _call_index_dot(self):
         target = self._primary()
-        while self._current_token() in (Sym("("), Sym("[")):
+        while self._current_token() in (Sym("("), Sym("["), Sym(".")):
             match self._current_token():
                 case Sym("("):
                     self._advance()
@@ -180,12 +182,19 @@ class Parser:
                     index = self._expression()
                     self._consume(Sym("]"))
                     target = (Sym("index"), [target, index])
+                case Sym("."):
+                    self._advance()
+                    assert type(self._current_token()) is Sym, \
+                        f"Illegal property @ _call_index_dot(): {self._current_token()}"
+                    index = self._advance()
+                    target = (Sym("index"), [target, str(index)])
         return target
 
     def _primary(self):
         match self._current_token():
             case Sym("("): return self._paren()
             case Sym("["): return self._array()
+            case Sym("{"): return self._dic()
             case None | bool() | int(): return self._advance()
             case s if type(s) == str: return self._advance()
             case Sym("func"): return self._func()
@@ -208,6 +217,38 @@ class Parser:
         self._advance()
         array = self._comma_separated_exprs(Sym("]"))
         return array
+
+    def _dic(self):
+        def _parse_key_value(dic):
+            match self._current_token():
+                case Sym("*"):
+                    self._advance()
+                    rest_name = self._advance()
+                    assert is_name(rest_name), f"Expected rest pattern name @ _dic(): {rest_name}"
+                    dic[Sym("*")] = rest_name
+                case Sym():
+                    key = str(self._advance())
+                    if self._current_token() == Sym(":"):
+                        self._advance()
+                        dic[key] = self._expression()
+                    else:
+                        dic[key] = Sym(key)
+                case str():
+                    key = self._advance()
+                    self._consume(Sym(":"))
+                    dic[key] = self._expression()
+                case illegal:
+                    assert False, f"Illegal key @ _dic(): {illegal}"
+
+        self._advance()
+        dic = {}
+        if self._current_token() != Sym("}"):
+            _parse_key_value(dic)
+            while self._current_token() != Sym("}"):
+                self._consume(Sym(","))
+                _parse_key_value(dic)
+        self._advance()
+        return dic
 
     def _func(self):
         self._advance()
@@ -366,6 +407,8 @@ class Evaluator:
                 return s
             case exprs if type(exprs) is list:
                 return [self.evaluate(expr, env) for expr in exprs]
+            case exprs if type(exprs) is dict:
+                return {key: self.evaluate(val, env) for key, val in exprs.items()}
             case Sym(name):
                 return env.val(name)
             case (Sym("define"), [left_expr, right_expr]):
@@ -412,11 +455,13 @@ class Evaluator:
             case (Sym("index"), [coll_expr, index_expr]):
                 coll_val = self.evaluate(coll_expr, env)
                 index_val = self.evaluate(index_expr, env)
-                assert isinstance(coll_val, list), \
-                    f"Index target not array @ _evaluate_assign(): {coll_val}"
-                assert isinstance(index_val, int), \
-                    f"Index not int @ _evaluate_assign(): {index_val}"
-                coll_val[index_val] = right_val
+                match coll_val, index_val:
+                    case list(), int():
+                        coll_val[index_val] = right_val
+                    case dict(), str():
+                        coll_val[index_val] = right_val
+                    case _:
+                        assert False, f"Illegal indexing @ _evaluate_assign(): {coll_val}"
                 return right_val
             case unexpected:
                 assert False, f"Illegal assign target @ _evaluate_assign(): {unexpected}"
@@ -467,24 +512,55 @@ class Evaluator:
                 assert False, f"Illegal operator @ eval_op(): {op_val}"
 
     def _match_pattern(self, pattern, value, env):
+        def match_list():
+            match pattern:
+                case [*prefix, (Sym("*"), [Sym(rest_name)])]:
+                    if len(value) < len(prefix): return False
+                    for sub_pattern, sub_value in zip(prefix, value):
+                        if not self._match_pattern(sub_pattern, sub_value, env):
+                            return False
+                    env.define(rest_name, value[len(prefix):])
+                    return True
+                case _:
+                    if len(pattern) != len(value): return False
+                    for sub_pattern, sub_value in zip(pattern, value):
+                        if not self._match_pattern(sub_pattern, sub_value, env):
+                            return False
+                    return True
+
+        def match_dict():
+            rest_name = pattern.get(Sym("*"))
+
+            fixed_patterns = pattern.copy()
+            remaining_values = value.copy()
+
+            if rest_name is not None:
+                assert is_name(rest_name), f"Invalid dict rest pattern @ match_dict(): {rest_name}"
+                del fixed_patterns[Sym("*")]
+
+            for key, sub_pattern in fixed_patterns.items():
+                if key not in remaining_values:
+                    return False
+                if not self._match_pattern(sub_pattern, remaining_values[key], env):
+                    return False
+                del remaining_values[key]
+
+            if rest_name is not None:
+                env.define(rest_name, remaining_values)
+            return True
+
         match pattern:
             case Sym("_"):
                 return True
             case Sym(name):
                 env.define(name, value)
                 return True
-            case [(Sym("*"), [Sym(name)])]:
+            case list():
                 if not isinstance(value, list): return False
-                env.define(name, list(value))
-                return True
-            case sub_patterns if isinstance(sub_patterns, list):
-                if not isinstance(value, list): return False
-                if sub_patterns == [] and value == []: return True
-                if sub_patterns == [] or value == []: return False
-                sub_pattern, *rest_sub_patterns = sub_patterns
-                val, *rest_vals = value
-                return self._match_pattern(sub_pattern, val, env) and \
-                    self._match_pattern(rest_sub_patterns, rest_vals, env)
+                return match_list()
+            case dict():
+                if not isinstance(value, dict): return False
+                return match_dict()
             case _:
                 return pattern == value
 
@@ -529,6 +605,10 @@ class Interpreter:
         self._env.define(Sym("chr"), lambda args: chr(args[0]))
         self._env.define(Sym("ord"), lambda args: ord(args[0]))
         self._env.define(Sym("join"), lambda args: str(args[1]).join(map(str, args[0])))
+
+        self._env.define(Sym("has"), lambda args: args[1] in args[0])
+        self._env.define(Sym("keys"), lambda args: list(args[0].keys()))
+        self._env.define(Sym("items"), lambda args: [list(e) for e in args[0].items()])
 
         self._env.define(Sym("print"), lambda args: print(*args))
 
@@ -631,7 +711,7 @@ class Interpreter:
 if __name__ == "__main__":
     import sys
 
-    i = Interpreter().init_env()#.stdlib()
+    i = Interpreter().init_env().stdlib()
 
     def repl():
         while True:
@@ -660,40 +740,72 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Python")
-    a = [2, 3, 4]
-    match a:
-        case elems: elems[0] = 5; print(elems)
-    print(a)
+    # literal
+    print(i.go(""" {} """)) # -> {}
+    print(i.go(""" {"aaa": 2} """)) # -> {'aaa': 2}
+    i.go(""" bbb := 4 """)
+    print(i.ast(""" {aaa: 2 + 3, bbb} """)) # -> {'aaa': (add, [2, 3]), 'bbb': bbb}
+    print(i.go(""" {aaa: 2 + 3, bbb} """)) # -> {'aaa': 5, 'bbb': 4}
+    i.go(""" a := {aaa: 2 + 3, bbb} """)
+    # print(i.go(""" {1: 2} """)) # -> Error
 
-    a = [2, 3, 4]
-    match a:
-        case [*elems]: elems[0] = 5; print(elems)
-    print(a)
+    # referring
+    print(i.ast(""" a["aaa"] """)) # -> (index, [a, 'aaa'])
+    print(i.go(""" a["aaa"] """)) # -> 5
+    print(i.go(""" a["bbb"] """)) # -> 4
+    # print(i.go(""" a["ccc"] """)) # -> Error
 
-    a = [2, 3, 4]
-    match a:
-        case [first, *rest]: rest[0] = 5; print(first, rest)
-    print(a)
+    # assignment
+    print(i.ast(""" a["aaa"] = 2 """)) # -> (assign, [(index, [a, 'aaa']), 2])
+    print(i.go(""" a["aaa"] = 2; a """)) # -> {'aaa': 2, 'bbb': 4}
+    print(i.go(""" a["ccc"] = 5; a """)) # -> {'aaa': 2, 'bbb': 4, 'ccc': 5}
 
+    # builtin functions
+    print(i.go(""" len(a) """)) # -> 3
+    print(i.go(""" has(a, "aaa") """)) # -> True
+    print(i.go(""" has(a, "bbb") """)) # -> True
+    print(i.go(""" has(a, "ddd") """)) # -> False
+    print(i.go(""" keys(a) """)) # -> ['aaa', 'bbb', 'ccc']
+    print(i.go(""" items(a) """)) # -> [['aaa', 2], ['bbb', 4], ['ccc', 5]]
+
+    # dot notation
+    print(i.ast(""" a.aaa """)) # -> (index, [a, 'aaa'])
+    print(i.ast(""" a.aaa = 2 """)) # -> (assign, [(index, [a, 'aaa']), 2])
+    print(i.go(""" a.aaa = 2; a """)) # -> {'aaa': 2, 'bbb': 4, 'ccc': 5}
+    print(i.go(""" a.aaa """)) # -> 2
+    print(i.go(""" a.ddd = 6; a """)) # -> {'aaa': 2, 'bbb': 4, 'ccc': 5, 'ddd': 6}
+    # print(i.go(""" a.1 """)) # -> Error
+
+    # Traversing
     i.go("""
-        print("Toil");
+        elems := items(a);
+        i := 0; while i < len(elems) do
+            [k, v] := elems[i];
+            print(i, k, v);
+            i = i + 1
+        end
+    """) # -> prints 4 lines of (index, key, value)
 
-        a := [2, 3, 4];
-        match a
-            case elems then elems[0] = 5; print(elems)
-        end;
-        print(a);
+    # destructuring
+    print(i.ast("""{a, b} := {a: 2, b: 3}; [a, b] """)) # -> (seq, [(define, [{a: a, b: b}, {a: 2, b: 3}]), [a, b]])
+    print(i.ast("""{a, *b} := {a: 2, b: 3, c: 4, d: 5}; [a, b] """)) # -> (seq, [(define, [{a: a, '*': b}, {a: 2, b: 3, c: 4, d: 5}]), [a, b]])
+    print(i.go("""{a, b} := {a: 2, b: 3}; [a, b] """)) # -> [2, 3]
+    print(i.go("""{a, *b} := {a: 2, b: 3, c: 4, d: 5}; [a, b] """)) # -> [2, {b: 3, c: 4, d: 5}]
+    print(i.go("""{*a, b} := {a: 2, b: 3, c: 4, d: 5}; [a, b] """)) # -> [{a: 2, c: 4, d: 5}, 3]
+    print(i.go("""{a, *b, c} := {a: 2, b: 3, c: 4, d: 5}; [a, b, c] """)) # -> [2, {b: 3, d: 5}, 4]
 
-        a := [2, 3, 4];
-        match a
-            case [*elems] then elems[0] = 5; print(elems)
-        end;
-        print(a);
+    # pattern match
+    print(i.ast(""" match {a: 2, b: 3} case {a, b} then [a, b] end """)) # -> (match, {a: 2, b: 3}, [({a: a, b: b}, [a, b])])
+    print(i.ast(""" match {a: 2, b: 3, c: 4} case {a, *rest} then [a, rest] end """)) # -> (match, {a: 2, b: 3, c: 4}, [({a: a, '*': rest}, [a, rest])])
+    print(i.go(""" match {a: 2, b: 3} case {a, b} then [a, b] end """)) # -> [2, 3]
+    print(i.go(""" match {a: 2, b: 3} case {a: aa, b: bb} then [aa, bb] end """)) # -> [2, 3]
+    print(i.go(""" match {a: 2, b: 3, c: 4} case {a, b} then [a, b] end """)) # -> [2, 3]
+    print(i.go(""" match {a: 2, b: {c: 3, d: 4}} case {a, b: {c, d}} then [a, c, d] end """)) # -> [2, 3, 4]
+    print(i.go(""" match {a: 2, b: [3, 4]} case {a, b: [c, d]} then [a, c, d] end """)) # -> [2, 3, 4]
+    print(i.go(""" match {a: 2, b: 3, c: 4} case {a, *rest} then [a, rest] end """)) # -> [2, {'b': 3, 'c': 4}]
+    print(i.go(""" match {a: 2, b: 3, c: 4} case {*rest, b} then [rest, b] end """)) # -> [{'a': 2, 'c': 4}, 3]
+    print(i.go(""" match {a: 2, b: 3, c: 4} case {a, *rest, c} then [a, rest, c] end """)) # -> [2, {'b': 3}, 4]
+    print(i.go(""" match {a: 2} case {b: 3} then 4 end """)) # -> None
 
-        a := [2, 3, 4];
-        match a
-            case [first, *rest] then rest[0] = 5; print(first, rest)
-        end;
-        print(a)
-    """)
+    # print(i.go(""" a[0] = 1 """)) # -> Error
+    # print(i.go(""" [1, 2].foo """)) # -> Error
