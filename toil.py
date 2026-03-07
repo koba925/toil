@@ -809,3 +809,16 @@ if __name__ == "__main__":
 
     # print(i.go(""" a[0] = 1 """)) # -> Error
     # print(i.go(""" [1, 2].foo """)) # -> Error
+
+    # module by dict
+    i.go(""" gcd := import("lib/gcd_dict.toil") """)
+    print(i.go(""" gcd.recur(24, 36) """)) # -> 12
+    print(i.go(""" gcd.iter(24, 36) """)) # -> 12
+
+    i.go(""" {recur, iter} := import("lib/gcd_dict.toil") """)
+    print(i.go(""" recur(24, 36) """)) # -> 12
+    print(i.go(""" iter(24, 36) """)) # -> 12
+
+    i.go(""" {recur: gcd_recur, iter: gcd_iter} := import("lib/gcd_dict.toil") """)
+    print(i.go(""" gcd_recur(24, 36) """)) # -> 12
+    print(i.go(""" gcd_iter(24, 36) """)) # -> 12
