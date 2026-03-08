@@ -866,5 +866,185 @@ text
         with pytest.raises(AssertionError, match="Undefined variable"):
             self.i.go(f""" import("{mod_b_path}") """)
 
+    def test_dict(self):
+        assert self.i.go(""" {} """) == {}
+        assert self.i.go(""" {"aaa": 2} """) == {'aaa': 2}
+        self.i.go(""" bbb := 4 """)
+        assert self.i.go(""" {aaa: 2 + 3, bbb} """) == {'aaa': 5, 'bbb': 4}
+
+        self.i.go(""" a := {aaa: 2 + 3, bbb} """)
+        assert self.i.go(""" a["aaa"] """) == 5
+        assert self.i.go(""" a["bbb"] """) == 4
+        with pytest.raises(KeyError):
+            self.i.go(""" a["ccc"] """)
+
+        self.i.go(""" a["aaa"] = 2 """)
+        assert self.i.go(""" a """) == {'aaa': 2, 'bbb': 4}
+        self.i.go(""" a["ccc"] = 5 """)
+        assert self.i.go(""" a """) == {'aaa': 2, 'bbb': 4, 'ccc': 5}
+
+        assert self.i.go(""" len(a) """) == 3
+        assert self.i.go(""" has(a, "aaa") """) is True
+        assert self.i.go(""" has(a, "bbb") """) is True
+        assert self.i.go(""" has(a, "ddd") """) is False
+        assert self.i.go(""" keys(a) """) == ['aaa', 'bbb', 'ccc']
+        assert self.i.go(""" items(a) """) == [['aaa', 2], ['bbb', 4], ['ccc', 5]]
+
+        self.i.go(""" [k, v] := items(a)[0] """)
+        assert self.i.go(""" k """) == 'aaa'
+        assert self.i.go(""" v """) == 2
+
+        with pytest.raises(AssertionError, match="Illegal key"):
+            self.i.go(""" {1: 2} """)
+
+        with pytest.raises(AssertionError, match="Illegal indexing"):
+            self.i.go(""" a[0] = 1 """)
+
+    def test_dot_notation(self):
+        self.i.go(""" a := {aaa: 2, bbb: 4} """)
+        self.i.go(""" a.aaa = 2 """)
+        assert self.i.go(""" a.aaa """) == 2
+        self.i.go(""" a.ddd = 6 """)
+        assert self.i.go(""" a """) == {'aaa': 2, 'bbb': 4, 'ddd': 6}
+
+        with pytest.raises(AssertionError, match="Illegal property"):
+            self.i.go(""" a.1 """)
+
+        with pytest.raises(AttributeError):
+            self.i.go(""" [1, 2].foo """)
+
+    def test_dict_destructuring(self):
+        assert self.i.go("""{a, b} := {a: 2, b: 3}; [a, b] """) == [2, 3]
+        assert self.i.go("""{a, *b} := {a: 2, b: 3, c: 4, d: 5}; [a, b] """) == [2, {'b': 3, 'c': 4, 'd': 5}]
+        assert self.i.go("""{*a, b} := {a: 2, b: 3, c: 4, d: 5}; [a, b] """) == [{'a': 2, 'c': 4, 'd': 5}, 3]
+        assert self.i.go("""{a, *b, c} := {a: 2, b: 3, c: 4, d: 5}; [a, b, c] """) == [2, {'b': 3, 'd': 5}, 4]
+
+    def test_dict_pattern_match(self):
+        assert self.i.go(""" match {a: 2, b: 3} case {a, b} then [a, b] end """) == [2, 3]
+        assert self.i.go(""" match {a: 2, b: 3} case {a: aa, b: bb} then [aa, bb] end """) == [2, 3]
+        assert self.i.go(""" match {a: 2, b: 3, c: 4} case {a, b} then [a, b] end """) == [2, 3]
+        assert self.i.go(""" match {a: 2, b: {c: 3, d: 4}} case {a, b: {c, d}} then [a, c, d] end """) == [2, 3, 4]
+        assert self.i.go(""" match {a: 2, b: [3, 4]} case {a, b: [c, d]} then [a, c, d] end """) == [2, 3, 4]
+        assert self.i.go(""" match {a: 2, b: 3, c: 4} case {a, *rest} then [a, rest] end """) == [2, {'b': 3, 'c': 4}]
+        assert self.i.go(""" match {a: 2, b: 3, c: 4} case {*rest, b} then [rest, b] end """) == [{'a': 2, 'c': 4}, 3]
+        assert self.i.go(""" match {a: 2, b: 3, c: 4} case {a, *rest, c} then [a, rest, c] end """) == [2, {'b': 3}, 4]
+        assert self.i.go(""" match {a: 2} case {b: 3} then 4 end """) is None
+
+    def test_dict_module(self):
+        self.i.go(""" gcd := import("lib/gcd_dict.toil") """)
+        assert self.i.go(""" gcd.recur(24, 36) """) == 12
+        assert self.i.go(""" gcd.iter(24, 36) """) == 12
+
+        self.i.go(""" {recur, iter} := import("lib/gcd_dict.toil") """)
+        assert self.i.go(""" recur(24, 36) """) == 12
+        assert self.i.go(""" iter(24, 36) """) == 12
+
+        self.i.go(""" {recur: gcd_recur, iter: gcd_iter} := import("lib/gcd_dict.toil") """)
+        assert self.i.go(""" gcd_recur(24, 36) """) == 12
+        assert self.i.go(""" gcd_iter(24, 36) """) == 12
+
+    def test_ufcs(self):
+        # Case 1: Namespace
+        self.i.go(""" foo := { add: func a, b do a + b end } """)
+        assert self.i.go(""" foo.add(2, 3) """) == 5
+
+        # Case 2: Method
+        self.i.go(""" foo := { add: func self, a do self.val + a end, val: 2 } """)
+        assert self.i.go(""" foo.add(3) """) == 5
+
+        # Case 3: UFCS
+        self.i.go(""" foo := 2 """)
+        assert self.i.go(""" add(foo, 3) """) == 5
+        assert self.i.go(""" foo.add(3) """) == 5
+
+        self.i.go(""" myadd := func a, b do a + b end """)
+        assert self.i.go(""" myadd(foo, 3) """) == 5
+        assert self.i.go(""" foo.myadd(3) """) == 5
+
+        # UFCS priority
+        self.i.go(""" d := { len: func self do "local" end } """)
+        assert self.i.go(""" d.len() """) == "local"
+
+        with pytest.raises(AssertionError, match="Illegal operator"):
+            self.i.go(""" d := { val: 123 }; d.val() """)
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            self.i.go(""" 2.non_existent() """)
+
+    def test_oo_style(self, capsys):
+        self.i.go("""
+            deffunc Animal params name do
+                self := {};
+                self._name = name;
+                self.introduce = func self do print("I'm", self._name) end;
+                self.make_sound = func self do print("crying") end;
+                self
+            end
+        """)
+        self.i.go("""
+            animal1 := Animal("Rocky");
+            animal2 := Animal("Lucy");
+            animal1.introduce();
+            animal1.make_sound();
+            animal2.introduce();
+            animal2.make_sound()
+        """)
+        assert capsys.readouterr().out == "I'm Rocky\ncrying\nI'm Lucy\ncrying\n"
+
+        self.i.go("""
+            deffunc Dog params name do
+                self := Animal(name);
+                self.make_sound = func self do print("woof") end;
+                self
+            end
+        """)
+        self.i.go("""
+            dog1 := Dog("Leo");
+            dog1.introduce();
+            dog1.make_sound()
+        """)
+        assert capsys.readouterr().out == "I'm Leo\nwoof\n"
+
+    def test_sieve_ufcs(self):
+        result = self.i.go("""
+            sieve := [False, False] + [True] * 98;
+            i := 2; while i * i < 100 do
+                if sieve[i] then
+                    j := i * i; while j < 100 do
+                        sieve[j] = False;
+                        j = j + i
+                    end
+                end;
+                i = i + 1
+            end;
+            sieve.enumerate().filter(last).map(first)
+        """)
+        assert result == [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]
+
+    def test_test_framework(self, capsys):
+        self.i.go("""
+            deffunc Test params name do
+                self := { name, failed: 0 };
+                self.assert = func self, cond, msg do
+                    if not cond then
+                        print("FAIL:", self.name, ":", msg);
+                        self.failed = self.failed + 1
+                    end;
+                    self
+                end;
+                self.report = func self do
+                    if self.failed == 0 then print("PASS:", self.name)
+                    else print("FAILED:", self.name, "(", self.failed, "errors )") end
+                end;
+                self
+            end;
+
+            t := Test("Math");
+            t.assert(2 + 2 == 4, "2+2 should be 4")
+             .assert(3 * 3 == 9, "3*3 should be 9")
+             .assert(1 > 2, "1 should be greater than 2")
+             .report()
+        """)
+        assert capsys.readouterr().out == "FAIL: Math : 1 should be greater than 2\nFAILED: Math ( 1 errors )\n"
+
 if __name__ == "__main__":
     pytest.main([__file__])

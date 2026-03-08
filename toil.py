@@ -186,8 +186,8 @@ class Parser:
                     self._advance()
                     assert type(self._current_token()) is Sym, \
                         f"Illegal property @ _call_index_dot(): {self._current_token()}"
-                    index = self._advance()
-                    target = (Sym("index"), [target, str(index)])
+                    attr = self._advance()
+                    target = (Sym("dot"), [target, str(attr)])
         return target
 
     def _primary(self):
@@ -366,11 +366,11 @@ class Environment:
                   ", ".join(self._vars)
         return f"[{content}]" + (f" < {self._parent}" if self._parent else "")
 
-    def define(self, name, val):
+    def define(self, name: Sym, val):
         self._vars[name] = val
         return val
 
-    def lookup(self, name):
+    def lookup(self, name: Sym):
         if name in self._vars:
             return self._vars
         elif self._parent is not None:
@@ -378,12 +378,12 @@ class Environment:
         else:
             return None
 
-    def val(self, name):
+    def val(self, name: Sym):
         vars = self.lookup(name)
         assert vars is not None, f"Undefined variable @ val(): {name}"
         return vars[name]
 
-    def set_val(self, name, val):
+    def set_val(self, name: Sym, val):
         vars = self.lookup(name)
         assert vars is not None, f"Undefined variable @ set_val(): {name}"
         vars[name] = val
@@ -436,6 +436,8 @@ class Evaluator:
                 raise ReturnException(self.evaluate(args[0], env) if args else None)
             case (Sym("scope"), expr):
                 return self.evaluate(expr, Environment(env))
+            case (Sym("dot"), [target, attr]):
+                return self._evaluate_dot(target, attr, env)
             case (op_expr, args_expr) if isinstance(expr, tuple):
                 return self._eval_op(op_expr, args_expr, env)
             case unexpected:
@@ -452,7 +454,7 @@ class Evaluator:
         match left_expr:
             case Sym(name):
                 return env.set_val(name, right_val)
-            case (Sym("index"), [coll_expr, index_expr]):
+            case (Sym("index"), [coll_expr, index_expr]) | (Sym("dot"), [coll_expr, index_expr]):
                 coll_val = self.evaluate(coll_expr, env)
                 index_val = self.evaluate(index_expr, env)
                 match coll_val, index_val:
@@ -494,10 +496,30 @@ class Evaluator:
             except BreakException as e: return e.val
         return None
 
+
+    def _evaluate_dot(self, target, attr, env):
+        target_val = self.evaluate(target, env)
+        match target_val:
+            case dict() if attr in target_val:
+                attr_val = target_val[attr]
+                match attr_val:
+                    case (Sym("closure"), [Sym("self"), *_], _, _):
+                        return lambda args: self._apply(attr_val, [target_val] + args)
+                return attr_val
+
+        attr_val = env.val(attr)
+        match attr_val:
+            case c if callable(c):
+                return lambda args: c([target_val] + args)
+            case (Sym("closure"), _, _, _):
+                return lambda args: self._apply(attr_val, [target_val] + args)
+
     def _eval_op(self, op_expr, args_expr, env):
         op_val = self.evaluate(op_expr, env)
         args_val = [self.evaluate(arg, env) for arg in args_expr]
+        return self._apply(op_val, args_val)
 
+    def _apply(self, op_val, args_val):
         match op_val:
             case c if callable(c):
                 return c(args_val)
@@ -609,6 +631,7 @@ class Interpreter:
         self._env.define(Sym("has"), lambda args: args[1] in args[0])
         self._env.define(Sym("keys"), lambda args: list(args[0].keys()))
         self._env.define(Sym("items"), lambda args: [list(e) for e in args[0].items()])
+        self._env.define(Sym("copy"), lambda args: args[0].copy())
 
         self._env.define(Sym("print"), lambda args: print(*args))
 
@@ -740,85 +763,110 @@ if __name__ == "__main__":
 
     # Example
 
-    # literal
-    print(i.go(""" {} """)) # -> {}
-    print(i.go(""" {"aaa": 2} """)) # -> {'aaa': 2}
-    i.go(""" bbb := 4 """)
-    print(i.ast(""" {aaa: 2 + 3, bbb} """)) # -> {'aaa': (add, [2, 3]), 'bbb': bbb}
-    print(i.go(""" {aaa: 2 + 3, bbb} """)) # -> {'aaa': 5, 'bbb': 4}
-    i.go(""" a := {aaa: 2 + 3, bbb} """)
-    # print(i.go(""" {1: 2} """)) # -> Error
+    print(i.ast(""" foo.add(2, 3) """)) # -> (dot, [foo, 'add'], [2, 3])
+    print(i.ast(""" func a, b do a + b end """)) # -> (func, [a, b], (add, [a, b]))
 
-    # referring
-    print(i.ast(""" a["aaa"] """)) # -> (index, [a, 'aaa'])
-    print(i.go(""" a["aaa"] """)) # -> 5
-    print(i.go(""" a["bbb"] """)) # -> 4
-    # print(i.go(""" a["ccc"] """)) # -> Error
+    i.go(""" foo := { add: func a, b do a + b end } """)
+    print(i.go(""" foo.add(2, 3) """)) # -> 5
 
-    # assignment
-    print(i.ast(""" a["aaa"] = 2 """)) # -> (assign, [(index, [a, 'aaa']), 2])
-    print(i.go(""" a["aaa"] = 2; a """)) # -> {'aaa': 2, 'bbb': 4}
-    print(i.go(""" a["ccc"] = 5; a """)) # -> {'aaa': 2, 'bbb': 4, 'ccc': 5}
+    i.go(""" foo := { add: func self, a do self.val + a end, val: 2 } """)
+    print(i.go(""" foo.add(3) """)) # -> 5
 
-    # builtin functions
-    print(i.go(""" len(a) """)) # -> 3
-    print(i.go(""" has(a, "aaa") """)) # -> True
-    print(i.go(""" has(a, "bbb") """)) # -> True
-    print(i.go(""" has(a, "ddd") """)) # -> False
-    print(i.go(""" keys(a) """)) # -> ['aaa', 'bbb', 'ccc']
-    print(i.go(""" items(a) """)) # -> [['aaa', 2], ['bbb', 4], ['ccc', 5]]
+    i.go(""" foo := 2 """)
+    print(i.go(""" add(foo, 3) """)) # -> 5
+    print(i.go(""" foo.add(3) """)) # -> 5
 
-    # dot notation
-    print(i.ast(""" a.aaa """)) # -> (index, [a, 'aaa'])
-    print(i.ast(""" a.aaa = 2 """)) # -> (assign, [(index, [a, 'aaa']), 2])
-    print(i.go(""" a.aaa = 2; a """)) # -> {'aaa': 2, 'bbb': 4, 'ccc': 5}
-    print(i.go(""" a.aaa """)) # -> 2
-    print(i.go(""" a.ddd = 6; a """)) # -> {'aaa': 2, 'bbb': 4, 'ccc': 5, 'ddd': 6}
-    # print(i.go(""" a.1 """)) # -> Error
+    i.go(""" myadd := func a, b do a + b end """)
+    print(i.go(""" myadd(foo, 3) """)) # -> 5
+    print(i.go(""" foo.myadd(3) """)) # -> 5
 
-    # Traversing
+    # UFCS method chain
     i.go("""
-        elems := items(a);
-        i := 0; while i < len(elems) do
-            [k, v] := elems[i];
-            print(i, k, v);
-            i = i + 1
+        deffunc double params self do self * 2 end;
+        deffunc add_one params self do self + 1 end
+    """)
+    print(i.go(""" 2.double().add_one() """)) # -> 5
+
+    # UFCS priority
+    i.go(""" d := { len: func self do "local" end } """)
+    print(i.go(""" d.len() """)) # -> "local"
+
+    # print(i.go(""" d := { val: 123 }; d.val() """)) # -> Error
+    # print(i.go(""" 2.non_existent() """)) # -> Error
+
+    # Object-oriented like notation
+
+    i.go("""
+        deffunc new params class_obj do class_obj.copy() end;
+
+        deffunc Animal params name do
+            self := {};
+            self._name = name;
+            self.introduce = func self do print("I'm", self._name) end;
+            self.make_sound = func self do print("crying") end;
+            self
         end
-    """) # -> prints 4 lines of (index, key, value)
+    """)
+    i.go("""
+        animal1 := Animal("Rocky");
+        animal2 := Animal("Lucy");
 
-    # destructuring
-    print(i.ast("""{a, b} := {a: 2, b: 3}; [a, b] """)) # -> (seq, [(define, [{a: a, b: b}, {a: 2, b: 3}]), [a, b]])
-    print(i.ast("""{a, *b} := {a: 2, b: 3, c: 4, d: 5}; [a, b] """)) # -> (seq, [(define, [{a: a, '*': b}, {a: 2, b: 3, c: 4, d: 5}]), [a, b]])
-    print(i.go("""{a, b} := {a: 2, b: 3}; [a, b] """)) # -> [2, 3]
-    print(i.go("""{a, *b} := {a: 2, b: 3, c: 4, d: 5}; [a, b] """)) # -> [2, {b: 3, c: 4, d: 5}]
-    print(i.go("""{*a, b} := {a: 2, b: 3, c: 4, d: 5}; [a, b] """)) # -> [{a: 2, c: 4, d: 5}, 3]
-    print(i.go("""{a, *b, c} := {a: 2, b: 3, c: 4, d: 5}; [a, b, c] """)) # -> [2, {b: 3, d: 5}, 4]
+        animal1.introduce();
+        animal1.make_sound();
+        animal2.introduce();
+        animal2.make_sound()
+    """) # -> I'm Rocky\ncrying\nI'm Lucy\ncrying
+    i.go("""
+        deffunc Dog params name do
+            self := Animal(name);
+            self.make_sound = func self do  print("woof") end;
+            self
+        end
+    """)
+    i.go("""
+        dog1 := Dog("Leo");
+        dog1.introduce();
+        dog1.make_sound()
+    """) # -> I'm Leo\nwoof
 
-    # pattern match
-    print(i.ast(""" match {a: 2, b: 3} case {a, b} then [a, b] end """)) # -> (match, {a: 2, b: 3}, [({a: a, b: b}, [a, b])])
-    print(i.ast(""" match {a: 2, b: 3, c: 4} case {a, *rest} then [a, rest] end """)) # -> (match, {a: 2, b: 3, c: 4}, [({a: a, '*': rest}, [a, rest])])
-    print(i.go(""" match {a: 2, b: 3} case {a, b} then [a, b] end """)) # -> [2, 3]
-    print(i.go(""" match {a: 2, b: 3} case {a: aa, b: bb} then [aa, bb] end """)) # -> [2, 3]
-    print(i.go(""" match {a: 2, b: 3, c: 4} case {a, b} then [a, b] end """)) # -> [2, 3]
-    print(i.go(""" match {a: 2, b: {c: 3, d: 4}} case {a, b: {c, d}} then [a, c, d] end """)) # -> [2, 3, 4]
-    print(i.go(""" match {a: 2, b: [3, 4]} case {a, b: [c, d]} then [a, c, d] end """)) # -> [2, 3, 4]
-    print(i.go(""" match {a: 2, b: 3, c: 4} case {a, *rest} then [a, rest] end """)) # -> [2, {'b': 3, 'c': 4}]
-    print(i.go(""" match {a: 2, b: 3, c: 4} case {*rest, b} then [rest, b] end """)) # -> [{'a': 2, 'c': 4}, 3]
-    print(i.go(""" match {a: 2, b: 3, c: 4} case {a, *rest, c} then [a, rest, c] end """)) # -> [2, {'b': 3}, 4]
-    print(i.go(""" match {a: 2} case {b: 3} then 4 end """)) # -> None
+    # Sieve by UFCS (pipelining)
 
-    # print(i.go(""" a[0] = 1 """)) # -> Error
-    # print(i.go(""" [1, 2].foo """)) # -> Error
+    print(i.go("""
+        sieve := [False, False] + [True] * 98;
+        i := 2; while i * i < 100 do
+            if sieve[i] then
+                j := i * i; while j < 100 do
+                    sieve[j] = False;
+                    j = j + i
+                end
+            end;
+            i = i + 1
+        end;
 
-    # module by dict
-    i.go(""" gcd := import("lib/gcd_dict.toil") """)
-    print(i.go(""" gcd.recur(24, 36) """)) # -> 12
-    print(i.go(""" gcd.iter(24, 36) """)) # -> 12
+        sieve.enumerate().filter(last).map(first)
+    """)) # -> [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]
 
-    i.go(""" {recur, iter} := import("lib/gcd_dict.toil") """)
-    print(i.go(""" recur(24, 36) """)) # -> 12
-    print(i.go(""" iter(24, 36) """)) # -> 12
+    # Simple test framework (method chaining)
+    i.go("""
+        deffunc Test params name do
+            self := { name, failed: 0 };
+            self.assert = func self, cond, msg do
+                if not cond then
+                    print("FAIL:", self.name, ":", msg);
+                    self.failed = self.failed + 1
+                end;
+                self
+            end;
+            self.report = func self do
+                if self.failed == 0 then print("PASS:", self.name)
+                else print("FAILED:", self.name, "(", self.failed, "errors )") end
+            end;
+            self
+        end;
 
-    i.go(""" {recur: gcd_recur, iter: gcd_iter} := import("lib/gcd_dict.toil") """)
-    print(i.go(""" gcd_recur(24, 36) """)) # -> 12
-    print(i.go(""" gcd_iter(24, 36) """)) # -> 12
+        t := Test("Math");
+        t.assert(2 + 2 == 4, "2+2 should be 4")
+         .assert(3 * 3 == 9, "3*3 should be 9")
+         .assert(1 > 2, "1 should be greater than 2") # This will fail
+         .report()
+    """) # -> FAIL: Math : 1 should be greater than 2\nFAILED: Math ( 1 errors )
