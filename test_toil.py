@@ -501,6 +501,60 @@ class TestGo(TestBase):
         with pytest.raises(AssertionError):
             self.i.go(""" while i < 10 do i = i + 1 """)
 
+    def test_for(self, capsys):
+        assert self.i.go("""
+            sum := 0;
+            for n in [2, 3, 4] do
+                sum = sum + n
+            end;
+            sum """) == 9
+
+        assert self.i.go(""" for i in [] do print("never") end; "ok" """) == "ok"
+        assert capsys.readouterr().out == ""
+
+        assert self.i.go("""
+            for i in [2, 3, 4] do
+                if i == 3 then break(i * 10) end
+            end
+        """) == 30
+
+        self.i.go("""
+            for i in [2, 3, 4] do
+                if i == 3 then continue() end;
+                print(i)
+            end
+        """)
+        assert capsys.readouterr().out == "2\n4\n"
+
+        self.i.go("""
+            funcs := [];
+            for i in [2, 3, 4] do
+                funcs.push(func do i end)
+            end;
+            print(funcs[0](), funcs[1](), funcs[2]())
+        """)
+        assert capsys.readouterr().out == "2 3 4\n"
+
+        self.i.go("""
+            keys := ["a", "b", "c"];
+            values := [2, 3, 4];
+            for [k, v] in zip(keys, values) do
+                print(k, v)
+            end
+        """)
+        assert capsys.readouterr().out == "a 2\nb 3\nc 4\n"
+
+        self.i.go("""
+            dic := { "a": 2, "b": 3, "c": 4 };
+            for [k, v] in dic.items() do
+                print(k, v)
+            end
+        """)
+        assert capsys.readouterr().out == "a 2\nb 3\nc 4\n"
+
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            self.i.go(""" for i in [2] do 1 end; i """)
+
     def test_call(self, capsys):
         assert self.i.go(""" add(2, 3) """) == 5
         assert self.i.go(""" add(2, mul(3, 4)) """) == 14

@@ -204,6 +204,7 @@ class Parser:
             case Sym("if"): return self._if()
             case Sym("match"): return self._match()
             case Sym("while"): return self._while()
+            case Sym("for"): return self._for()
             case Sym("deffunc"): return self._deffunc()
             case Sym(name) if is_name(name): return self._advance()
             case unexpected:
@@ -288,6 +289,29 @@ class Parser:
         body_expr = self._expression()
         self._consume(Sym("end"))
         return (Sym("while"), cond_expr, body_expr)
+
+    def _for(self):
+        self._advance()
+        var_expr = self._expression()
+        self._consume(Sym("in"))
+        coll_expr = self._expression()
+        self._consume(Sym("do"))
+        body_expr = self._expression()
+        self._consume(Sym("end"))
+        return (Sym("scope"), (Sym("seq"), [
+            (Sym("define"), [Sym("__for_coll"), coll_expr]),
+            (Sym("define"), [Sym("__for_index"), -1]),
+            (Sym("while"),
+                (Sym("less"), [(Sym("add"), [Sym("__for_index"), 1]), (Sym("len"), [Sym("__for_coll")])]),
+                (Sym("seq"), [
+                    (Sym("assign"), [Sym("__for_index"), (Sym("add"), [Sym("__for_index"), 1])]),
+                    (Sym("scope"), (Sym("seq"), [
+                        (Sym("define"), [var_expr, (Sym("index"), [Sym("__for_coll"), Sym("__for_index")])]),
+                        body_expr
+                    ]))
+                ])
+            )
+        ]))
 
     def _deffunc(self):
         self._advance()
@@ -771,4 +795,70 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.go(""" a := 2; print(func b do a + b end) """))
+    print(i.ast(""" sum := 0; for n in [2, 3, 4] do sum = sum + n end; sum """))
+    # -> (seq, [(define, [sum, 0]), (scope, (seq, [(define, [__for_coll, [2, 3, 4]]), (define, [__for_index, -1]), (while, (less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])]))])), sum])
+
+    # (seq, [
+    #     (define, [sum, 0]),
+    #     (scope, (seq, [
+    #         (define, [__for_coll, [2, 3, 4]]),
+    #         (define, [__for_index, -1]),
+    #         (while,
+    #             (less, [(add, [__for_index, 1]), (len, [__for_coll])]),
+    #             (seq, [
+    #                 (assign, [__for_index, (add, [__for_index, 1])]),
+    #                 (define, [n, (index, [__for_coll, __for_index])]),
+    #                 (assign, [sum, (add, [sum, n])])
+    #             ])
+    #         )
+    #     ])),
+    #     sum
+    # ])
+
+    print(i.go("""
+        sum := 0;
+        for n in [2, 3, 4] do
+            sum = sum + n
+        end;
+        sum """))
+    # -> 9
+
+    print(i.go(""" for i in [] do print("never") end; "ok" """)) # -> ok
+
+    print(i.go("""
+        for i in [2, 3, 4] do
+            if i == 3 then break(i * 10) end
+        end
+    """)) # -> 30
+
+    i.go("""
+        for i in [2, 3, 4] do
+            if i == 3 then continue() end;
+            print(i)
+        end
+    """) # -> 2\n4\n
+
+    i.go("""
+        funcs := [];
+        for i in [2, 3, 4] do
+            funcs.push(func do i end)
+        end;
+        print(funcs[0](), funcs[1](), funcs[2]())
+    """) # -> 2, 3, 4\n
+
+    i.go("""
+        keys := ["a", "b", "c"];
+        values := [2, 3, 4];
+        for [k, v] in zip(keys, values) do
+            print(k, v)
+        end
+    """) # -> a 2\nb 3\nc 4
+
+    i.go("""
+        dic := { "a": 2, "b": 3, "c": 4 };
+        for [k, v] in dic.items() do
+            print(k, v)
+        end
+    """) # -> a 2\nb 3\nc 4
+
+    # print(i.go(""" for i in [2] do 1 end; i """)) # -> Error
