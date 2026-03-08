@@ -134,7 +134,8 @@ class Parser:
 
     def _and_or(self):
         left = self._not()
-        while (op := self._current_token()) in (Sym("and"), Sym("or")):
+        while type(self._current_token()) is Sym and \
+                (op := self._current_token()) in (Sym("and"), Sym("or")):
             self._advance()
             right = self._not()
             if op == Sym("and"):
@@ -172,7 +173,8 @@ class Parser:
 
     def _call_index_dot(self):
         target = self._primary()
-        while self._current_token() in (Sym("("), Sym("["), Sym(".")):
+        while type(self._current_token()) is Sym and \
+                self._current_token() in (Sym("("), Sym("["), Sym(".")):
             match self._current_token():
                 case Sym("("):
                     self._advance()
@@ -312,7 +314,8 @@ class Parser:
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
-        while (op := self._current_token()) in ops:
+        while type(self._current_token()) is Sym and \
+                (op := self._current_token()) in ops:
             self._advance()
             right = sub_elem()
             left = (ops[op], [left, right])
@@ -320,14 +323,16 @@ class Parser:
 
     def _binary_right(self, ops, sub_elem):
         left = sub_elem()
-        if (op := self._current_token()) in ops:
+        if type(self._current_token()) is Sym and \
+                (op := self._current_token()) in ops:
             self._advance()
             right = self._binary_right(ops, sub_elem)
             return (ops[op], [left, right])
         return left
 
     def _unary(self, ops, sub_elem):
-        if (op := self._current_token()) in ops:
+        if type(self._current_token()) is Sym and \
+                (op := self._current_token()) in ops:
             self._advance()
             return (ops[op], [self._unary(ops, sub_elem)])
         else:
@@ -763,110 +768,4 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.ast(""" foo.add(2, 3) """)) # -> (dot, [foo, 'add'], [2, 3])
-    print(i.ast(""" func a, b do a + b end """)) # -> (func, [a, b], (add, [a, b]))
-
-    i.go(""" foo := { add: func a, b do a + b end } """)
-    print(i.go(""" foo.add(2, 3) """)) # -> 5
-
-    i.go(""" foo := { add: func self, a do self.val + a end, val: 2 } """)
-    print(i.go(""" foo.add(3) """)) # -> 5
-
-    i.go(""" foo := 2 """)
-    print(i.go(""" add(foo, 3) """)) # -> 5
-    print(i.go(""" foo.add(3) """)) # -> 5
-
-    i.go(""" myadd := func a, b do a + b end """)
-    print(i.go(""" myadd(foo, 3) """)) # -> 5
-    print(i.go(""" foo.myadd(3) """)) # -> 5
-
-    # UFCS method chain
-    i.go("""
-        deffunc double params self do self * 2 end;
-        deffunc add_one params self do self + 1 end
-    """)
-    print(i.go(""" 2.double().add_one() """)) # -> 5
-
-    # UFCS priority
-    i.go(""" d := { len: func self do "local" end } """)
-    print(i.go(""" d.len() """)) # -> "local"
-
-    # print(i.go(""" d := { val: 123 }; d.val() """)) # -> Error
-    # print(i.go(""" 2.non_existent() """)) # -> Error
-
-    # Object-oriented like notation
-
-    i.go("""
-        deffunc new params class_obj do class_obj.copy() end;
-
-        deffunc Animal params name do
-            self := {};
-            self._name = name;
-            self.introduce = func self do print("I'm", self._name) end;
-            self.make_sound = func self do print("crying") end;
-            self
-        end
-    """)
-    i.go("""
-        animal1 := Animal("Rocky");
-        animal2 := Animal("Lucy");
-
-        animal1.introduce();
-        animal1.make_sound();
-        animal2.introduce();
-        animal2.make_sound()
-    """) # -> I'm Rocky\ncrying\nI'm Lucy\ncrying
-    i.go("""
-        deffunc Dog params name do
-            self := Animal(name);
-            self.make_sound = func self do  print("woof") end;
-            self
-        end
-    """)
-    i.go("""
-        dog1 := Dog("Leo");
-        dog1.introduce();
-        dog1.make_sound()
-    """) # -> I'm Leo\nwoof
-
-    # Sieve by UFCS (pipelining)
-
-    print(i.go("""
-        sieve := [False, False] + [True] * 98;
-        i := 2; while i * i < 100 do
-            if sieve[i] then
-                j := i * i; while j < 100 do
-                    sieve[j] = False;
-                    j = j + i
-                end
-            end;
-            i = i + 1
-        end;
-
-        sieve.enumerate().filter(last).map(first)
-    """)) # -> [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]
-
-    # Simple test framework (method chaining)
-    i.go("""
-        deffunc Test params name do
-            self := { name, failed: 0 };
-            self.assert = func self, cond, msg do
-                if not cond then
-                    print("FAIL:", self.name, ":", msg);
-                    self.failed = self.failed + 1
-                end;
-                self
-            end;
-            self.report = func self do
-                if self.failed == 0 then print("PASS:", self.name)
-                else print("FAILED:", self.name, "(", self.failed, "errors )") end
-            end;
-            self
-        end;
-
-        t := Test("Math");
-        t.assert(2 + 2 == 4, "2+2 should be 4")
-         .assert(3 * 3 == 9, "3*3 should be 9")
-         .assert(1 > 2, "1 should be greater than 2") # This will fail
-         .report()
-    """) # -> FAIL: Math : 1 should be greater than 2\nFAILED: Math ( 1 errors )
+    print(i.go(""" "-" """))

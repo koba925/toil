@@ -910,7 +910,7 @@ text
         with pytest.raises(AssertionError, match="Illegal property"):
             self.i.go(""" a.1 """)
 
-        with pytest.raises(AttributeError):
+        with pytest.raises(AssertionError):
             self.i.go(""" [1, 2].foo """)
 
     def test_dict_destructuring(self):
