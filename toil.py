@@ -368,6 +368,7 @@ class Environment:
 
     def __repr__(self):
         content = "__builtins__" if Sym("__builtins__") in self._vars else \
+                  "__stdlib__" if Sym("__stdlib__") in self._vars else \
                   ", ".join(self._vars)
         return f"[{content}]" + (f" < {self._parent}" if self._parent else "")
 
@@ -644,6 +645,7 @@ class Interpreter:
         return self
 
     def stdlib(self):
+        self.go(""" __stdlib__ := None """)
         self.go("""
             deffunc first params a do a[0] end;
             deffunc rest params a do slice(a, 1, None) end;
@@ -715,6 +717,7 @@ class Interpreter:
             end
         """)
 
+        self._env = Environment(self._env)
         return self
 
     def scan(self, src):
@@ -768,4 +771,4 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.go(""" "-" """))
+    print(i.go(""" a := 2; print(func b do a + b end) """))
