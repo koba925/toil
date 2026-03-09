@@ -1100,5 +1100,61 @@ text
         """)
         assert capsys.readouterr().out == "FAIL: Math : 1 should be greater than 2\nFAILED: Math ( 1 errors )\n"
 
+    def test_try_except(self, capsys):
+        # try without except
+        assert self.i.go(""" try 2; 3 end """) == 3
+        self.i.go(""" try print(2); print(3) end """)
+        assert capsys.readouterr().out == "2\n3\n"
+
+        # try with except, no raise
+        assert self.i.go(""" try 2; 3 except e then print(e) end """) == 3
+        self.i.go(""" try print(2); print(3) except e then print(e) end """)
+        assert capsys.readouterr().out == "2\n3\n"
+
+        # try with raise and catch
+        self.i.go(""" try print(2); raise(2 + 3); print(3) except e then print(e) end """)
+        assert capsys.readouterr().out == "2\n5\n"
+        assert self.i.go(""" try 2; raise(2 + 3); 3 except e then e end """) == 5
+
+        # pattern match in except
+        self.i.go("""
+            try
+                print(2); raise(["foo", 3]); print(4)
+            except ["foo", val] then print("foo", val)
+            except ["bar", val] then print("bar", val)
+            end
+        """)
+        assert capsys.readouterr().out == "2\nfoo 3\n"
+
+        self.i.go("""
+            try
+                print(2); raise(["bar", 3]); print(4)
+            except ["foo", val] then print("foo", val)
+            except ["bar", val] then print("bar", val)
+            end
+        """)
+        assert capsys.readouterr().out == "2\nbar 3\n"
+
+        # unhandled exception
+        with pytest.raises(AssertionError, match="ToilException"):
+            self.i.go("""
+                try
+                    raise(["baz", 3])
+                except ["foo", val] then print("foo", val)
+                end
+            """)
+
+        # nested try
+        self.i.go("""
+            try
+                try
+                    raise("outer")
+                except "inner" then print("caught inner")
+                end
+            except "outer" then print("caught outer")
+            end
+        """)
+        assert capsys.readouterr().out == "caught outer\n"
+
 if __name__ == "__main__":
     pytest.main([__file__])

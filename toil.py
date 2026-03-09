@@ -200,12 +200,13 @@ class Parser:
             case None | bool() | int(): return self._advance()
             case s if type(s) == str: return self._advance()
             case Sym("func"): return self._func()
+            case Sym("deffunc"): return self._deffunc()
             case Sym("scope"): return self._scope()
             case Sym("if"): return self._if()
             case Sym("match"): return self._match()
             case Sym("while"): return self._while()
             case Sym("for"): return self._for()
-            case Sym("deffunc"): return self._deffunc()
+            case Sym("try"): return self._try()
             case Sym(name) if is_name(name): return self._advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
@@ -260,6 +261,16 @@ class Parser:
         self._consume(Sym("end"))
         return (Sym("func"), params, body_expr)
 
+    def _deffunc(self):
+        self._advance()
+        name = self._advance()
+        assert is_name(name), f"Expected function name @ deffunc: {name}"
+        self._consume(Sym("params"))
+        params = self._comma_separated_exprs(Sym("do"))
+        body_expr = self._expression()
+        self._consume(Sym("end"))
+        return (Sym("define"), [name, (Sym("func"), params, body_expr)])
+
     def _scope(self):
         self._advance()
         body_expr = self._expression()
@@ -313,15 +324,18 @@ class Parser:
             )
         ]))
 
-    def _deffunc(self):
+    def _try(self):
         self._advance()
-        name = self._advance()
-        assert is_name(name), f"Expected function name @ deffunc: {name}"
-        self._consume(Sym("params"))
-        params = self._comma_separated_exprs(Sym("do"))
         body_expr = self._expression()
+        clauses = []
+        while self._current_token() == Sym("except"):
+            self._advance()
+            cond_expr = self._expression()
+            self._consume(Sym("then"))
+            except_expr = self._expression()
+            clauses.append((cond_expr, except_expr))
         self._consume(Sym("end"))
-        return (Sym("define"), [name, (Sym("func"), params, body_expr)])
+        return (Sym("try"), body_expr, clauses)
 
     def _match(self):
         self._advance()
@@ -420,6 +434,10 @@ class Environment:
         return val
 
 
+class ToilException(Exception):
+    def __init__(self, e=None):
+        self.e = e
+
 class ReturnException(Exception):
     def __init__(self, val=None): self.val = val
 
@@ -464,6 +482,11 @@ class Evaluator:
             case (Sym("return"), args):
                 assert len(args) <= 1, f"Return takes zero or one argument @ evaluate(): {args}"
                 raise ReturnException(self.evaluate(args[0], env) if args else None)
+            case (Sym("try"), body_expr, clauses):
+                return self._evaluate_try(body_expr, clauses, env)
+            case (Sym("raise"), args):
+                assert len(args) <= 1, f"Raise takes zero or one argument @ evaluate(): {args}"
+                raise ToilException(self.evaluate(args[0], env) if args else None)
             case (Sym("scope"), expr):
                 return self.evaluate(expr, Environment(env))
             case (Sym("dot"), [target, attr]):
@@ -526,6 +549,14 @@ class Evaluator:
             except BreakException as e: return e.val
         return None
 
+    def _evaluate_try(self, body_expr, clauses, env):
+        try:
+            return self.evaluate(body_expr, env)
+        except ToilException as toil_exception:
+            for cond_expr, except_expr in clauses:
+                if self._match_pattern(cond_expr, toil_exception.e, env):
+                    return self.evaluate(except_expr, env)
+            raise toil_exception
 
     def _evaluate_dot(self, target, attr, env):
         target_val = self.evaluate(target, env)
@@ -756,6 +787,7 @@ class Interpreter:
     def evaluate(self, expr):
         try:
             return Evaluator().evaluate(expr, self._env)
+        except ToilException as e: assert False, f"ToilException @ evaluate(): {e.e}"
         except ReturnException: assert False, "Return from top level @ evaluate()"
         except ContinueException: assert False, "Continue at top level @ evaluate()"
         except BreakException: assert False, "Break at top level @ evaluate()"
@@ -795,70 +827,55 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.ast(""" sum := 0; for n in [2, 3, 4] do sum = sum + n end; sum """))
-    # -> (seq, [(define, [sum, 0]), (scope, (seq, [(define, [__for_coll, [2, 3, 4]]), (define, [__for_index, -1]), (while, (less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])]))])), sum])
+    print(i.ast(""" try 2; 3 end""")) # -> (try, (seq, [2, 3]), [])
+    i.go(""" try print(2); print(3) end """) # -> 2\n3\n
 
-    # (seq, [
-    #     (define, [sum, 0]),
-    #     (scope, (seq, [
-    #         (define, [__for_coll, [2, 3, 4]]),
-    #         (define, [__for_index, -1]),
-    #         (while,
-    #             (less, [(add, [__for_index, 1]), (len, [__for_coll])]),
-    #             (seq, [
-    #                 (assign, [__for_index, (add, [__for_index, 1])]),
-    #                 (define, [n, (index, [__for_coll, __for_index])]),
-    #                 (assign, [sum, (add, [sum, n])])
-    #             ])
-    #         )
-    #     ])),
-    #     sum
-    # ])
+    print(i.ast(""" try 2; 3 except e then print(e) end """)) # -> (try, (seq, [2, 3]), [(e, (print, [e]))])
+    print(i.go(""" try 2; 3 except e then print(e) end """)) # -> 3
+    i.go(""" try print(2); print(3) except e then print(e) end """) # -> 2\n3\n
 
-    print(i.go("""
-        sum := 0;
-        for n in [2, 3, 4] do
-            sum = sum + n
-        end;
-        sum """))
-    # -> 9
-
-    print(i.go(""" for i in [] do print("never") end; "ok" """)) # -> ok
-
-    print(i.go("""
-        for i in [2, 3, 4] do
-            if i == 3 then break(i * 10) end
-        end
-    """)) # -> 30
+    print(i.ast(""" try 2; raise(2 + 3); 3 except e then print(e) end """)) # -> (try, (seq, [2, (raise, [(add, [2, 3])]), 3]), [(e, (print, [e]))])
+    print(i.go(""" try 2; raise(2 + 3); 3 except e then e end """)) # -> 5
+    i.go(""" try print(2); raise(2 + 3); print(3) except e then print(e) end """) # -> 2\n5\n
 
     i.go("""
-        for i in [2, 3, 4] do
-            if i == 3 then continue() end;
-            print(i)
+        try
+            print(2); raise(["foo", 3]); print(4)
+        except ["foo", val] then print("foo", val)
+        except ["foo", val] then print("foo", val)
         end
-    """) # -> 2\n4\n
+    """) # -> 2\nfoo 3\n
 
     i.go("""
-        funcs := [];
-        for i in [2, 3, 4] do
-            funcs.push(func do i end)
-        end;
-        print(funcs[0](), funcs[1](), funcs[2]())
-    """) # -> 2, 3, 4\n
+        try
+            print(2); raise(["bar", 3]); print(4)
+        except ["foo", val] then print("foo", val)
+        except ["bar", val] then print("bar", val)
+        end
+    """) # -> 2\nbar 3\n
+
+    # i.go("""
+    #     try
+    #         print(2); raise(["baz", 3]); print(4)
+    #     except ["foo", val] then print("foo", val)
+    #     except ["bar", val] then print("bar", val)
+    #     end
+    # """) # -> ToiLException
 
     i.go("""
-        keys := ["a", "b", "c"];
-        values := [2, 3, 4];
-        for [k, v] in zip(keys, values) do
-            print(k, v)
+        deffunc foo params val do print(2); raise(["foo", val]); print(3) end;
+        try
+            print(4); foo(5); print(6)
+        except ["foo", val] then print("foo", val)
         end
-    """) # -> a 2\nb 3\nc 4
+    """) # -> 4\n2\nfoo 5\n
 
     i.go("""
-        dic := { "a": 2, "b": 3, "c": 4 };
-        for [k, v] in dic.items() do
-            print(k, v)
+        try
+            try
+                raise("outer")
+            except "inner" then print("caught inner")
+            end
+        except "outer" then print("caught outer")
         end
-    """) # -> a 2\nb 3\nc 4
-
-    # print(i.go(""" for i in [2] do 1 end; i """)) # -> Error
+    """) # -> caught outer\n
