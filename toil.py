@@ -459,6 +459,8 @@ class Evaluator:
                 return {key: self.evaluate(val, env) for key, val in exprs.items()}
             case Sym(name):
                 return env.val(name)
+            case (Sym("ast"), [expr]):
+                return expr
             case (Sym("define"), [left_expr, right_expr]):
                 return self._evaluate_define(left_expr, right_expr, env)
             case (Sym("assign"), [left_expr, right_expr]):
@@ -663,6 +665,7 @@ class Interpreter:
         self._env.define(Sym("import"), lambda args: self._import(args[0]))
 
         self._env.define(Sym("eval"), lambda args: Evaluator().evaluate(self.ast(args[0]), self._env))
+        self._env.define(Sym("eval_expr"), lambda args: Evaluator().evaluate(args[0], self._env))
         self._env.define(Sym("apply"), lambda args: Evaluator().apply(args[0], args[1]))
 
         self._env.define(Sym("add"), lambda args: args[0] + args[1])
@@ -696,6 +699,9 @@ class Interpreter:
         self._env.define(Sym("keys"), lambda args: list(args[0].keys()))
         self._env.define(Sym("items"), lambda args: [list(e) for e in args[0].items()])
         self._env.define(Sym("copy"), lambda args: args[0].copy())
+
+        self._env.define(Sym("sym"), lambda args: Sym(args[0]))
+        self._env.define(Sym("expr"), lambda args: tuple(args))
 
         self._env.define(Sym("print"), lambda args: print(*args))
 
@@ -830,28 +836,38 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.go(""" apply(add, [2, 3]) """)) # -> 5
-    print(i.go(""" apply(func a, b do a + b end, [2, 3]) """)) # -> 5
+    print(i.go(""" ast(if True then 2 else 3 end) """)) # -> (if, True, 2, 3)
+    print(i.go(""" expr(sym("if"), True, 2, 3) """)) # -> (if, True, 2, 3)
+    print(i.go(""" eval_expr(expr(sym("if"), True, 2, 3)) """)) # -> 2
 
-    print(i.go(""" a := 2; b := 3; eval("a + b") """)) # -> 5
-    print(i.go(""" scope a := 4; b := 5; eval("a + b") end """)) # -> 5 (uses global a, b)
+    print(i.go(""" ast(add(2, 3)) """)) # -> (add, [2, 3])
+    print(i.go(""" expr(sym("add"), [2, 3]) """)) # -> (add, [2, 3])
+    print(i.go(""" eval_expr(expr(sym("add"), [2, 3])) """)) # -> 5
 
-    # Poor man's serialization
-    i.go("""
-        org := { name: "Toil", id: 1 };
-        print(org);
-        serialized := str(org);
-        print(serialized);
-        deserialized := eval(serialized);
-        print(deserialized)
-    """) # -> {'name': 'Toil', 'id': 1}\n{'name': 'Toil', 'id': 1}\n{'name': 'Toil', 'id': 1}
-
-    # Poor man's syntax sugar
+    print(i.go(""" ast(
+        a := 2;
+        b := 3;
+        if a == b then a + b else a * b end
+    ) """)) # -> (seq, [(define, [a, 2]), (define, [b, 3]), (if, (equal, [a, b]), (add, [a, b]), (mul, [a, b]))])
     print(i.go("""
-        deffunc mydeffunc params name, params_, body do
-            eval("deffunc " + name + " params " + params_ + " do " + body + " end")
-        end;
-
-        mydeffunc("myadd", "a, b", "a + b");
-        myadd(2, 3)
-    """)) # -> 5
+        expr(sym("seq"), [
+            expr(sym("define"), [sym("a"), 2]),
+            expr(sym("define"), [sym("b"), 3]),
+            expr(sym("if"),
+                expr(sym("equal"), [sym("a"), sym("b")]),
+                expr(sym("add"), [sym("a"), sym("b")]),
+                expr(sym("mul"), [sym("a"), sym("b")])
+            )
+        ])
+    """)) # -> (seq, [(define, [a, 2]), (define, [b, 3]), (if, (equal, [a, b]), (add, [a, b]), (mul, [a, b]))])
+    print(i.go(""" eval_expr(
+        expr(sym("seq"), [
+            expr(sym("define"), [sym("a"), 2]),
+            expr(sym("define"), [sym("b"), 3]),
+            expr(sym("if"),
+                expr(sym("equal"), [sym("a"), sym("b")]),
+                expr(sym("add"), [sym("a"), sym("b")]),
+                expr(sym("mul"), [sym("a"), sym("b")])
+            )
+        ])
+    ) """)) # -> 6

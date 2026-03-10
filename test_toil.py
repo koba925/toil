@@ -1186,5 +1186,42 @@ text
             myadd(2, 3)
         """) == 5
 
+    def test_ast_primitives(self):
+        assert self.i.go(""" ast(if True then 2 else 3 end) """) == (Sym("if"), True, 2, 3)
+        assert self.i.go(""" expr(sym("if"), True, 2, 3) """) == (Sym("if"), True, 2, 3)
+        assert self.i.go(""" eval_expr(expr(sym("if"), True, 2, 3)) """) == 2
+
+        assert self.i.go(""" ast(add(2, 3)) """) == (Sym("add"), [2, 3])
+        assert self.i.go(""" expr(sym("add"), [2, 3]) """) == (Sym("add"), [2, 3])
+        assert self.i.go(""" eval_expr(expr(sym("add"), [2, 3])) """) == 5
+
+        assert self.i.go(""" ast(
+            a := 2;
+            b := 3;
+            if a == b then a + b else a * b end
+        ) """) == (Sym("seq"), [(Sym("define"), [Sym("a"), 2]), (Sym("define"), [Sym("b"), 3]), (Sym("if"), (Sym("equal"), [Sym("a"), Sym("b")]), (Sym("add"), [Sym("a"), Sym("b")]), (Sym("mul"), [Sym("a"), Sym("b")]))])
+        assert self.i.go("""
+            expr(sym("seq"), [
+                expr(sym("define"), [sym("a"), 2]),
+                expr(sym("define"), [sym("b"), 3]),
+                expr(sym("if"),
+                    expr(sym("equal"), [sym("a"), sym("b")]),
+                    expr(sym("add"), [sym("a"), sym("b")]),
+                    expr(sym("mul"), [sym("a"), sym("b")])
+                )
+            ])
+        """) == (Sym("seq"), [(Sym("define"), [Sym("a"), 2]), (Sym("define"), [Sym("b"), 3]), (Sym("if"), (Sym("equal"), [Sym("a"), Sym("b")]), (Sym("add"), [Sym("a"), Sym("b")]), (Sym("mul"), [Sym("a"), Sym("b")]))])
+        assert self.i.go(""" eval_expr(
+            expr(sym("seq"), [
+                expr(sym("define"), [sym("a"), 2]),
+                expr(sym("define"), [sym("b"), 3]),
+                expr(sym("if"),
+                    expr(sym("equal"), [sym("a"), sym("b")]),
+                    expr(sym("add"), [sym("a"), sym("b")]),
+                    expr(sym("mul"), [sym("a"), sym("b")])
+                )
+            ])
+        ) """) == 6
+
 if __name__ == "__main__":
     pytest.main([__file__])
