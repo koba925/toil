@@ -1156,5 +1156,35 @@ text
         """)
         assert capsys.readouterr().out == "caught outer\n"
 
+    def test_eval_apply(self, capsys):
+        # apply
+        assert self.i.go(""" apply(add, [2, 3]) """) == 5
+        assert self.i.go(""" apply(func a, b do a + b end, [2, 3]) """) == 5
+
+        # eval
+        self.i.go(""" a := 2; b := 3 """)
+        assert self.i.go(""" eval("a + b") """) == 5
+        assert self.i.go(""" scope a := 4; b := 5; eval("a + b") end """) == 5
+
+        # Poor man's serialization
+        self.i.go("""
+            org := { name: "Toil", id: 1 };
+            print(org);
+            serialized := str(org);
+            print(serialized);
+            deserialized := eval(serialized);
+            print(deserialized)
+        """)
+        assert capsys.readouterr().out == "{'name': 'Toil', 'id': 1}\n{'name': 'Toil', 'id': 1}\n{'name': 'Toil', 'id': 1}\n"
+
+        # Poor man's syntax sugar
+        assert self.i.go("""
+            deffunc mydeffunc params name, params_, body do
+                eval("deffunc " + name + " params " + params_ + " do " + body + " end")
+            end;
+            mydeffunc("myadd", "a, b", "a + b");
+            myadd(2, 3)
+        """) == 5
+
 if __name__ == "__main__":
     pytest.main([__file__])

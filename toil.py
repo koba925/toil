@@ -565,7 +565,7 @@ class Evaluator:
                 attr_val = target_val[attr]
                 match attr_val:
                     case (Sym("closure"), [Sym("self"), *_], _, _):
-                        return lambda args: self._apply(attr_val, [target_val] + args)
+                        return lambda args: self.apply(attr_val, [target_val] + args)
                 return attr_val
 
         attr_val = env.val(attr)
@@ -573,14 +573,14 @@ class Evaluator:
             case c if callable(c):
                 return lambda args: c([target_val] + args)
             case (Sym("closure"), _, _, _):
-                return lambda args: self._apply(attr_val, [target_val] + args)
+                return lambda args: self.apply(attr_val, [target_val] + args)
 
     def _eval_op(self, op_expr, args_expr, env):
         op_val = self.evaluate(op_expr, env)
         args_val = [self.evaluate(arg, env) for arg in args_expr]
-        return self._apply(op_val, args_val)
+        return self.apply(op_val, args_val)
 
-    def _apply(self, op_val, args_val):
+    def apply(self, op_val, args_val):
         match op_val:
             case c if callable(c):
                 return c(args_val)
@@ -590,9 +590,9 @@ class Evaluator:
                     try:
                         return self.evaluate(body, new_env)
                     except ReturnException as e: return e.val
-                assert False, f"Argument mismatch @ _eval_op(): {params}, {args_val}"
+                assert False, f"Argument mismatch @ apply(): {params}, {args_val}"
             case _:
-                assert False, f"Illegal operator @ eval_op(): {op_val}"
+                assert False, f"Illegal operator @ apply(): {op_val}"
 
     def _match_pattern(self, pattern, value, env):
         def match_list():
@@ -661,6 +661,9 @@ class Interpreter:
         self._env.define(Sym("__builtins__"), None)
 
         self._env.define(Sym("import"), lambda args: self._import(args[0]))
+
+        self._env.define(Sym("eval"), lambda args: Evaluator().evaluate(self.ast(args[0]), self._env))
+        self._env.define(Sym("apply"), lambda args: Evaluator().apply(args[0], args[1]))
 
         self._env.define(Sym("add"), lambda args: args[0] + args[1])
         self._env.define(Sym("sub"), lambda args: args[0] - args[1])
@@ -827,55 +830,28 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.ast(""" try 2; 3 end""")) # -> (try, (seq, [2, 3]), [])
-    i.go(""" try print(2); print(3) end """) # -> 2\n3\n
+    print(i.go(""" apply(add, [2, 3]) """)) # -> 5
+    print(i.go(""" apply(func a, b do a + b end, [2, 3]) """)) # -> 5
 
-    print(i.ast(""" try 2; 3 except e then print(e) end """)) # -> (try, (seq, [2, 3]), [(e, (print, [e]))])
-    print(i.go(""" try 2; 3 except e then print(e) end """)) # -> 3
-    i.go(""" try print(2); print(3) except e then print(e) end """) # -> 2\n3\n
+    print(i.go(""" a := 2; b := 3; eval("a + b") """)) # -> 5
+    print(i.go(""" scope a := 4; b := 5; eval("a + b") end """)) # -> 5 (uses global a, b)
 
-    print(i.ast(""" try 2; raise(2 + 3); 3 except e then print(e) end """)) # -> (try, (seq, [2, (raise, [(add, [2, 3])]), 3]), [(e, (print, [e]))])
-    print(i.go(""" try 2; raise(2 + 3); 3 except e then e end """)) # -> 5
-    i.go(""" try print(2); raise(2 + 3); print(3) except e then print(e) end """) # -> 2\n5\n
-
+    # Poor man's serialization
     i.go("""
-        try
-            print(2); raise(["foo", 3]); print(4)
-        except ["foo", val] then print("foo", val)
-        except ["foo", val] then print("foo", val)
-        end
-    """) # -> 2\nfoo 3\n
+        org := { name: "Toil", id: 1 };
+        print(org);
+        serialized := str(org);
+        print(serialized);
+        deserialized := eval(serialized);
+        print(deserialized)
+    """) # -> {'name': 'Toil', 'id': 1}\n{'name': 'Toil', 'id': 1}\n{'name': 'Toil', 'id': 1}
 
-    i.go("""
-        try
-            print(2); raise(["bar", 3]); print(4)
-        except ["foo", val] then print("foo", val)
-        except ["bar", val] then print("bar", val)
-        end
-    """) # -> 2\nbar 3\n
+    # Poor man's syntax sugar
+    print(i.go("""
+        deffunc mydeffunc params name, params_, body do
+            eval("deffunc " + name + " params " + params_ + " do " + body + " end")
+        end;
 
-    # i.go("""
-    #     try
-    #         print(2); raise(["baz", 3]); print(4)
-    #     except ["foo", val] then print("foo", val)
-    #     except ["bar", val] then print("bar", val)
-    #     end
-    # """) # -> ToiLException
-
-    i.go("""
-        deffunc foo params val do print(2); raise(["foo", val]); print(3) end;
-        try
-            print(4); foo(5); print(6)
-        except ["foo", val] then print("foo", val)
-        end
-    """) # -> 4\n2\nfoo 5\n
-
-    i.go("""
-        try
-            try
-                raise("outer")
-            except "inner" then print("caught inner")
-            end
-        except "outer" then print("caught outer")
-        end
-    """) # -> caught outer\n
+        mydeffunc("myadd", "a, b", "a + b");
+        myadd(2, 3)
+    """)) # -> 5
