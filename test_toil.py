@@ -1223,5 +1223,77 @@ text
             ])
         ) """) == 6
 
+    def test_macro(self, capsys):
+        # Basic macro (when) vs function (fwhen)
+        self.i.go("""
+            when := macro cond, body do expr(sym("if"), cond, body, None) end;
+            fwhen := func cond, body do if cond then body else None end end
+        """)
+        assert self.i.go(""" expand(when(2 == 2, 3)) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
+        assert self.i.go(""" when(2 == 2, 3) """) == 3
+        assert self.i.go(""" when(2 == 3, 4 / 0) """) is None
+
+        assert self.i.go(""" fwhen(2 == 2, 3) """) == 3
+        with pytest.raises(ZeroDivisionError):
+            self.i.go(""" fwhen(2 == 3, 4 / 0) """)
+
+        # Macro defining macro (defmacro)
+        self.i.go("""
+            defmacro := macro name, params_, body do
+                expr(sym("define"), [name, expr(sym("macro"), params_, body)])
+            end
+        """)
+        self.i.go(""" defmacro(mwhen, [cond, body], expr(sym("if"), cond, body, None)) """)
+        assert self.i.go(""" mwhen(2 == 2, 3) """) == 3
+        with pytest.raises(AssertionError, match="Argument mismatch"):
+            self.i.go(""" mwhen(2 == 2) """)
+
+        # Macro for scope
+        self.i.go("""
+            defmacro(mscope, [body], expr(expr(sym("func"), [], body), []))
+        """)
+        self.i.go(""" a := 2; mscope(print(a); a := 3; print(a)); print(a) """)
+        assert capsys.readouterr().out == "2\n3\n2\n"
+
+        # Anaphoric if
+        self.i.go("""
+            defmacro(aif, [cnd, thn, els], expr(sym("if"),
+                expr(sym("define"), [sym("it"), cnd]),
+                thn,
+                els
+            ))
+        """)
+        assert self.i.go(""" aif(2, [True, it], [False, it]) """) == [True, 2]
+        assert self.i.go(""" aif(0, [True, it], [False, it]) """) == [False, 0]
+
+        # and/or using aif
+        self.i.go("""
+            defmacro(mand, [a, b], expr(sym("aif"), [a, b, sym("it")]));
+            defmacro(mor, [a, b], expr(sym("aif"), [a, sym("it"), b]))
+        """)
+        assert self.i.go(""" mand(2, 3) """) == 3
+        assert self.i.go(""" mand(0, 3) """) == 0
+        assert self.i.go(""" mor(2, 3) """) == 2
+        assert self.i.go(""" mor(0, 3) """) == 3
+
+        # Side effect in macro argument
+        self.i.go("""
+            deffunc ftwice params x do x + x end;
+            defmacro(mtwice, [x], expr(sym("add"), [x, x]))
+        """)
+        self.i.go(""" cnt := 0 """)
+        assert self.i.go(""" ftwice(cnt = cnt + 1) """) == 2
+        assert self.i.go(""" cnt """) == 1
+
+        self.i.go(""" cnt := 0 """)
+        assert self.i.go(""" mtwice(cnt = cnt + 1) """) == 3
+        assert self.i.go(""" cnt """) == 2
+
+        # Variable capture (Non-hygienic)
+        self.i.go(""" defmacro(capture, [val], expr(sym("define"), [sym("x"), val])) """)
+        self.i.go(""" x := 1 """)
+        self.i.go(""" capture(2) """)
+        assert self.i.go(""" x """) == 2
+
 if __name__ == "__main__":
     pytest.main([__file__])
