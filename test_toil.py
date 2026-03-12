@@ -1187,15 +1187,15 @@ text
         """) == 5
 
     def test_ast_primitives(self):
-        assert self.i.go(""" ast(if True then 2 else 3 end) """) == (Sym("if"), True, 2, 3)
+        assert self.i.go(""" quote(if True then 2 else 3 end) """) == (Sym("if"), True, 2, 3)
         assert self.i.go(""" expr(sym("if"), True, 2, 3) """) == (Sym("if"), True, 2, 3)
         assert self.i.go(""" eval_expr(expr(sym("if"), True, 2, 3)) """) == 2
 
-        assert self.i.go(""" ast(add(2, 3)) """) == (Sym("add"), [2, 3])
+        assert self.i.go(""" quote(add(2, 3)) """) == (Sym("add"), [2, 3])
         assert self.i.go(""" expr(sym("add"), [2, 3]) """) == (Sym("add"), [2, 3])
         assert self.i.go(""" eval_expr(expr(sym("add"), [2, 3])) """) == 5
 
-        assert self.i.go(""" ast(
+        assert self.i.go(""" quote(
             a := 2;
             b := 3;
             if a == b then a + b else a * b end

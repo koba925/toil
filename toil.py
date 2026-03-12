@@ -460,7 +460,7 @@ class Evaluator:
                 return {key: self.evaluate(val, env) for key, val in exprs.items()}
             case Sym(name):
                 return env.val(name)
-            case (Sym("ast"), [expr]):
+            case (Sym("quote"), [expr]):
                 return expr
             case (Sym("define"), [left_expr, right_expr]):
                 return self._evaluate_define(left_expr, right_expr, env)
