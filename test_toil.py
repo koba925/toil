@@ -1257,11 +1257,11 @@ text
 
         # Anaphoric if
         self.i.go("""
-            defmacro(aif, [cnd, thn, els], expr(sym("if"),
+            defmacro(aif, [cnd, thn, els], expr(sym("scope"), expr(sym("if"),
                 expr(sym("define"), [sym("it"), cnd]),
                 thn,
                 els
-            ))
+            )))
         """)
         assert self.i.go(""" aif(2, [True, it], [False, it]) """) == [True, 2]
         assert self.i.go(""" aif(0, [True, it], [False, it]) """) == [False, 0]
@@ -1291,6 +1291,131 @@ text
 
         # Variable capture (Non-hygienic)
         self.i.go(""" defmacro(capture, [val], expr(sym("define"), [sym("x"), val])) """)
+        self.i.go(""" x := 1 """)
+        self.i.go(""" capture(2) """)
+        assert self.i.go(""" x """) == 2
+
+class TestQuasiquote(TestBase):
+    def test_basic(self):
+        self.i.go(""" a := 2; b := ["A", "B"] """)
+        assert self.i.go(""" qq(3) """) == 3
+        assert self.i.go(""" qq("A") """) == "A"
+        assert self.i.go(""" qq(a) """) == Sym("a")
+        assert self.i.go(""" qq(!a) """) == 2
+        assert self.i.go(""" qq(!a + 2) """) == (Sym("add"), [2, 2])
+        assert self.i.go(""" qq(!(a + 2)) """) == 4
+
+    def test_list(self):
+        self.i.go(""" a := 2; b := ["A", "B"] """)
+        assert self.i.go(""" qq([a, b]) """) == [Sym("a"), Sym("b")]
+        assert self.i.go(""" qq([!a, !b]) """) == [2, ["A", "B"]]
+
+    def test_splicing(self):
+        self.i.go(""" a := 2; b := ["A", "B"] """)
+        assert self.i.go(""" qq([!!b]) """) == ["A", "B"]
+        assert self.i.go(""" qq([a, !!b, 2]) """) == [Sym("a"), "A", "B", 2]
+
+    def test_nested(self):
+        self.i.go(""" a := 2 """)
+        expected = (Sym("if"), (Sym("equal"), [2, 3]), 4, 5)
+        assert self.i.go(""" qq(if !a == 3 then 4 else 5 end) """) == expected
+        assert self.i.go(""" eval_expr(qq(if !a == 3 then 4 else 5 end)) """) == 5
+
+    def test_splicing_call(self, capsys):
+        self.i.go(""" args := [2, 3] """)
+        assert self.i.go(""" qq(print(1, !!args, 4)) """) == (Sym("print"), [1, 2, 3, 4])
+        self.i.go(""" eval_expr(qq(print(1, !!args, 4))) """)
+        assert capsys.readouterr().out == "1 2 3 4\n"
+
+    def test_splicing_seq(self, capsys):
+        self.i.go(""" stmts := [quote(print(2)), quote(print(3))] """)
+        seq_ast = self.i.go(""" qq(print(1); !!stmts; print(4)) """)
+        self.i.go(""" eval_expr(qq(print(1); !!stmts; print(4))) """)
+        assert capsys.readouterr().out == "1\n2\n3\n4\n"
+
+    def test_errors(self):
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            self.i.go(""" qq(!c) """)
+        with pytest.raises(AssertionError, match="Unexpected token"):
+             self.i.go(""" qq(if) """)
+
+class TestMacroSamples(TestBase):
+    def test_when(self):
+        self.i.go("""
+            when := macro cond, body do qq(if !cond then !body else None end) end
+        """)
+        assert self.i.go(""" expand(when(2 == 2, 3)) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
+        assert self.i.go(""" when(2 == 2, 3) """) == 3
+        assert self.i.go(""" when(2 == 3, 4 / 0) """) is None
+
+    def test_fwhen_error(self):
+        self.i.go("""
+            fwhen := func cond, body do if cond then body else None end end
+        """)
+        assert self.i.go(""" fwhen(2 == 2, 3) """) == 3
+        with pytest.raises(ZeroDivisionError):
+            self.i.go(""" fwhen(2 == 3, 4 / 0) """)
+
+    def test_deffunc_macro(self):
+        self.i.go("""
+            mdeffunc := macro name, params_, body do
+                qq(!name := func !!params_ do !body end)
+            end
+        """)
+        self.i.go(""" mdeffunc(myadd, [a, b], a + b) """)
+        assert self.i.go(""" myadd(2, 3) """) == 5
+
+    def test_defmacro_macro(self):
+        self.i.go("""
+            defmacro := macro name, params_, body do
+                qq(!name := macro !!params_ do !body end)
+            end
+        """)
+        self.i.go(""" defmacro(when, [cond, body], qq(if !cond then !body else None end)) """)
+        assert self.i.go(""" when(2 == 2, 3) """) == 3
+        assert self.i.go(""" when(2 == 3, 4 / 0) """) is None
+        with pytest.raises(AssertionError, match="Argument mismatch"):
+            self.i.go(""" when(2 == 2) """)
+
+    def test_mscope(self, capsys):
+        self.i.go(""" mscope := macro body do qq(func do !body end ()) end """)
+        self.i.go(""" a := 2; mscope(print(a); a := 3; print(a)); print(a) """)
+        assert capsys.readouterr().out == "2\n3\n2\n"
+
+    def test_anaphoric_if_and_or(self):
+        self.i.go("""
+            aif := macro cnd, thn, els do qq(
+                scope if it := !cnd then !thn else !els end end
+            ) end
+        """)
+        assert self.i.go(""" aif(2, [True, it], [False, it]) """) == [True, 2]
+        assert self.i.go(""" aif(0, [True, it], [False, it]) """) == [False, 0]
+
+        self.i.go(""" mand := macro a, b do qq(aif(!a, !b, it)) end """)
+        self.i.go(""" mor := macro a, b do qq(aif(!a, it, !b)) end """)
+
+        assert self.i.go(""" mand(2, 3) """) == 3
+        assert self.i.go(""" mand(0, 3) """) == 0
+        assert self.i.go(""" mor(2, 3) """) == 2
+        assert self.i.go(""" mor(0, 3) """) == 3
+
+        with pytest.raises(AssertionError, match="Undefined variable"):
+             self.i.go(""" expand(expand(mand(2, 3))) """)
+
+    def test_side_effect_macro(self):
+        self.i.go("""
+            deffunc ftwice params x do x + x end;
+            mtwice := macro x do qq(add(!x, !x)) end
+        """)
+        self.i.go(""" cnt := 0 """)
+        assert self.i.go(""" ftwice(cnt = cnt + 1) """) == 2
+        assert self.i.go(""" cnt """) == 1
+        self.i.go(""" cnt := 0 """)
+        assert self.i.go(""" mtwice(cnt = cnt + 1) """) == 3
+        assert self.i.go(""" cnt """) == 2
+
+    def test_capture(self):
+        self.i.go(""" capture := macro val do qq(x := !val) end """)
         self.i.go(""" x := 1 """)
         self.i.go(""" capture(2) """)
         assert self.i.go(""" x """) == 2

@@ -37,6 +37,12 @@ class Scanner:
                     self._string()
                 case c if is_name_first(c):
                     self._name()
+                case "!" as ch:
+                    start = self._pos
+                    self._advance()
+                    if self._current_char() in ("=", "!"):
+                        self._advance()
+                    self._tokens.append(Sym(self._src[start:self._pos]))
                 case ("=" | "!" | "<" | ">" | ":") as ch:
                     start = self._pos
                     self._advance()
@@ -168,7 +174,8 @@ class Parser:
 
     def _unaries(self):
         return self._unary({
-            Sym("-"): Sym("neg"), Sym("*"): Sym("*")
+            Sym("-"): Sym("neg"), Sym("*"): Sym("*"),
+            Sym("!"): Sym("!"), Sym("!!"): Sym("!!")
         }, self._call_index_dot)
 
     def _call_index_dot(self):
@@ -462,6 +469,8 @@ class Evaluator:
                 return env.val(name)
             case (Sym("quote"), [expr]):
                 return expr
+            case (Sym("qq"), [expr]):
+                return self._evaluate_quasiquote(expr, env)
             case (Sym("define"), [left_expr, right_expr]):
                 return self._evaluate_define(left_expr, right_expr, env)
             case (Sym("assign"), [left_expr, right_expr]):
@@ -502,6 +511,27 @@ class Evaluator:
                 return self._eval_op(op_expr, args_expr, env)
             case unexpected:
                 assert False, f"Unexpected expression @ evaluate(): {unexpected}"
+
+    def _evaluate_quasiquote(self, expr, env):
+        def items(exprs):
+            quoted = []
+            for expr in exprs:
+                match expr:
+                    case (Sym("!!"), [elem]):
+                        quoted += self.evaluate(elem, env)
+                    case _:
+                        quoted.append(self._evaluate_quasiquote(expr, env))
+            return quoted
+
+        match expr:
+            case [*exprs] if isinstance(expr, list):
+                return items(exprs)
+            case (Sym("!"), [elem]):
+                return self.evaluate(elem, env)
+            case (*exprs,):
+                return tuple(items(exprs))
+            case _:
+                return expr
 
     def _evaluate_define(self, left_expr, right_expr, env):
         right_val = self.evaluate(right_expr, env)
@@ -593,7 +623,6 @@ class Evaluator:
             case _:
                 args_val = [self.evaluate(arg, env) for arg in args_expr]
                 return self.apply(op_val, args_val)
-
 
     def _eval_expand(self, op_expr, args_expr, env):
         match self.evaluate(op_expr, env):
@@ -717,8 +746,6 @@ class Interpreter:
         self._env.define(Sym("push"), lambda args: args[0].append(args[1]))
         self._env.define(Sym("pop"), lambda args: args[0].pop())
 
-        self._env.define(Sym("str"), lambda args: str(args[0]))
-        self._env.define(Sym("int"), lambda args: int(args[0]))
         self._env.define(Sym("chr"), lambda args: chr(args[0]))
         self._env.define(Sym("ord"), lambda args: ord(args[0]))
         self._env.define(Sym("join"), lambda args: str(args[1]).join(map(str, args[0])))
@@ -728,6 +755,8 @@ class Interpreter:
         self._env.define(Sym("items"), lambda args: [list(e) for e in args[0].items()])
         self._env.define(Sym("copy"), lambda args: args[0].copy())
 
+        self._env.define(Sym("str"), lambda args: str(args[0]))
+        self._env.define(Sym("int"), lambda args: int(args[0]))
         self._env.define(Sym("sym"), lambda args: Sym(args[0]))
         self._env.define(Sym("expr"), lambda args: tuple(args))
 
@@ -864,25 +893,57 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.ast(""" macro cond, body do expr(sym("if"), cond, body, None) end """))
-    print(i.go(""" macro cond, body do expr(sym("if"), cond, body, None) end """))
+    # basic tests
+    print(i.go(""" a := 2; b := ["A", "B"] """)) # -> ['A', 'B']
+    print(i.go(""" qq(3) """)) # -> 3
+    print(i.go(""" qq("A") """)) # -> 'A'
+    print(i.go(""" qq(a) """)) # -> a
+    print(i.go(""" qq(!a) """)) # -> 2
+    print(i.go(""" qq(!a + 2) """)) # -> (add, [2, 2])
+    print(i.go(""" qq(!(a + 2)) """)) # -> 4
+    # print(i.go(""" qq(!c) """)) # -> Error
+    # print(i.go(""" qq(if) """)) # -> Error
+    print(i.go(""" qq([a, b]) """)) # -> [a, b]
+    print(i.go(""" qq([!a, !b]) """)) # -> [2, ['A', 'B']]
+    print(i.go(""" qq([!!b]) """)) # -> ['A', 'B']
+    print(i.go(""" qq([a, !!b, 2]) """)) # -> [a, 'A', 'B', 2]
+    print(i.ast(""" qq(if !a == 3 then 4 else 5 end) """)) # -> (qq, [(if, (equal, [(!, [a]), 3]), 4, 5)])
+    print(i.go(""" qq(if !a == 3 then 4 else 5 end) """)) # -> (if, (equal, [2, 3]), 4, 5)
+    print(i.go(""" eval_expr(qq(if !a == 3 then 4 else 5 end)) """)) # -> 5
+
+    # unquote_splicing (call arguments)
+    i.go(""" args := [2, 3] """)
+    print(i.go(""" qq(print(1, !!args, 4)) """)) # -> (print, [1, 2, 3, 4])
+    i.go(""" eval_expr(qq(print(1, !!args, 4))) """) # -> 1 2 3 4 (stdout)
+
+    # unquote_splicing (flat sequence)
+    i.go(""" stmts := [quote(print(2)), quote(print(3))] """)
+    print(i.go(""" qq(print(1); !!stmts; print(4)) """))
+    # -> (seq, [(print, [1]), (print, [2]), (print, [3]), (print, [4])])
+    i.go(""" eval_expr(qq(print(1); !!stmts; print(4))) """) # -> 1\n2\n3\n4 (stdout)
+
+    # macro
+    print(i.go(""" macro cond, body do expr(sym("if"), cond, body, None) end """)) # -> (mclosure, ...)
+    print(i.go(""" macro cond, body do qq(if !cond then !body else None end) end """)) # -> (mclosure, ...)
 
     i.go("""
-        when := macro cond, body do expr(sym("if"), cond, body, None) end
+        when := macro cond, body do qq(if !cond then !body else None end) end
     """)
     print(i.go(""" expand(when(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
     print(i.go(""" when(2 == 2, 3) """)) # -> 3
     print(i.go(""" when(2 == 3, 4 / 0) """)) # -> None
 
+    # why macro
     i.go("""
         fwhen := func cond, body do if cond then body else None end end
     """)
     print(i.go(""" fwhen(2 == 2, 3) """)) # -> 3
-    # print(i.go(""" fwhen(2 == 3, 4 / 0) """)) # -> Error
+    # print(i.go(""" fwhen(2 == 3, 4 / 0) """)) # -> ZeroDivisionError
 
+    # syntax sugar (deffunc)
     i.go("""
         mdeffunc := macro name, params_, body do
-            expr(sym("define"), [name, expr(sym("func"), params_, body)])
+            qq(!name := func !!params_ do !body end)
         end
     """)
     print(i.go(""" expand(mdeffunc(myadd, [a, b], a + b)) """)) # -> (define, [myadd, (func, [a, b], (add, [a, b]))])
@@ -890,44 +951,62 @@ if __name__ == "__main__":
     i.go(""" mdeffunc(myadd, [a, b], a + b) """)
     print(i.go(""" myadd(2, 3) """)) # -> 5
 
+    # syntax sugar (defmacro)
     i.go("""
         defmacro := macro name, params_, body do
-            expr(sym("define"), [name, expr(sym("macro"), params_, body)])
+            qq(!name := macro !!params_ do !body end)
         end
     """)
     print(i.go(""" expand(defmacro(
         mwhen, [cond, body], expr(sym("if"), cond, body, None)
     )) """))
     # -> (define, [mwhen, (macro, [cond, body], (expr, [(sym, ["if"]), cond, body, None]))])
-    i.go(""" defmacro(mwhen, [cond, body], expr(sym("if"), cond, body, None)) """)
+    i.go(""" defmacro(mwhen, [cond, body], qq(if !cond then !body else None end)) """)
     print(i.go(""" expand(mwhen(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
     print(i.go(""" mwhen(2 == 2, 3) """)) # -> 3
     print(i.go(""" mwhen(2 == 3, 4 / 0) """)) # -> None
     # print(i.go(""" mwhen(2 == 2) """)) # -> Error (Argument mismatch)
 
+    # syntax sugar (scope)
     i.go("""
-        defmacro(mscope, [body], expr(expr(sym("func"), [], body), []))
+        defmacro(mscope, [body], qq(func do !body end ()))
     """)
-    i.go(""" a := 2; mscope(print(a); a := 3; print(a)); print(a) """) # -> 2\n3\n2
+    i.go(""" a := 2; mscope(print(a); a := 3; print(a)); print(a) """) # -> 2\n3\n2 (stdout)
 
+    # Side effect in macro argument
     i.go("""
-        defmacro(aif, [cnd, thn, els], expr(sym("if"),
-            expr(sym("define"), [sym("it"), cnd]),
-            thn,
-            els
+        deffunc ftwice params x do x + x end;
+        defmacro(mtwice, [x], qq(add(!x, !x)))
+    """)
+    print(i.go(""" cnt := 0; ftwice(cnt = cnt + 1) """)) # -> 2
+    print(i.go(""" cnt """)) # -> 1
+    print(i.go(""" expand(mtwice(cnt = cnt + 1)) """)) # -> (add, [(assign, [cnt, (add, [cnt, 1])]), (assign, [cnt, (add, [cnt, 1])])])
+    print(i.go(""" cnt := 0; mtwice(cnt = cnt + 1) """)) # -> 3
+    print(i.go(""" cnt """)) # -> 2
+
+    # Variable capture (Non-hygienic)
+    i.go(""" defmacro(capture, [val], qq(x := !val)) """)
+    print(i.go(""" expand(capture(2)) """)) # -> (define, [x, 2])
+    print(i.go(""" x := 1; capture(2); x """)) # -> 2 (captured!)
+
+    # anaphoric if
+    i.go("""
+        defmacro(aif, [cnd, thn, els], qq(
+            scope if it := !cnd then !thn else !els end end
         ))
     """)
-    print(i.ast(""" aif(2, [True, it], [False, it]) """)) # -> (aif, [2, [True, it], [False, it]])
     print(i.go(""" expand(aif(2, [True, it], [False, it])) """)) # -> (if, (define, [it, 2]), [True, it], [False, it])
     print(i.go(""" aif(2, [True, it], [False, it]) """)) # -> [True, 2]
     print(i.go(""" aif(0, [True, it], [False, it]) """)) # -> [False, 0]
 
+    # and/or by anaphoric if
     i.go("""
-        defmacro(mand, [a, b], expr(sym("aif"), [a, b, sym("it")]));
-        defmacro(mor, [a, b], expr(sym("aif"), [a, sym("it"), b]))
+        defmacro(mand, [a, b], qq(aif(!a, !b, it)));
+        defmacro(mor, [a, b], qq(aif(!a, it, !b)))
     """)
     print(i.go(""" expand(mand(2, 3)) """)) # -> (aif, [2, 3, it])
     print(i.go(""" expand(mor(2, 3)) """)) # -> (aif, [2, it, 3])
+    # print(i.go(""" expand(expand(mand(2, 3))) """)) # -> Error
     print(i.go(""" 2 and 3 """)) # -> 3
     print(i.go(""" mand(2, 3) """)) # -> 3
     print(i.go(""" 0 and 3 """)) # -> 0
@@ -936,19 +1015,3 @@ if __name__ == "__main__":
     print(i.go(""" mor(2, 3) """)) # -> 2
     print(i.go(""" 0 or 3 """)) # -> 3
     print(i.go(""" mor(0, 3) """)) # -> 3
-    # print(i.go(""" expand(expand(mand(a != 0, 3 / a))) """))
-
-    # Side effect in macro argument
-    i.go("""
-        deffunc ftwice params x do x + x end;
-        defmacro(mtwice, [x], expr(sym("add"), [x, x]))
-    """)
-    print(i.go(""" cnt := 0; ftwice(cnt = cnt + 1) """)) # -> 2 (0+1 + 0+1)
-    print(i.go(""" cnt """)) # -> 1
-    print(i.go(""" expand(mtwice(cnt = cnt + 1)) """)) # -> (add, [(assign, [cnt, (add, [cnt, 1])]), (assign, [cnt, (add, [cnt, 1])])])
-    print(i.go(""" cnt := 0; mtwice(cnt = cnt + 1) """)) # -> 3 (0+1 + 1+1)
-    print(i.go(""" cnt """)) # -> 2
-
-    # Variable capture (Non-hygienic)
-    i.go(""" defmacro(capture, [val], expr(sym("define"), [sym("x"), val])) """)
-    print(i.go(""" x := 1; capture(2); x """)) # -> 2 (captured!)
