@@ -187,6 +187,12 @@ class TestEvaluate(TestBase):
         assert self.i.evaluate((Sym("if"), True, (Sym("if"), True, 2, 3), 4)) == 2
         assert self.i.evaluate((Sym("if"), False, 2, (Sym("if"), False, 3, 4))) == 4
 
+    def test_evaluate_if_scope(self):
+        # Variable defined inside if should not leak
+        self.i.evaluate((Sym("if"), True, (Sym("define"), [Sym("inner_if"), 1]), 2))
+        with pytest.raises(AssertionError):
+            self.i.evaluate(Sym("inner_if"))
+
     def test_evaluate_variable(self):
         assert self.i.evaluate((Sym("define"), [Sym("a"), 2])) == 2
         assert self.i.evaluate(Sym("a")) == 2
@@ -441,13 +447,25 @@ class TestGo(TestBase):
         assert self.i.go(""" if True then 2 end """) == 2
         assert self.i.go(""" if False then 2 end """) is None
 
-        assert self.i.go(""" if False then 1 elif True then 3 else 4 end """) == 3
-        assert self.i.go(""" if False then 1 elif False then 3 else 4 end """) == 4
+        assert self.i.go(""" if False then 2 elif True then 3 else 4 end """) == 3
+        assert self.i.go(""" if False then 2 elif False then 3 else 4 end """) == 4
 
         with pytest.raises(AssertionError):
             self.i.go(""" if True then 2 else 3 """)
         with pytest.raises(AssertionError):
             self.i.go(""" if True else 2 end """)
+
+    def test_if_scope(self):
+        # Definition inside if should not leak
+        with pytest.raises(AssertionError, match="Undefined variable"):
+             self.i.go(""" if True then a := 1 else a := 2 end; a """)
+
+        # Assignment to existing variable should work (via parent scope lookup)
+        assert self.i.go(""" a := False; if True then a = True end; a """) == True
+
+        # Variable defined in condition should be visible in branches but not outside
+        assert self.i.go(""" if (a := 2) == 2 then a + 1 else 0 end """) == 3
+        assert self.i.go(""" a """) == True # 'a' is still True from previous test
 
     def test_var_define(self):
         assert self.i.go(""" a := not True """) == False
@@ -1384,9 +1402,9 @@ class TestMacroSamples(TestBase):
 
     def test_anaphoric_if_and_or(self):
         self.i.go("""
-            aif := macro cnd, thn, els do qq(
-                scope if it := !cnd then !thn else !els end end
-            ) end
+            aif := macro cnd, thn, els do
+                qq(if it := !cnd then !thn else !els end)
+            end
         """)
         assert self.i.go(""" aif(2, [True, it], [False, it]) """) == [True, 2]
         assert self.i.go(""" aif(0, [True, it], [False, it]) """) == [False, 0]

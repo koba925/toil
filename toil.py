@@ -565,10 +565,11 @@ class Evaluator:
         return val
 
     def _evaluate_if(self, cond_expr, then_expr, else_expr, env):
-        if self.evaluate(cond_expr, env):
-            return self.evaluate(then_expr, env)
+        new_env = Environment(env)
+        if self.evaluate(cond_expr, new_env):
+            return self.evaluate(then_expr, new_env)
         else:
-            return self.evaluate(else_expr, env)
+            return self.evaluate(else_expr, new_env)
 
     def _evaluate_match(self, val_expr, cases, env):
         val = self.evaluate(val_expr, env)
