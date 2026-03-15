@@ -1438,5 +1438,14 @@ class TestMacroSamples(TestBase):
         self.i.go(""" capture(2) """)
         assert self.i.go(""" x """) == 2
 
+    def test_call_by_name(self):
+        self.i.go("""
+            call_by_name := macro name_str, *args do
+                qq( (!sym(qq(!name_str)))(!!args) )
+            end
+        """)
+        assert self.i.go(""" call_by_name("add", 2, 3) """) == 5
+        assert self.i.go(""" call_by_name("sub", 10, 4) """) == 6
+
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -970,14 +970,14 @@ if __name__ == "__main__":
 
     # syntax sugar (scope)
     i.go("""
-        defmacro(mscope, [body], qq(func do !body end ()))
+        mscope := macro body do qq(func do !body end ()) end
     """)
     i.go(""" a := 2; mscope(print(a); a := 3; print(a)); print(a) """) # -> 2\n3\n2 (stdout)
 
     # Side effect in macro argument
     i.go("""
         deffunc ftwice params x do x + x end;
-        defmacro(mtwice, [x], qq(add(!x, !x)))
+        mtwice := macro x do qq(add(!x, !x)) end
     """)
     print(i.go(""" cnt := 0; ftwice(cnt = cnt + 1) """)) # -> 2
     print(i.go(""" cnt """)) # -> 1
@@ -986,15 +986,15 @@ if __name__ == "__main__":
     print(i.go(""" cnt """)) # -> 2
 
     # Variable capture (Non-hygienic)
-    i.go(""" defmacro(capture, [val], qq(x := !val)) """)
+    i.go(""" capture := macro val do qq(x := !val) end """)
     print(i.go(""" expand(capture(2)) """)) # -> (define, [x, 2])
     print(i.go(""" x := 1; capture(2); x """)) # -> 2 (captured!)
 
     # anaphoric if
     i.go("""
-        defmacro(aif, [cnd, thn, els], qq(
+        aif := macro cnd, thn, els do qq(
             scope if it := !cnd then !thn else !els end end
-        ))
+        ) end
     """)
     print(i.go(""" expand(aif(2, [True, it], [False, it])) """)) # -> (if, (define, [it, 2]), [True, it], [False, it])
     print(i.go(""" aif(2, [True, it], [False, it]) """)) # -> [True, 2]
@@ -1002,8 +1002,8 @@ if __name__ == "__main__":
 
     # and/or by anaphoric if
     i.go("""
-        defmacro(mand, [a, b], qq(aif(!a, !b, it)));
-        defmacro(mor, [a, b], qq(aif(!a, it, !b)))
+        mand := macro a, b do qq(aif(!a, !b, it)) end;
+        mor := macro a, b do qq(aif(!a, it, !b)) end
     """)
     print(i.go(""" expand(mand(2, 3)) """)) # -> (aif, [2, 3, it])
     print(i.go(""" expand(mor(2, 3)) """)) # -> (aif, [2, it, 3])
@@ -1016,3 +1016,65 @@ if __name__ == "__main__":
     print(i.go(""" mor(2, 3) """)) # -> 2
     print(i.go(""" 0 or 3 """)) # -> 3
     print(i.go(""" mor(0, 3) """)) # -> 3
+
+    # Complex macro example: let with new syntax `let([[var, val], ...], body)`
+
+    # Pattern 1: Using `func` for parallel binding (like Scheme's `let`)
+    # This transforms `let([[a, 1], [b, 2]], ...)` into `func a, b do ... end (1, 2)`.
+    i.go("""
+        deffunc get_let_params params bindings_ast do
+            map(bindings_ast, func pair do pair[0] end)
+        end;
+        deffunc get_let_args params bindings_ast do
+            map(bindings_ast, func pair do pair[1] end)
+        end;
+
+        let_func := macro bindings, body do qq(
+            func !!get_let_params(bindings) do
+                !body
+            end (!!get_let_args(bindings))
+        ) end
+    """)
+
+    print(i.go(""" a := 2; b := 3; let_func([[a, 4 + 5], [b, 6; 7]], [a, b]) """)) # -> [9, 7]
+    print(i.go(""" a """)) # -> 2 (outer scope `a` is unchanged)
+    print(i.go(""" expand(let_func([[aa, 2], [bb, aa+1]], aa+bb)) """))
+    # -> ((func, [aa, bb], (add, [aa, bb])), [2, (add, [aa, 1])])
+    # print(i.go(""" let_func([[aa, 2], [bb, aa+1]], aa+bb) """)) # -> Error
+
+    # Pattern 2: Using `scope` and `define` for sequential binding (like Scheme's `let*`)
+    # This transforms `let([[a, 1], [b, 2]], ...)` into `scope a := 1; b := 2; ... end`.
+    i.go("""
+        deffunc make_defines params bindings_ast do
+            map(bindings_ast, func pair do
+                expr(sym("define"), [pair[0], pair[1]])
+            end)
+        end;
+
+        let_scope := macro bindings, body do qq(
+            scope
+                !!make_defines(bindings);
+                !body
+            end
+        ) end
+    """)
+    # Example: `b` uses the new value of `a` defined within the same let.
+    print(i.go(""" a := 1; let_scope([[a, 2], [b, a + 10]], a + b) """)) # -> 14
+    print(i.go(""" a """)) # -> 1 (outer scope `a` is unchanged)
+    print(i.go(""" expand(let_scope([[a, 2], [b, a+1]], a+b)) """))
+    # -> (scope, (seq, [(define, [a, 2]), (define, [b, (add, [a, 1])]), (add, [a, b])]))
+    print(i.go(""" expand(let_scope([[aa, 2], [bb, aa+1]], aa+bb)) """))
+    # -> ((func, [aa, bb], (add, [aa, bb])), [2, (add, [aa, 1])])
+    print(i.go(""" let_scope([[aa, 2], [bb, aa+1]], aa+bb) """)) # -> 5
+
+    # Dynamic function call with qq
+    print(i.go("""
+        name_str := "add"; args := [2, 3];
+        qq( (!sym(qq(!name_str)))(!!args) )
+    """)) # -> (add, [2, 3])
+    i.go("""
+        call_by_name := macro name_str, *args do
+            qq( (!sym(qq(!name_str)))(!!args) )
+        end
+    """)
+    print(i.go(""" call_by_name("add", 2, 3) """)) # -> 5
