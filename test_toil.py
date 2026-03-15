@@ -1447,5 +1447,82 @@ class TestMacroSamples(TestBase):
         assert self.i.go(""" call_by_name("add", 2, 3) """) == 5
         assert self.i.go(""" call_by_name("sub", 10, 4) """) == 6
 
+class TestCustomSyntax(TestBase):
+    def test_when(self):
+        self.i.go("""
+            _when := macro cond, body do qq(if !cond then !body else None end) end
+            #rule {when: [_when, EXPR, do, EXPR, end]}
+        """)
+        assert self.i.go(""" expand(_when(2 == 2, 3)) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
+        assert self.i.go(""" _when(2 == 2, 3) """) == 3
+        assert self.i.go(""" _when(2 == 3, 4 / 0) """) is None
+
+        assert self.i.go(""" expand(when 2 == 2 do 3 end ) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
+        assert self.i.go(""" when 2 == 2 do 3 end """) == 3
+        assert self.i.go(""" when 2 == 3 do 4 / 0 end """) is None
+
+        with pytest.raises(AssertionError):
+            self.i.go(""" when do 4 end """)
+        with pytest.raises(AssertionError):
+            self.i.go(""" when 2 == 3 4 end """)
+        with pytest.raises(AssertionError):
+            self.i.go(""" when 2 == 3 do end """)
+        with pytest.raises(AssertionError):
+            self.i.go(""" when 2 == 3 do 4 """)
+
+    def test_mfor(self):
+        self.i.go("""
+            #rule {qq: [qq, EXPR, end]}
+
+            _qqs := macro expr do qq qq scope !expr end end end end;
+            #rule {qqs: [_qqs, EXPR, end]}
+
+            _mfor := macro var, coll, body do qqs
+                __for_coll := !coll;
+                __for_index := -1;
+                while __for_index + 1 < len(__for_coll) do
+                    __for_index = __for_index + 1;
+                    scope
+                        !var := __for_coll[__for_index];
+                        !body
+                    end
+                end
+            end end
+            #rule {mfor: [_mfor, EXPR, in, EXPR, do, EXPR, end]}
+        """)
+        assert self.i.go("""
+            sum := 0;
+            mfor n in [2, 3, 4] do sum = sum + n end;
+            sum
+        """) == 9
+
+    def test_aif_and_or(self):
+        self.i.go("""
+            #rule {qq: [qq, EXPR, end]}
+
+            _qqs := macro expr do qq qq scope !expr end end end end;
+            #rule {qqs: [_qqs, EXPR, end]}
+
+            _aif := macro cnd, thn, els do qqs if it := !cnd then !thn else !els end end end
+            #rule {aif: [_aif, EXPR, then, EXPR, else, EXPR, end]}
+        """)
+        assert self.i.go(""" aif 2 then [True, it] else [False, it] end """) == [True, 2]
+        assert self.i.go(""" aif 0 then [True, it] else [False, it] end """) == [False, 0]
+
+        self.i.go("""
+            mand := macro a, b do qq aif !a then !b else it end end end;
+            mor := macro a, b do qq aif !a then it else !b end end end
+        """)
+        assert self.i.go(""" mand(2, 3) """) == 3
+        assert self.i.go(""" mand(0, 3) """) == 0
+        assert self.i.go(""" mor(2, 3) """) == 2
+        assert self.i.go(""" mor(0, 3) """) == 3
+
+        # Test short-circuiting
+        assert self.i.go(""" mand(0, 2 / 0) """) == 0
+        assert self.i.go(""" mor(2, 2 / 0) """) == 2
+        with pytest.raises(ZeroDivisionError): self.i.go(""" mand(2, 2/0) """)
+        with pytest.raises(ZeroDivisionError): self.i.go(""" mor(0, 2/0) """)
+
 if __name__ == "__main__":
     pytest.main([__file__])

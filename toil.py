@@ -9,6 +9,22 @@ def is_name_rest(c): return c.isalnum() or c == "_"
 def is_name(expr): return isinstance(expr, Sym) and is_name_first(expr[0])
 
 
+class RuleCollector:
+    def __init__(self, src):
+        self._src = src
+
+    def collect(self):
+        custom_rules = {}
+        for line in self._src.splitlines():
+            line = line.strip()
+            if line.startswith("#rule "):
+                rule_src = line[6:]
+                new_rule = Parser(Scanner(rule_src).tokenize(), {}).parse()
+                assert type(new_rule) is dict, f"Invalid rule @ collect(): {new_rule}"
+                custom_rules = {**custom_rules, **new_rule}
+        return custom_rules
+
+
 class Scanner:
     def __init__(self, src):
         self._src = src
@@ -113,9 +129,10 @@ class Scanner:
 
 
 class Parser:
-    def __init__(self, tokens):
+    def __init__(self, tokens, custom_rules):
         self._tokens = tokens
         self._pos = 0
+        self._custom_rules = custom_rules
 
     def parse(self):
         expr = self._expression()
@@ -215,6 +232,8 @@ class Parser:
             case Sym("while"): return self._while()
             case Sym("for"): return self._for()
             case Sym("try"): return self._try()
+            case Sym(name) if name in self._custom_rules:
+                return self._custom(name, self._custom_rules[name])
             case Sym(name) if is_name(name): return self._advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
@@ -344,6 +363,17 @@ class Parser:
             clauses.append((cond_expr, except_expr))
         self._consume(Sym("end"))
         return (Sym("try"), body_expr, clauses)
+
+    def _custom(self, name, rule):
+        self._advance()
+        op = Sym(rule[0]); args = []
+        for elem in rule[1:]:
+            match elem:
+                case "EXPR":
+                    args.append(self._expression())
+                case delimiter:
+                    self._consume(Sym(delimiter))
+        return (op, args)
 
     def _match(self):
         self._advance()
@@ -710,6 +740,7 @@ class Evaluator:
 class Interpreter:
     def __init__(self):
         self._env = Environment()
+        self._custom_rules = {}
 
     def _import(self, path):
         with open(path, "r") as f: src = f.read()
@@ -842,13 +873,17 @@ class Interpreter:
         self._env = Environment(self._env)
         return self
 
+    def collect_rules(self, src):
+        self._custom_rules = {**self._custom_rules, **RuleCollector(src).collect()}
+
     def scan(self, src):
         return Scanner(src).tokenize()
 
     def parse(self, tokens):
-        return Parser(tokens).parse()
+        return Parser(tokens, self._custom_rules).parse()
 
     def ast(self, src):
+        self.collect_rules(src)
         return self.parse(self.scan(src))
 
     def evaluate(self, expr):
@@ -894,116 +929,93 @@ if __name__ == "__main__":
 
     # Example
 
-    # basic tests
-    print(i.go(""" a := 2; b := ["A", "B"] """)) # -> ['A', 'B']
-    print(i.go(""" qq(3) """)) # -> 3
-    print(i.go(""" qq("A") """)) # -> 'A'
-    print(i.go(""" qq(a) """)) # -> a
-    print(i.go(""" qq(!a) """)) # -> 2
-    print(i.go(""" qq(!a + 2) """)) # -> (add, [2, 2])
-    print(i.go(""" qq(!(a + 2)) """)) # -> 4
-    # print(i.go(""" qq(!c) """)) # -> Error
-    # print(i.go(""" qq(if) """)) # -> Error
-    print(i.go(""" qq([a, b]) """)) # -> [a, b]
-    print(i.go(""" qq([!a, !b]) """)) # -> [2, ['A', 'B']]
-    print(i.go(""" qq([!!b]) """)) # -> ['A', 'B']
-    print(i.go(""" qq([a, !!b, 2]) """)) # -> [a, 'A', 'B', 2]
-    print(i.ast(""" qq(if !a == 3 then 4 else 5 end) """)) # -> (qq, [(if, (equal, [(!, [a]), 3]), 4, 5)])
-    print(i.go(""" qq(if !a == 3 then 4 else 5 end) """)) # -> (if, (equal, [2, 3]), 4, 5)
-    print(i.go(""" eval_expr(qq(if !a == 3 then 4 else 5 end)) """)) # -> 5
+    i.go("""
+        _when := macro cond, body do qq(if !cond then !body else None end) end
+        #rule {when: [_when, EXPR, do, EXPR, end]}
+    """)
+    print(i.go(""" expand(_when(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
+    print(i.go(""" _when(2 == 2, 3) """)) # -> 3
+    print(i.go(""" _when(2 == 3, 4 / 0) """)) # -> None
+    print(i.go(""" expand(when 2 == 2 do 3 end ) """)) # -> (if, (equal, [2, 2]), 3, None)
+    print(i.go(""" when 2 == 2 do 3 end """)) # -> 3
+    print(i.go(""" when 2 == 3 do 4 / 0 end """)) # -> None
 
-    # unquote_splicing (call arguments)
-    i.go(""" args := [2, 3] """)
-    print(i.go(""" qq(print(1, !!args, 4)) """)) # -> (print, [1, 2, 3, 4])
-    i.go(""" eval_expr(qq(print(1, !!args, 4))) """) # -> 1 2 3 4 (stdout)
+    # i.go(""" #rule if """) # -> Error
+    # i.go(""" #rule [_when, EXPR, do, EXPR, end] """) # -> Error
+    # i.go(""" when do 4 end""") # -> Error
+    # i.go(""" when 2 == 3 4 end """) # -> Error
+    # i.go(""" when 2 == 3 do end """) # -> Error
+    # i.go(""" when 2 == 3 do 4 """) # -> Error
 
-    # unquote_splicing (flat sequence)
-    i.go(""" stmts := [quote(print(2)), quote(print(3))] """)
-    print(i.go(""" qq(print(1); !!stmts; print(4)) """))
-    # -> (seq, [(print, [1]), (print, [2]), (print, [3]), (print, [4])])
-    i.go(""" eval_expr(qq(print(1); !!stmts; print(4))) """) # -> 1\n2\n3\n4 (stdout)
+    # Test rule redefinition
+    i.go("""
+        _while := macro cond, body do qq(while !cond do !body end) end
+        #rule {when: [_while, EXPR, do, EXPR, end]}
+    """)
+    print(i.go("""
+        i := 0;
+        sum := 0;
+        when i < 5 do
+            sum = sum + i;
+            i = i + 1
+        end;
+        sum
+    """)) # -> 10
 
-    # macro
-    print(i.go(""" macro cond, body do expr(sym("if"), cond, body, None) end """)) # -> (mclosure, ...)
-    print(i.go(""" macro cond, body do qq(if !cond then !body else None end) end """)) # -> (mclosure, ...)
+    # quasiquote rule and macro
+    i.go("""
+        #rule {qq: [qq, EXPR, end]}
+
+        _qqs := macro expr do qq qq scope !expr end end end end
+        #rule {qqs: [_qqs, EXPR, end]}
+    """)
+
+    # for by macro
 
     i.go("""
-        when := macro cond, body do qq(if !cond then !body else None end) end
+        _mfor := macro var, coll, body do qqs
+            __for_coll := !coll;
+            __for_index := -1;
+            while __for_index + 1 < len(__for_coll) do
+                __for_index = __for_index + 1;
+                scope
+                    !var := __for_coll[__for_index];
+                    !body
+                end
+            end
+        end end
+        #rule {mfor: [_mfor, EXPR, in, EXPR, do, EXPR, end]}
     """)
-    print(i.go(""" expand(when(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
-    print(i.go(""" when(2 == 2, 3) """)) # -> 3
-    print(i.go(""" when(2 == 3, 4 / 0) """)) # -> None
 
-    # why macro
-    i.go("""
-        fwhen := func cond, body do if cond then body else None end end
-    """)
-    print(i.go(""" fwhen(2 == 2, 3) """)) # -> 3
-    # print(i.go(""" fwhen(2 == 3, 4 / 0) """)) # -> ZeroDivisionError
-
-    # syntax sugar (deffunc)
-    i.go("""
-        mdeffunc := macro name, params_, body do
-            qq(!name := func !!params_ do !body end)
-        end
-    """)
-    print(i.go(""" expand(mdeffunc(myadd, [a, b], a + b)) """)) # -> (define, [myadd, (func, [a, b], (add, [a, b]))])
-    print(i.ast(""" deffunc myadd params a, b do a + b end """)) # -> (define, [myadd, (func, [a, b], (add, [a, b]))])
-    i.go(""" mdeffunc(myadd, [a, b], a + b) """)
-    print(i.go(""" myadd(2, 3) """)) # -> 5
-
-    # syntax sugar (defmacro)
-    i.go("""
-        defmacro := macro name, params_, body do
-            qq(!name := macro !!params_ do !body end)
-        end
-    """)
-    print(i.go(""" expand(defmacro(
-        mwhen, [cond, body], expr(sym("if"), cond, body, None)
-    )) """))
-    # -> (define, [mwhen, (macro, [cond, body], (expr, [(sym, ["if"]), cond, body, None]))])
-    i.go(""" defmacro(mwhen, [cond, body], qq(if !cond then !body else None end)) """)
-    print(i.go(""" expand(mwhen(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
-    print(i.go(""" mwhen(2 == 2, 3) """)) # -> 3
-    print(i.go(""" mwhen(2 == 3, 4 / 0) """)) # -> None
-    # print(i.go(""" mwhen(2 == 2) """)) # -> Error (Argument mismatch)
-
-    # syntax sugar (scope)
-    i.go("""
-        mscope := macro body do qq(func do !body end ()) end
-    """)
-    i.go(""" a := 2; mscope(print(a); a := 3; print(a)); print(a) """) # -> 2\n3\n2 (stdout)
-
-    # Side effect in macro argument
-    i.go("""
-        deffunc ftwice params x do x + x end;
-        mtwice := macro x do qq(add(!x, !x)) end
-    """)
-    print(i.go(""" cnt := 0; ftwice(cnt = cnt + 1) """)) # -> 2
-    print(i.go(""" cnt """)) # -> 1
-    print(i.go(""" expand(mtwice(cnt = cnt + 1)) """)) # -> (add, [(assign, [cnt, (add, [cnt, 1])]), (assign, [cnt, (add, [cnt, 1])])])
-    print(i.go(""" cnt := 0; mtwice(cnt = cnt + 1) """)) # -> 3
-    print(i.go(""" cnt """)) # -> 2
-
-    # Variable capture (Non-hygienic)
-    i.go(""" capture := macro val do qq(x := !val) end """)
-    print(i.go(""" expand(capture(2)) """)) # -> (define, [x, 2])
-    print(i.go(""" x := 1; capture(2); x """)) # -> 2 (captured!)
+    print(i.go(""" expand(_mfor(n, [2, 3, 4], sum = sum + n)) """)) # -> (scope, (seq, [(define, [__for_coll, [2, 3, 4]]), (define, [__for_index, -1]), (while, (less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (scope, (seq, [(define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])]))]))]))
+    print(i.go("""
+            sum := 0;
+            _mfor(n, [2, 3, 4], sum = sum + n);
+            sum
+    """)) # -> 9
+    print(i.go(""" expand(mfor n in [2, 3, 4] do sum = sum + n end) """)) # -> (scope, (seq, [(define, [__for_coll, [2, 3, 4]]), (define, [__for_index, -1]), (while, (less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (scope, (seq, [(define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])]))]))]))
+    print(i.go("""
+            sum := 0;
+            mfor n in [2, 3, 4] do sum = sum + n end;
+            sum
+    """)) # -> 9
+    print(i.ast(""" for n in [2, 3, 4] do sum = sum + n end """)) # -> (scope, (seq, [(define, [__for_coll, [2, 3, 4]]), (define, [__for_index, -1]), (while, (less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (scope, (seq, [(define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])]))]))]))
 
     # anaphoric if
     i.go("""
-        aif := macro cnd, thn, els do qq(
-            scope if it := !cnd then !thn else !els end end
-        ) end
+        _aif := macro cnd, thn, els do qqs
+            if it := !cnd then !thn else !els end
+        end end
+        #rule {aif: [_aif, EXPR, then, EXPR, else, EXPR, end]}
     """)
-    print(i.go(""" expand(aif(2, [True, it], [False, it])) """)) # -> (if, (define, [it, 2]), [True, it], [False, it])
-    print(i.go(""" aif(2, [True, it], [False, it]) """)) # -> [True, 2]
-    print(i.go(""" aif(0, [True, it], [False, it]) """)) # -> [False, 0]
+    print(i.go(""" expand(aif 2 then [True, it] else [False, it] end) """)) # -> (scope, (if, (define, [it, 2]), [True, it], [False, it]))
+    print(i.go(""" aif 2 then [True, it] else [False, it] end """)) # -> [True, 2]
+    print(i.go(""" aif 0 then [True, it] else [False, it] end """)) # -> [False, 0]
 
     # and/or by anaphoric if
     i.go("""
-        mand := macro a, b do qq(aif(!a, !b, it)) end;
-        mor := macro a, b do qq(aif(!a, it, !b)) end
+        mand := macro a, b do qq aif !a then !b else it end end end;
+        mor := macro a, b do qq aif !a then it else !b end end end
     """)
     print(i.go(""" expand(mand(2, 3)) """)) # -> (aif, [2, 3, it])
     print(i.go(""" expand(mor(2, 3)) """)) # -> (aif, [2, it, 3])
@@ -1016,65 +1028,3 @@ if __name__ == "__main__":
     print(i.go(""" mor(2, 3) """)) # -> 2
     print(i.go(""" 0 or 3 """)) # -> 3
     print(i.go(""" mor(0, 3) """)) # -> 3
-
-    # Complex macro example: let with new syntax `let([[var, val], ...], body)`
-
-    # Pattern 1: Using `func` for parallel binding (like Scheme's `let`)
-    # This transforms `let([[a, 1], [b, 2]], ...)` into `func a, b do ... end (1, 2)`.
-    i.go("""
-        deffunc get_let_params params bindings_ast do
-            map(bindings_ast, func pair do pair[0] end)
-        end;
-        deffunc get_let_args params bindings_ast do
-            map(bindings_ast, func pair do pair[1] end)
-        end;
-
-        let_func := macro bindings, body do qq(
-            func !!get_let_params(bindings) do
-                !body
-            end (!!get_let_args(bindings))
-        ) end
-    """)
-
-    print(i.go(""" a := 2; b := 3; let_func([[a, 4 + 5], [b, 6; 7]], [a, b]) """)) # -> [9, 7]
-    print(i.go(""" a """)) # -> 2 (outer scope `a` is unchanged)
-    print(i.go(""" expand(let_func([[aa, 2], [bb, aa+1]], aa+bb)) """))
-    # -> ((func, [aa, bb], (add, [aa, bb])), [2, (add, [aa, 1])])
-    # print(i.go(""" let_func([[aa, 2], [bb, aa+1]], aa+bb) """)) # -> Error
-
-    # Pattern 2: Using `scope` and `define` for sequential binding (like Scheme's `let*`)
-    # This transforms `let([[a, 1], [b, 2]], ...)` into `scope a := 1; b := 2; ... end`.
-    i.go("""
-        deffunc make_defines params bindings_ast do
-            map(bindings_ast, func pair do
-                expr(sym("define"), [pair[0], pair[1]])
-            end)
-        end;
-
-        let_scope := macro bindings, body do qq(
-            scope
-                !!make_defines(bindings);
-                !body
-            end
-        ) end
-    """)
-    # Example: `b` uses the new value of `a` defined within the same let.
-    print(i.go(""" a := 1; let_scope([[a, 2], [b, a + 10]], a + b) """)) # -> 14
-    print(i.go(""" a """)) # -> 1 (outer scope `a` is unchanged)
-    print(i.go(""" expand(let_scope([[a, 2], [b, a+1]], a+b)) """))
-    # -> (scope, (seq, [(define, [a, 2]), (define, [b, (add, [a, 1])]), (add, [a, b])]))
-    print(i.go(""" expand(let_scope([[aa, 2], [bb, aa+1]], aa+bb)) """))
-    # -> ((func, [aa, bb], (add, [aa, bb])), [2, (add, [aa, 1])])
-    print(i.go(""" let_scope([[aa, 2], [bb, aa+1]], aa+bb) """)) # -> 5
-
-    # Dynamic function call with qq
-    print(i.go("""
-        name_str := "add"; args := [2, 3];
-        qq( (!sym(qq(!name_str)))(!!args) )
-    """)) # -> (add, [2, 3])
-    i.go("""
-        call_by_name := macro name_str, *args do
-            qq( (!sym(qq(!name_str)))(!!args) )
-        end
-    """)
-    print(i.go(""" call_by_name("add", 2, 3) """)) # -> 5
