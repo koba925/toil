@@ -203,6 +203,7 @@ class Parser:
                 case Sym("("):
                     self._advance()
                     target = (target, self._comma_separated_exprs(Sym(")")))
+                    self._consume(Sym(")"))
                 case Sym("["):
                     self._advance()
                     index = self._expression()
@@ -247,6 +248,7 @@ class Parser:
     def _array(self):
         self._advance()
         array = self._comma_separated_exprs(Sym("]"))
+        self._consume(Sym("]"))
         return array
 
     def _dic(self):
@@ -284,6 +286,7 @@ class Parser:
     def _func_macro(self, op):
         self._advance()
         params = self._comma_separated_exprs(Sym("do"))
+        self._consume(Sym("do"))
         body_expr = self._expression()
         self._consume(Sym("end"))
         return (op, params, body_expr)
@@ -294,6 +297,7 @@ class Parser:
         assert is_name(name), f"Expected function name @ deffunc: {name}"
         self._consume(Sym("params"))
         params = self._comma_separated_exprs(Sym("do"))
+        self._consume(Sym("do"))
         body_expr = self._expression()
         self._consume(Sym("end"))
         return (Sym("define"), [name, (Sym("func"), params, body_expr)])
@@ -367,10 +371,12 @@ class Parser:
     def _custom(self, name, rule):
         self._advance()
         op = Sym(rule[0]); args = []
-        for elem in rule[1:]:
-            match elem:
+        for current, next in zip(rule[1:], rule[2:] + [None]):
+            match current:
                 case "EXPR":
                     args.append(self._expression())
+                case "EXPRS":
+                    args.append(self._comma_separated_exprs(Sym(next)))
                 case delimiter:
                     self._consume(Sym(delimiter))
         return (op, args)
@@ -421,7 +427,6 @@ class Parser:
             while self._current_token() == Sym(","):
                 self._advance()
                 cse.append(self._expression())
-        self._consume(terminate)
         return cse
 
     def _consume(self, expected):
@@ -1028,3 +1033,63 @@ if __name__ == "__main__":
     print(i.go(""" mor(2, 3) """)) # -> 2
     print(i.go(""" 0 or 3 """)) # -> 3
     print(i.go(""" mor(0, 3) """)) # -> 3
+
+    # syntax sugar (deffunc)
+    i.go("""
+        _mdeffunc := macro name, params_, body do
+            qq !name := func !!params_ do !body end end
+        end
+        #rule {mdeffunc: [_mdeffunc, EXPR, params, EXPRS, do, EXPR, end]}
+    """)
+
+    print(i.go(""" expand(_mdeffunc(myadd, [a, b], a + b)) """)) # -> (define, [myadd, (func, [a, b], (add, [a, b]))])
+    print(i.ast(""" _mdeffunc(myadd, [a, b], a + b) """)) # -> (define, [myadd, (func, [a, b], (add, [a, b]))])
+    i.go(""" _mdeffunc(myadd, [a, b], a + b) """)
+    print(i.go(""" myadd(2, 3) """)) # -> 5
+
+    print(i.go(""" expand(mdeffunc myadd2 params a, b do a + b end) """)) # -> (define, [myadd2, (func, [a, b], (add, [a, b]))])
+    print(i.ast(""" mdeffunc myadd2 params a, b do a + b end """)) # -> (define, [myadd2, (func, [a, b], (add, [a, b]))])
+    i.go(""" mdeffunc myadd2 params a, b do a + b end """)
+    print(i.go(""" myadd2(2, 3) """)) # -> 5
+
+    # syntax sugar (defmacro)
+    i.go("""
+        _defmacro := macro name, params_, body do
+            qq !name := macro !!params_ do !body end end
+        end
+        #rule {defmacro: [_defmacro, EXPR, params, EXPRS, do, EXPR, end]}
+    """)
+    print(i.go(""" expand(
+        _defmacro(mwhen, [cond, body], expr(sym("if"), cond, body, None))
+    ) """))
+    # ->
+
+    # Test EXPRS with zero and one parameter
+    i.go(""" mdeffunc zero_params params do 2 end """)
+    print(i.go(""" zero_params() """)) # -> 2
+
+    i.go(""" mdeffunc one_param params x do x * 2 end """)
+    print(i.go(""" one_param(3) """)) # -> 6
+
+    print(i.go(""" expand(
+        _defmacro(mwhen, [cond, body], qq if !cond then !body else None end end)
+    ) """))
+    i.go(""" _defmacro(mwhen, [cond, body], qq if !cond then !body else None end end) """)
+    print(i.go(""" expand(mwhen(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
+    print(i.go(""" mwhen(2 == 2, 3) """)) # -> 3
+    print(i.go(""" mwhen(2 == 3, 4 / 0) """)) # -> None
+    # print(i.go(""" mwhen(2 == 2) """)) # -> Error (Argument mismatch)
+
+    print(i.go(""" expand(
+        defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
+    ) """))
+    i.go("""
+        defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
+    """)
+    print(i.go(""" expand(mwhen2(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
+    print(i.go(""" mwhen2(2 == 2, 3) """)) # -> 3
+    print(i.go(""" mwhen2(2 == 3, 4 / 0) """)) # -> None
+    # print(i.go(""" mwhen2(2 == 2) """)) # -> Error (Argument mismatch)
+
+    # i.go(""" mdeffunc trailing_comma params a, b, do a + b end """) # -> Error
+    # print(i.go(""" mwhen2(2 == 2) """)) # -> Error (Argument mismatch)

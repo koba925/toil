@@ -1524,5 +1524,79 @@ class TestCustomSyntax(TestBase):
         with pytest.raises(ZeroDivisionError): self.i.go(""" mand(2, 2/0) """)
         with pytest.raises(ZeroDivisionError): self.i.go(""" mor(0, 2/0) """)
 
+    def test_mdeffunc_defmacro(self):
+        # _mdeffunc macro definition and rule
+        self.i.go("""
+            #rule {qq: [qq, EXPR, end]}
+
+            _qqs := macro expr do qq qq scope !expr end end end end
+            #rule {qqs: [_qqs, EXPR, end]}
+        """)
+
+        self.i.go("""
+            _mdeffunc := macro name, params_, body do
+                qq !name := func !!params_ do !body end end
+            end
+            #rule {mdeffunc: [_mdeffunc, EXPR, params, EXPRS, do, EXPR, end]}
+        """)
+        assert self.i.go(""" expand(_mdeffunc(myadd, [a, b], a + b)) """) == \
+               (Sym("define"), [Sym("myadd"), (Sym("func"), [Sym("a"), Sym("b")], (Sym("add"), [Sym("a"), Sym("b")]))])
+        self.i.go(""" _mdeffunc(myadd, [a, b], a + b) """)
+        assert self.i.go(""" myadd(2, 3) """) == 5
+
+        # mdeffunc custom syntax
+        assert self.i.go(""" expand(mdeffunc myadd2 params a, b do a + b end) """) == \
+               (Sym("define"), [Sym("myadd2"), (Sym("func"), [Sym("a"), Sym("b")], (Sym("add"), [Sym("a"), Sym("b")]))])
+        self.i.go(""" mdeffunc myadd2 params a, b do a + b end """)
+        assert self.i.go(""" myadd2(2, 3) """) == 5
+
+        # _defmacro macro definition and rule
+        self.i.go("""
+            _defmacro := macro name, params_, body do
+                qq !name := macro !!params_ do !body end end
+            end
+            #rule {defmacro: [_defmacro, EXPR, params, EXPRS, do, EXPR, end]}
+        """)
+        assert self.i.go(""" expand(
+            _defmacro(mwhen, [cond, body], expr(sym("if"), cond, body, None))
+        ) """) == (Sym("define"), [Sym("mwhen"), (Sym("macro"), [Sym("cond"), Sym("body")], (Sym("expr"), [(Sym("sym"), ["if"]), Sym("cond"), Sym("body"), None]))])
+
+        self.i.go(""" _defmacro(mwhen, [cond, body], qq if !cond then !body else None end end) """)
+        assert self.i.go(""" expand(mwhen(2 == 2, 3)) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
+        assert self.i.go(""" mwhen(2 == 2, 3) """) == 3
+        assert self.i.go(""" mwhen(2 == 3, 4 / 0) """) is None
+        with pytest.raises(AssertionError, match="Argument mismatch"):
+            self.i.go(""" mwhen(2 == 2) """)
+
+        # defmacro custom syntax
+        assert self.i.go(""" expand(
+            defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
+        ) """) == (Sym("define"), [Sym("mwhen2"), (Sym("macro"), [Sym("cond"), Sym("body")], (Sym("qq"), [(Sym("if"), (Sym("!"), [Sym("cond")]), (Sym("!"), [Sym("body")]), None)]))])
+
+        self.i.go("""
+            defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
+        """)
+
+        assert self.i.go(""" expand(mwhen2(2 == 2, 3)) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
+        assert self.i.go(""" mwhen2(2 == 2, 3) """) == 3
+        assert self.i.go(""" mwhen2(2 == 3, 4 / 0) """) is None
+        with pytest.raises(AssertionError, match="Argument mismatch"):
+            self.i.go(""" mwhen2(2 == 2) """)
+
+        # Test EXPRS with zero and one parameter for mdeffunc
+        self.i.go(""" mdeffunc zero_params params do 2 end """)
+        assert self.i.go(""" zero_params() """) == 2
+
+        self.i.go(""" mdeffunc one_param params x do x * 2 end """)
+        assert self.i.go(""" one_param(3) """) == 6
+
+        # Test EXPRS with zero and one parameter for defmacro
+        self.i.go(""" defmacro mzero_macro params do qq 2 end end """)
+        assert self.i.go(""" expand(mzero_macro()) """) == 2
+        assert self.i.go(""" mzero_macro() """) == 2
+
+        self.i.go(""" defmacro mone_macro params x do qq !x * 2 end end """)
+        assert self.i.go(""" expand(mone_macro(3)) """)
+
 if __name__ == "__main__":
     pytest.main([__file__])
