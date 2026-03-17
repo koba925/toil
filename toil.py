@@ -234,7 +234,7 @@ class Parser:
             case Sym("for"): return self._for()
             case Sym("try"): return self._try()
             case Sym(name) if name in self._custom_rules:
-                return self._custom(name, self._custom_rules[name])
+                return self._custom(self._custom_rules[name])
             case Sym(name) if is_name(name): return self._advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
@@ -368,17 +368,27 @@ class Parser:
         self._consume(Sym("end"))
         return (Sym("try"), body_expr, clauses)
 
-    def _custom(self, name, rule):
+    def _custom(self, rule):
+        def match_args(rule):
+            args = []
+            for current, next in zip(rule, rule[1:] + [None]):
+                match current:
+                    case "EXPR":
+                        args.append(self._expression())
+                    case "EXPRS":
+                        args.append(self._comma_separated_exprs(Sym(next)))
+                    case ("*", [subrule]):
+                        subargs = []
+                        while self._current_token() == subrule[0]:
+                            subargs.append(match_args(subrule))
+                        args.append(subargs)
+                    case delimiter:
+                        self._consume(Sym(delimiter))
+            return args
+
         self._advance()
-        op = Sym(rule[0]); args = []
-        for current, next in zip(rule[1:], rule[2:] + [None]):
-            match current:
-                case "EXPR":
-                    args.append(self._expression())
-                case "EXPRS":
-                    args.append(self._comma_separated_exprs(Sym(next)))
-                case delimiter:
-                    self._consume(Sym(delimiter))
+        op = Sym(rule[0])
+        args = match_args(rule[1:])
         return (op, args)
 
     def _match(self):
@@ -1093,3 +1103,75 @@ if __name__ == "__main__":
 
     # i.go(""" mdeffunc trailing_comma params a, b, do a + b end """) # -> Error
     # print(i.go(""" mwhen2(2 == 2) """)) # -> Error (Argument mismatch)
+
+    # repeated arguments and let
+    i.go("""
+        deffunc get_let_params params bindings_ast do
+            map(bindings_ast, func pair do pair[0] end)
+        end;
+        deffunc get_let_args params bindings_ast do
+            map(bindings_ast, func pair do pair[1] end)
+        end;
+
+        _let_func := macro bindings, body do qq
+            func !!get_let_params(bindings) do
+                !body
+            end (!!get_let_args(bindings))
+        end end
+        #rule {let_func: [_let_func, *[var, EXPR, be, EXPR], do, EXPR, end]}
+    """)
+
+    print(i.go(""" expand(_let_func([[a, 4 + 5], [b, 6]], [a, b])) """))
+    # -> ((func, [a, b], [a, b]), [(add, [4, 5]), 6])
+    print(i.go(""" a := 2; b := 3; _let_func([[a, 4 + 5], [b, 6]], [a, b]) """)) # -> [9, 6]
+    print(i.go(""" a """)) # -> 2
+
+    print(i.go(""" expand(let_func var a be 4 + 5 var b be 6 do [a, b] end) """))
+    # -> ((func, [a, b], [a, b]), [(add, [4, 5]), 6])
+    print(i.go(""" a := 2; b := 3;
+        let_func
+            var a be 4 + 5
+            var b be 6
+        do
+            [a, b]
+        end
+    """)) # -> [9, 6]
+    print(i.go(""" a """)) # -> 2
+
+    # Test zero and one argument (check * repetition)
+    print(i.go(""" let_func do 2 end """)) # -> 2
+    print(i.go(""" let_func var a be 2 do a * 3 end """)) # -> 6
+    print(i.go(""" let_func var a be 2 do let_func var b be 3 do a + b end end """)) # -> 5
+
+    # Error cases for repetition
+    # i.go(""" let_func var a be 1 var b do a end """) # -> Error (Expected be)
+    # i.go(""" let_func var a = 1 do a end """) # -> Error (Expected be)
+
+    i.go("""
+        deffunc make_defines params bindings_ast do
+            map(bindings_ast, func pair do
+                expr(sym("define"), [pair[0], pair[1]])
+            end)
+        end;
+
+        _let_scope := macro bindings, body do qq
+            scope
+                !!make_defines(bindings);
+                !body
+            end
+        end end
+        #rule {let_scope: [_let_scope, *[var, EXPR, be, EXPR], do, EXPR, end]}
+    """)
+    print(i.go(""" expand(_let_scope([[a, 4 + 5], [b, a + 6]], [a, b])) """)) # -> (scope, (seq, [(define, [a, (add, [4, 5])]), (define, [b, (add, [a, 6])]), [a, b]]))
+    print(i.go(""" a := 2; b := 3; _let_scope([[a, 4 + 5], [b, a + 6]], [a, b]) """)) # -> [9, 15]
+    print(i.go(""" a """)) # -> 2 (outer scope `a` is unchanged)
+    print(i.go(""" expand(let_scope var a be 4 + 5 var b be a + 6 do [a, b] end) """)) # -> (scope, (seq, [(define, [a, (add, [4, 5])]), (define, [b, (add, [a, 6])]), [a, b]]))
+    print(i.go(""" a := 2; b := 3;
+        let_scope
+            var a be 4 + 5
+            var b be a + 6
+        do
+            [a, b]
+        end
+    """)) # -> [9, 15]
+    print(i.go(""" a """)) # -> 2 (outer scope `a` is unchanged)

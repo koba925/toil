@@ -1597,6 +1597,74 @@ class TestCustomSyntax(TestBase):
 
         self.i.go(""" defmacro mone_macro params x do qq !x * 2 end end """)
         assert self.i.go(""" expand(mone_macro(3)) """)
+        assert self.i.go(""" mone_macro(3) """) == 6
+
+    def test_let_custom_rule(self):
+        # Setup for let_func and let_scope
+        self.i.go("""
+            #rule {qq: [qq, EXPR, end]}
+
+            deffunc get_let_params params bindings_ast do
+                map(bindings_ast, func pair do pair[0] end)
+            end;
+            deffunc get_let_args params bindings_ast do
+                map(bindings_ast, func pair do pair[1] end)
+            end;
+
+            _let_func := macro bindings, body do qq
+                func !!get_let_params(bindings) do
+                    !body
+                end (!!get_let_args(bindings))
+            end end;
+            #rule {let_func: [_let_func, *[var, EXPR, be, EXPR], do, EXPR, end]}
+
+            deffunc make_defines params bindings_ast do
+                map(bindings_ast, func pair do
+                    expr(sym("define"), [pair[0], pair[1]])
+                end)
+            end;
+
+            _let_scope := macro bindings, body do qq
+                scope
+                    !!make_defines(bindings);
+                    !body
+                end
+            end end
+            #rule {let_scope: [_let_scope, *[var, EXPR, be, EXPR], do, EXPR, end]}
+        """)
+
+        # let_func tests (parallel binding)
+        assert self.i.go(""" expand(let_func var a be 4 + 5 var b be 6 do [a, b] end) """) == \
+               ((Sym("func"), [Sym("a"), Sym("b")], [Sym("a"), Sym("b")]), [(Sym("add"), [4, 5]), 6])
+
+        self.i.go(""" a := 2 """)
+        # 'b' is bound to the outer 'a' (2), demonstrating parallel binding
+        assert self.i.go(""" let_func var a be 3 var b be a + 4 do [a, b] end """) == [3, 6]
+        assert self.i.go(""" a """) == 2 # Outer scope is not affected
+
+        # let_func with zero and one binding
+        assert self.i.go(""" let_func do 2 end """) == 2
+        assert self.i.go(""" let_func var a be 3 do a * 2 end """) == 6
+
+        # let_func nested
+        assert self.i.go(""" let_func var a be 10 do let_func var b be 20 do a + b end end """) == 30
+
+        # let_scope tests (sequential binding)
+        assert self.i.go(""" expand(let_scope var a be 4 + 5 var b be a + 6 do [a, b] end) """) == \
+               (Sym('scope'), (Sym('seq'), [(Sym('define'), [Sym('a'), (Sym('add'), [4, 5])]), (Sym('define'), [Sym('b'), (Sym('add'), [Sym('a'), 6])]), [Sym('a'), Sym('b')]]))
+
+        self.i.go(""" a := 2 """)
+        # 'b' is bound to the inner 'a' (10), demonstrating sequential binding
+        assert self.i.go(""" let_scope var a be 10 var b be a + 1 do [a, b] end """) == [10, 11]
+        assert self.i.go(""" a """) == 2 # Outer scope is not affected
+
+        # Error cases for custom rule with repetition
+        with pytest.raises(AssertionError, match="Expected be @ consume: do"):
+            self.i.go(""" let_func var a be 1 var b do a end """)
+
+        with pytest.raises(AssertionError):
+            self.i.go(""" let_func var a = 1 do a end """)
+
 
 if __name__ == "__main__":
     pytest.main([__file__])
