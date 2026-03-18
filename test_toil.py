@@ -1604,29 +1604,18 @@ class TestCustomSyntax(TestBase):
         self.i.go("""
             #rule {qq: [qq, EXPR, end]}
 
-            deffunc get_let_params params bindings_ast do
-                map(bindings_ast, func pair do pair[0] end)
-            end;
-            deffunc get_let_args params bindings_ast do
-                map(bindings_ast, func pair do pair[1] end)
-            end;
-
             _let_func := macro bindings, body do qq
-                func !!get_let_params(bindings) do
+                func !!map(bindings, func pair do pair[0] end) do
                     !body
-                end (!!get_let_args(bindings))
+                end (!!map(bindings, func pair do pair[1] end))
             end end;
             #rule {let_func: [_let_func, *[var, EXPR, be, EXPR], do, EXPR, end]}
 
-            deffunc make_defines params bindings_ast do
-                map(bindings_ast, func pair do
-                    expr(sym("define"), [pair[0], pair[1]])
-                end)
-            end;
-
             _let_scope := macro bindings, body do qq
                 scope
-                    !!make_defines(bindings);
+                    !!map(bindings, func binding do
+                        qq !binding[0] := !binding[1] end
+                    end);
                     !body
                 end
             end end
@@ -1644,27 +1633,82 @@ class TestCustomSyntax(TestBase):
 
         # let_func with zero and one binding
         assert self.i.go(""" let_func do 2 end """) == 2
-        assert self.i.go(""" let_func var a be 3 do a * 2 end """) == 6
+        assert self.i.go(""" let_func var a be 2 do a * 3 end """) == 6
 
         # let_func nested
-        assert self.i.go(""" let_func var a be 10 do let_func var b be 20 do a + b end end """) == 30
+        assert self.i.go(""" let_func var a be 2 do let_func var b be 3 do a + b end end """) == 5
 
         # let_scope tests (sequential binding)
         assert self.i.go(""" expand(let_scope var a be 4 + 5 var b be a + 6 do [a, b] end) """) == \
                (Sym('scope'), (Sym('seq'), [(Sym('define'), [Sym('a'), (Sym('add'), [4, 5])]), (Sym('define'), [Sym('b'), (Sym('add'), [Sym('a'), 6])]), [Sym('a'), Sym('b')]]))
 
         self.i.go(""" a := 2 """)
-        # 'b' is bound to the inner 'a' (10), demonstrating sequential binding
-        assert self.i.go(""" let_scope var a be 10 var b be a + 1 do [a, b] end """) == [10, 11]
+        # 'b' is bound to the inner 'a' (9), demonstrating sequential binding
+        assert self.i.go(""" let_scope var a be 4 + 5 var b be a + 6 do [a, b] end """) == [9, 15]
         assert self.i.go(""" a """) == 2 # Outer scope is not affected
 
         # Error cases for custom rule with repetition
         with pytest.raises(AssertionError, match="Expected be @ consume: do"):
             self.i.go(""" let_func var a be 1 var b do a end """)
 
-        with pytest.raises(AssertionError):
+        with pytest.raises(AssertionError, match="Expected be @ consume: do"):
             self.i.go(""" let_func var a = 1 do a end """)
 
+    def test_optional_arguments(self):
+        # Setup for foo and mif
+        self.i.go("""
+            #rule {qq: [qq, EXPR, end]}
+            #rule {foo: [_foo, +[opt, EXPR], do, EXPR, end]}
+
+            _mif := macro cnd, thn, elifs, els do scope
+                e := if els == [] then None else qq !els[0] end end;
+                for [cnd, thn] in elifs.reverse() do
+                    e = qq if !cnd then !thn else !(e) end end
+                end;
+                qq if !cnd then !thn else !(e) end end
+            end end
+            #rule {mif: [_mif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], +[else, EXPR], end]}
+        """)
+
+        # Test foo parsing
+        assert self.i.ast(""" foo do 4 end """) == (Sym("_foo"), [[], 4])
+        assert self.i.ast(""" foo opt 2 + 3 do 4 end """) == (Sym("_foo"), [[(Sym("add"), [2, 3])], 4])
+        with pytest.raises(AssertionError, match="Expected do @ consume: opt"):
+            self.i.ast(""" foo opt 2 + 3 opt 4 + 5 do 6 end """)
+
+        # Test mif parsing
+        assert self.i.ast(""" mif 2 == 3 then 4 end """) == (Sym("_mif"), [(Sym("equal"), [2, 3]), 4, [], []])
+        assert self.i.ast(""" mif 2 == 3 then 4 else 5 end """) == (Sym("_mif"), [(Sym("equal"), [2, 3]), 4, [], [5]])
+        assert self.i.ast(""" mif 2 == 3 then 4 elif 2 == 2 then 5 end """) == (Sym("_mif"), [(Sym("equal"), [2, 3]), 4, [[(Sym("equal"), [2, 2]), 5]], []])
+        assert self.i.ast(""" mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """) == (Sym("_mif"), [(Sym("equal"), [2, 3]), 4, [[(Sym("equal"), [2, 2]), 5]], [6]])
+        assert self.i.ast(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """) == (Sym("_mif"), [(Sym("equal"), [2, 3]), 4, [[(Sym("equal"), [3, 4]), 5], [(Sym("equal"), [2, 2]), 6]], []])
+        assert self.i.ast(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """) == (Sym("_mif"), [(Sym("equal"), [2, 3]), 4, [[(Sym("equal"), [3, 4]), 5], [(Sym("equal"), [2, 2]), 6]], [7]])
+
+        # Test mif expansion
+        assert self.i.go(""" expand(mif 2 == 3 then 4 end) """) == (Sym("if"), (Sym("equal"), [2, 3]), 4, None)
+        assert self.i.go(""" expand(mif 2 == 3 then 4 else 5 end) """) == (Sym("if"), (Sym("equal"), [2, 3]), 4, 5)
+        assert self.i.go(""" expand(mif 2 == 3 then 4 elif 2 == 2 then 5 end) """) == (Sym("if"), (Sym("equal"), [2, 3]), 4, (Sym("if"), (Sym("equal"), [2, 2]), 5, None))
+        assert self.i.go(""" expand(mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end) """) == (Sym("if"), (Sym("equal"), [2, 3]), 4, (Sym("if"), (Sym("equal"), [2, 2]), 5, 6))
+        assert self.i.go(""" expand(mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end) """) == (Sym("if"), (Sym("equal"), [2, 3]), 4, (Sym("if"), (Sym("equal"), [3, 4]), 5, (Sym("if"), (Sym("equal"), [2, 2]), 6, None)))
+        assert self.i.go(""" expand(mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end) """) == (Sym("if"), (Sym("equal"), [2, 3]), 4, (Sym("if"), (Sym("equal"), [3, 4]), 5, (Sym("if"), (Sym("equal"), [2, 2]), 6, 7)))
+
+        # Test mif evaluation
+        assert self.i.go(""" mif 2 == 3 then 4 end """) is None
+        assert self.i.go(""" mif 2 == 3 then 4 else 5 end """) == 5
+        assert self.i.go(""" mif 2 == 3 then 4 elif 2 == 2 then 5 end """) == 5
+        assert self.i.go(""" mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """) == 5
+        assert self.i.go(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """) == 6
+        assert self.i.go(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """) == 6
+
+        # Test mif error cases
+        with pytest.raises(AssertionError, match="Expected then @ consume: 4"):
+            self.i.ast(""" mif then 4 end """)
+        with pytest.raises(AssertionError, match="Expected then @ consume: 4"):
+            self.i.ast(""" mif 2 == 3 4 end """)
+        with pytest.raises(AssertionError, match="Expected end @ consume"):
+            self.i.ast(""" mif 2 == 3 then 4 else end """)
+        with pytest.raises(AssertionError, match="Expected end @ consume: else"):
+            self.i.ast(""" mif 2 == 3 then 4 else 5 else 6 end """)
 
 if __name__ == "__main__":
     pytest.main([__file__])

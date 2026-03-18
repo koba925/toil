@@ -191,7 +191,7 @@ class Parser:
 
     def _unaries(self):
         return self._unary({
-            Sym("-"): Sym("neg"), Sym("*"): Sym("*"),
+            Sym("-"): Sym("neg"), Sym("+"): Sym("+"), Sym("*"): Sym("*"),
             Sym("!"): Sym("!"), Sym("!!"): Sym("!!")
         }, self._call_index_dot)
 
@@ -382,6 +382,11 @@ class Parser:
                         while self._current_token() == subrule[0]:
                             subargs.append(match_args(subrule))
                         args.append(subargs)
+                    case ("+", [subrule]):
+                        if self._current_token() == subrule[0]:
+                            args.append(match_args(subrule))
+                        else:
+                            args.append([])
                     case delimiter:
                         self._consume(Sym(delimiter))
             return args
@@ -944,38 +949,38 @@ if __name__ == "__main__":
 
     # Example
 
-    i.go("""
-        _when := macro cond, body do qq(if !cond then !body else None end) end
-        #rule {when: [_when, EXPR, do, EXPR, end]}
-    """)
-    print(i.go(""" expand(_when(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
-    print(i.go(""" _when(2 == 2, 3) """)) # -> 3
-    print(i.go(""" _when(2 == 3, 4 / 0) """)) # -> None
-    print(i.go(""" expand(when 2 == 2 do 3 end ) """)) # -> (if, (equal, [2, 2]), 3, None)
-    print(i.go(""" when 2 == 2 do 3 end """)) # -> 3
-    print(i.go(""" when 2 == 3 do 4 / 0 end """)) # -> None
+    # i.go("""
+    #     _when := macro cond, body do qq(if !cond then !body else None end) end
+    #     #rule {when: [_when, EXPR, do, EXPR, end]}
+    # """)
+    # print(i.go(""" expand(_when(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
+    # print(i.go(""" _when(2 == 2, 3) """)) # -> 3
+    # print(i.go(""" _when(2 == 3, 4 / 0) """)) # -> None
+    # print(i.go(""" expand(when 2 == 2 do 3 end ) """)) # -> (if, (equal, [2, 2]), 3, None)
+    # print(i.go(""" when 2 == 2 do 3 end """)) # -> 3
+    # print(i.go(""" when 2 == 3 do 4 / 0 end """)) # -> None
 
-    # i.go(""" #rule if """) # -> Error
-    # i.go(""" #rule [_when, EXPR, do, EXPR, end] """) # -> Error
-    # i.go(""" when do 4 end""") # -> Error
-    # i.go(""" when 2 == 3 4 end """) # -> Error
-    # i.go(""" when 2 == 3 do end """) # -> Error
-    # i.go(""" when 2 == 3 do 4 """) # -> Error
+    # # i.go(""" #rule if """) # -> Error
+    # # i.go(""" #rule [_when, EXPR, do, EXPR, end] """) # -> Error
+    # # i.go(""" when do 4 end""") # -> Error
+    # # i.go(""" when 2 == 3 4 end """) # -> Error
+    # # i.go(""" when 2 == 3 do end """) # -> Error
+    # # i.go(""" when 2 == 3 do 4 """) # -> Error
 
-    # Test rule redefinition
-    i.go("""
-        _while := macro cond, body do qq(while !cond do !body end) end
-        #rule {when: [_while, EXPR, do, EXPR, end]}
-    """)
-    print(i.go("""
-        i := 0;
-        sum := 0;
-        when i < 5 do
-            sum = sum + i;
-            i = i + 1
-        end;
-        sum
-    """)) # -> 10
+    # # Test rule redefinition
+    # i.go("""
+    #     _while := macro cond, body do qq(while !cond do !body end) end
+    #     #rule {when: [_while, EXPR, do, EXPR, end]}
+    # """)
+    # print(i.go("""
+    #     i := 0;
+    #     sum := 0;
+    #     when i < 5 do
+    #         sum = sum + i;
+    #         i = i + 1
+    #     end;
+    #     sum
+    # """)) # -> 10
 
     # quasiquote rule and macro
     i.go("""
@@ -985,138 +990,131 @@ if __name__ == "__main__":
         #rule {qqs: [_qqs, EXPR, end]}
     """)
 
-    # for by macro
+    # # for by macro
 
-    i.go("""
-        _mfor := macro var, coll, body do qqs
-            __for_coll := !coll;
-            __for_index := -1;
-            while __for_index + 1 < len(__for_coll) do
-                __for_index = __for_index + 1;
-                scope
-                    !var := __for_coll[__for_index];
-                    !body
-                end
-            end
-        end end
-        #rule {mfor: [_mfor, EXPR, in, EXPR, do, EXPR, end]}
-    """)
+    # i.go("""
+    #     _mfor := macro var, coll, body do qqs
+    #         __for_coll := !coll;
+    #         __for_index := -1;
+    #         while __for_index + 1 < len(__for_coll) do
+    #             __for_index = __for_index + 1;
+    #             scope
+    #                 !var := __for_coll[__for_index];
+    #                 !body
+    #             end
+    #         end
+    #     end end
+    #     #rule {mfor: [_mfor, EXPR, in, EXPR, do, EXPR, end]}
+    # """)
 
-    print(i.go(""" expand(_mfor(n, [2, 3, 4], sum = sum + n)) """)) # -> (scope, (seq, [(define, [__for_coll, [2, 3, 4]]), (define, [__for_index, -1]), (while, (less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (scope, (seq, [(define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])]))]))]))
-    print(i.go("""
-            sum := 0;
-            _mfor(n, [2, 3, 4], sum = sum + n);
-            sum
-    """)) # -> 9
-    print(i.go(""" expand(mfor n in [2, 3, 4] do sum = sum + n end) """)) # -> (scope, (seq, [(define, [__for_coll, [2, 3, 4]]), (define, [__for_index, -1]), (while, (less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (scope, (seq, [(define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])]))]))]))
-    print(i.go("""
-            sum := 0;
-            mfor n in [2, 3, 4] do sum = sum + n end;
-            sum
-    """)) # -> 9
-    print(i.ast(""" for n in [2, 3, 4] do sum = sum + n end """)) # -> (scope, (seq, [(define, [__for_coll, [2, 3, 4]]), (define, [__for_index, -1]), (while, (less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (scope, (seq, [(define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])]))]))]))
+    # print(i.go(""" expand(_mfor(n, [2, 3, 4], sum = sum + n)) """)) # -> (scope, (seq, [(define, [__for_coll, [2, 3, 4]]), (define, [__for_index, -1]), (while, (less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (scope, (seq, [(define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])]))]))]))
+    # print(i.go("""
+    #         sum := 0;
+    #         _mfor(n, [2, 3, 4], sum = sum + n);
+    #         sum
+    # """)) # -> 9
+    # print(i.go(""" expand(mfor n in [2, 3, 4] do sum = sum + n end) """)) # -> (scope, (seq, [(define, [__for_coll, [2, 3, 4]]), (define, [__for_index, -1]), (while, (less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (scope, (seq, [(define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])]))]))]))
+    # print(i.go("""
+    #         sum := 0;
+    #         mfor n in [2, 3, 4] do sum = sum + n end;
+    #         sum
+    # """)) # -> 9
+    # print(i.ast(""" for n in [2, 3, 4] do sum = sum + n end """)) # -> (scope, (seq, [(define, [__for_coll, [2, 3, 4]]), (define, [__for_index, -1]), (while, (less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (scope, (seq, [(define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])]))]))]))
 
-    # anaphoric if
-    i.go("""
-        _aif := macro cnd, thn, els do qqs
-            if it := !cnd then !thn else !els end
-        end end
-        #rule {aif: [_aif, EXPR, then, EXPR, else, EXPR, end]}
-    """)
-    print(i.go(""" expand(aif 2 then [True, it] else [False, it] end) """)) # -> (scope, (if, (define, [it, 2]), [True, it], [False, it]))
-    print(i.go(""" aif 2 then [True, it] else [False, it] end """)) # -> [True, 2]
-    print(i.go(""" aif 0 then [True, it] else [False, it] end """)) # -> [False, 0]
+    # # anaphoric if
+    # i.go("""
+    #     _aif := macro cnd, thn, els do qqs
+    #         if it := !cnd then !thn else !els end
+    #     end end
+    #     #rule {aif: [_aif, EXPR, then, EXPR, else, EXPR, end]}
+    # """)
+    # print(i.go(""" expand(aif 2 then [True, it] else [False, it] end) """)) # -> (scope, (if, (define, [it, 2]), [True, it], [False, it]))
+    # print(i.go(""" aif 2 then [True, it] else [False, it] end """)) # -> [True, 2]
+    # print(i.go(""" aif 0 then [True, it] else [False, it] end """)) # -> [False, 0]
 
-    # and/or by anaphoric if
-    i.go("""
-        mand := macro a, b do qq aif !a then !b else it end end end;
-        mor := macro a, b do qq aif !a then it else !b end end end
-    """)
-    print(i.go(""" expand(mand(2, 3)) """)) # -> (aif, [2, 3, it])
-    print(i.go(""" expand(mor(2, 3)) """)) # -> (aif, [2, it, 3])
-    # print(i.go(""" expand(expand(mand(2, 3))) """)) # -> Error
-    print(i.go(""" 2 and 3 """)) # -> 3
-    print(i.go(""" mand(2, 3) """)) # -> 3
-    print(i.go(""" 0 and 3 """)) # -> 0
-    print(i.go(""" mand(0, 3) """)) # -> 0
-    print(i.go(""" 2 or 3 """)) # -> 2
-    print(i.go(""" mor(2, 3) """)) # -> 2
-    print(i.go(""" 0 or 3 """)) # -> 3
-    print(i.go(""" mor(0, 3) """)) # -> 3
+    # # and/or by anaphoric if
+    # i.go("""
+    #     mand := macro a, b do qq aif !a then !b else it end end end;
+    #     mor := macro a, b do qq aif !a then it else !b end end end
+    # """)
+    # print(i.go(""" expand(mand(2, 3)) """)) # -> (aif, [2, 3, it])
+    # print(i.go(""" expand(mor(2, 3)) """)) # -> (aif, [2, it, 3])
+    # # print(i.go(""" expand(expand(mand(2, 3))) """)) # -> Error
+    # print(i.go(""" 2 and 3 """)) # -> 3
+    # print(i.go(""" mand(2, 3) """)) # -> 3
+    # print(i.go(""" 0 and 3 """)) # -> 0
+    # print(i.go(""" mand(0, 3) """)) # -> 0
+    # print(i.go(""" 2 or 3 """)) # -> 2
+    # print(i.go(""" mor(2, 3) """)) # -> 2
+    # print(i.go(""" 0 or 3 """)) # -> 3
+    # print(i.go(""" mor(0, 3) """)) # -> 3
 
-    # syntax sugar (deffunc)
-    i.go("""
-        _mdeffunc := macro name, params_, body do
-            qq !name := func !!params_ do !body end end
-        end
-        #rule {mdeffunc: [_mdeffunc, EXPR, params, EXPRS, do, EXPR, end]}
-    """)
+    # # syntax sugar (deffunc)
+    # i.go("""
+    #     _mdeffunc := macro name, params_, body do
+    #         qq !name := func !!params_ do !body end end
+    #     end
+    #     #rule {mdeffunc: [_mdeffunc, EXPR, params, EXPRS, do, EXPR, end]}
+    # """)
 
-    print(i.go(""" expand(_mdeffunc(myadd, [a, b], a + b)) """)) # -> (define, [myadd, (func, [a, b], (add, [a, b]))])
-    print(i.ast(""" _mdeffunc(myadd, [a, b], a + b) """)) # -> (define, [myadd, (func, [a, b], (add, [a, b]))])
-    i.go(""" _mdeffunc(myadd, [a, b], a + b) """)
-    print(i.go(""" myadd(2, 3) """)) # -> 5
+    # print(i.go(""" expand(_mdeffunc(myadd, [a, b], a + b)) """)) # -> (define, [myadd, (func, [a, b], (add, [a, b]))])
+    # print(i.ast(""" _mdeffunc(myadd, [a, b], a + b) """)) # -> (define, [myadd, (func, [a, b], (add, [a, b]))])
+    # i.go(""" _mdeffunc(myadd, [a, b], a + b) """)
+    # print(i.go(""" myadd(2, 3) """)) # -> 5
 
-    print(i.go(""" expand(mdeffunc myadd2 params a, b do a + b end) """)) # -> (define, [myadd2, (func, [a, b], (add, [a, b]))])
-    print(i.ast(""" mdeffunc myadd2 params a, b do a + b end """)) # -> (define, [myadd2, (func, [a, b], (add, [a, b]))])
-    i.go(""" mdeffunc myadd2 params a, b do a + b end """)
-    print(i.go(""" myadd2(2, 3) """)) # -> 5
+    # print(i.go(""" expand(mdeffunc myadd2 params a, b do a + b end) """)) # -> (define, [myadd2, (func, [a, b], (add, [a, b]))])
+    # print(i.ast(""" mdeffunc myadd2 params a, b do a + b end """)) # -> (define, [myadd2, (func, [a, b], (add, [a, b]))])
+    # i.go(""" mdeffunc myadd2 params a, b do a + b end """)
+    # print(i.go(""" myadd2(2, 3) """)) # -> 5
 
-    # syntax sugar (defmacro)
-    i.go("""
-        _defmacro := macro name, params_, body do
-            qq !name := macro !!params_ do !body end end
-        end
-        #rule {defmacro: [_defmacro, EXPR, params, EXPRS, do, EXPR, end]}
-    """)
-    print(i.go(""" expand(
-        _defmacro(mwhen, [cond, body], expr(sym("if"), cond, body, None))
-    ) """))
-    # ->
+    # # syntax sugar (defmacro)
+    # i.go("""
+    #     _defmacro := macro name, params_, body do
+    #         qq !name := macro !!params_ do !body end end
+    #     end
+    #     #rule {defmacro: [_defmacro, EXPR, params, EXPRS, do, EXPR, end]}
+    # """)
+    # print(i.go(""" expand(
+    #     _defmacro(mwhen, [cond, body], expr(sym("if"), cond, body, None))
+    # ) """))
+    # # ->
 
-    # Test EXPRS with zero and one parameter
-    i.go(""" mdeffunc zero_params params do 2 end """)
-    print(i.go(""" zero_params() """)) # -> 2
+    # # Test EXPRS with zero and one parameter
+    # i.go(""" mdeffunc zero_params params do 2 end """)
+    # print(i.go(""" zero_params() """)) # -> 2
 
-    i.go(""" mdeffunc one_param params x do x * 2 end """)
-    print(i.go(""" one_param(3) """)) # -> 6
+    # i.go(""" mdeffunc one_param params x do x * 2 end """)
+    # print(i.go(""" one_param(3) """)) # -> 6
 
-    print(i.go(""" expand(
-        _defmacro(mwhen, [cond, body], qq if !cond then !body else None end end)
-    ) """))
-    i.go(""" _defmacro(mwhen, [cond, body], qq if !cond then !body else None end end) """)
-    print(i.go(""" expand(mwhen(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
-    print(i.go(""" mwhen(2 == 2, 3) """)) # -> 3
-    print(i.go(""" mwhen(2 == 3, 4 / 0) """)) # -> None
-    # print(i.go(""" mwhen(2 == 2) """)) # -> Error (Argument mismatch)
+    # print(i.go(""" expand(
+    #     _defmacro(mwhen, [cond, body], qq if !cond then !body else None end end)
+    # ) """))
+    # i.go(""" _defmacro(mwhen, [cond, body], qq if !cond then !body else None end end) """)
+    # print(i.go(""" expand(mwhen(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
+    # print(i.go(""" mwhen(2 == 2, 3) """)) # -> 3
+    # print(i.go(""" mwhen(2 == 3, 4 / 0) """)) # -> None
+    # # print(i.go(""" mwhen(2 == 2) """)) # -> Error (Argument mismatch)
 
-    print(i.go(""" expand(
-        defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
-    ) """))
-    i.go("""
-        defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
-    """)
-    print(i.go(""" expand(mwhen2(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
-    print(i.go(""" mwhen2(2 == 2, 3) """)) # -> 3
-    print(i.go(""" mwhen2(2 == 3, 4 / 0) """)) # -> None
-    # print(i.go(""" mwhen2(2 == 2) """)) # -> Error (Argument mismatch)
+    # print(i.go(""" expand(
+    #     defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
+    # ) """))
+    # i.go("""
+    #     defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
+    # """)
+    # print(i.go(""" expand(mwhen2(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
+    # print(i.go(""" mwhen2(2 == 2, 3) """)) # -> 3
+    # print(i.go(""" mwhen2(2 == 3, 4 / 0) """)) # -> None
+    # # print(i.go(""" mwhen2(2 == 2) """)) # -> Error (Argument mismatch)
 
-    # i.go(""" mdeffunc trailing_comma params a, b, do a + b end """) # -> Error
-    # print(i.go(""" mwhen2(2 == 2) """)) # -> Error (Argument mismatch)
+    # # i.go(""" mdeffunc trailing_comma params a, b, do a + b end """) # -> Error
+    # # print(i.go(""" mwhen2(2 == 2) """)) # -> Error (Argument mismatch)
 
     # repeated arguments and let
     i.go("""
-        deffunc get_let_params params bindings_ast do
-            map(bindings_ast, func pair do pair[0] end)
-        end;
-        deffunc get_let_args params bindings_ast do
-            map(bindings_ast, func pair do pair[1] end)
-        end;
-
         _let_func := macro bindings, body do qq
-            func !!get_let_params(bindings) do
+            func !!map(bindings, func pair do pair[0] end) do
                 !body
-            end (!!get_let_args(bindings))
+            end (!!map(bindings, func pair do pair[1] end))
         end end
         #rule {let_func: [_let_func, *[var, EXPR, be, EXPR], do, EXPR, end]}
     """)
@@ -1148,15 +1146,11 @@ if __name__ == "__main__":
     # i.go(""" let_func var a = 1 do a end """) # -> Error (Expected be)
 
     i.go("""
-        deffunc make_defines params bindings_ast do
-            map(bindings_ast, func pair do
-                expr(sym("define"), [pair[0], pair[1]])
-            end)
-        end;
-
         _let_scope := macro bindings, body do qq
             scope
-                !!make_defines(bindings);
+                !!map(bindings, func binding do
+                    qq !binding[0] := !binding[1] end
+                end);
                 !body
             end
         end end
@@ -1175,3 +1169,49 @@ if __name__ == "__main__":
         end
     """)) # -> [9, 15]
     print(i.go(""" a """)) # -> 2 (outer scope `a` is unchanged)
+
+    # Optional arguments
+
+    i.go("""
+        #rule {foo: [_foo, +[opt, EXPR], do, EXPR, end]}
+        None
+    """)
+    print(i.ast(""" foo do 4 end """)) # -> (_foo, [[], 4])
+    print(i.ast(""" foo opt 2 + 3 do 4 end """)) # -> (_foo, [[(add, [2, 3])], 4])
+    # # print(i.ast(""" foo opt 2 + 3 opt 4 + 5 do 6 end """)) # -> Error
+
+    # if by macro
+    i.go("""
+        _mif := macro cnd, thn, elifs, els do scope
+            e := if els == [] then None else qq !els[0] end end;
+            for [cnd, thn] in elifs.reverse() do
+                e = qq if !cnd then !thn else !(e) end end
+            end;
+            qq if !cnd then !thn else !(e) end end
+        end end
+        #rule {mif: [_mif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], +[else, EXPR], end]}
+    """)
+    print(i.ast(""" mif 2 == 3 then 4 end """)) # -> (_mif, [(equal, [2, 3]), 4, [], []])
+    print(i.ast(""" mif 2 == 3 then 4 else 5 end """)) # -> (_mif, [(equal, [2, 3]), 4, [], [5]])
+    print(i.ast(""" mif 2 == 3 then 4 elif 2 == 2 then 5 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [2, 2]), 5]], []])
+    print(i.ast(""" mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [2, 2]), 5]], [6]])
+    print(i.ast(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [3, 4]), 5], [(equal, [2, 2]), 6]], []])
+    print(i.ast(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [3, 4]), 5], [(equal, [2, 2]), 6]], [7]])
+    print(i.go(""" expand(mif 2 == 3 then 4 end) """)) # -> (if, (equal, [2, 3]), 4, None)
+    print(i.go(""" expand(mif 2 == 3 then 4 else 5 end) """)) # -> (if, (equal, [2, 3]), 4, 5)
+    print(i.go(""" expand(mif 2 == 3 then 4 elif 2 == 2 then 5 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [2, 2]), 5, None))
+    print(i.go(""" expand(mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [2, 2]), 5, 6))
+    print(i.go(""" expand(mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [3, 4]), 5, (if, (equal, [2, 2]), 6, None)))
+    print(i.go(""" expand(mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [3, 4]), 5, (if, (equal, [2, 2]), 6, 7)))
+    print(i.go(""" mif 2 == 3 then 4 end """)) # -> None
+    print(i.go(""" mif 2 == 3 then 4 else 5 end """)) # -> 5
+    print(i.go(""" mif 2 == 3 then 4 elif 2 == 2 then 5 end """)) # -> 5
+    print(i.go(""" mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """)) # -> 5
+    print(i.go(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """)) # -> 6
+    print(i.go(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """)) # -> 6
+
+    # Error cases for mif
+    # print(i.ast(""" mif then 4 end """)) # -> Error (Unexpected token)
+    # print(i.ast(""" mif 2 == 3 4 end """)) # -> Error (Expected then)
+    # print(i.ast(""" mif 2 == 3 then 4 else end """)) # -> Error (Unexpected token)
+    # print(i.ast(""" mif 2 == 3 then 4 else 5 else 6 end """)) # -> Error (Extra token)
