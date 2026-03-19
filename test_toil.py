@@ -1316,51 +1316,51 @@ text
 class TestQuasiquote(TestBase):
     def test_basic(self):
         self.i.go(""" a := 2; b := ["A", "B"] """)
-        assert self.i.go(""" qq(3) """) == 3
-        assert self.i.go(""" qq("A") """) == "A"
-        assert self.i.go(""" qq(a) """) == Sym("a")
-        assert self.i.go(""" qq(!a) """) == 2
-        assert self.i.go(""" qq(!a + 2) """) == (Sym("add"), [2, 2])
-        assert self.i.go(""" qq(!(a + 2)) """) == 4
+        assert self.i.go(""" qq 3 end """) == 3
+        assert self.i.go(""" qq "A" end """) == "A"
+        assert self.i.go(""" qq a end """) == Sym("a")
+        assert self.i.go(""" qq !a end """) == 2
+        assert self.i.go(""" qq !a + 2 end """) == (Sym("add"), [2, 2])
+        assert self.i.go(""" qq !(a + 2) end """) == 4
 
     def test_list(self):
         self.i.go(""" a := 2; b := ["A", "B"] """)
-        assert self.i.go(""" qq([a, b]) """) == [Sym("a"), Sym("b")]
-        assert self.i.go(""" qq([!a, !b]) """) == [2, ["A", "B"]]
+        assert self.i.go(""" qq [a, b] end """) == [Sym("a"), Sym("b")]
+        assert self.i.go(""" qq [!a, !b] end """) == [2, ["A", "B"]]
 
     def test_splicing(self):
         self.i.go(""" a := 2; b := ["A", "B"] """)
-        assert self.i.go(""" qq([!!b]) """) == ["A", "B"]
-        assert self.i.go(""" qq([a, !!b, 2]) """) == [Sym("a"), "A", "B", 2]
+        assert self.i.go(""" qq [!!b] end """) == ["A", "B"]
+        assert self.i.go(""" qq [a, !!b, 2] end """) == [Sym("a"), "A", "B", 2]
 
     def test_nested(self):
         self.i.go(""" a := 2 """)
         expected = (Sym("if"), (Sym("equal"), [2, 3]), 4, 5)
-        assert self.i.go(""" qq(if !a == 3 then 4 else 5 end) """) == expected
-        assert self.i.go(""" eval_expr(qq(if !a == 3 then 4 else 5 end)) """) == 5
+        assert self.i.go(""" qq if !a == 3 then 4 else 5 end end """) == expected
+        assert self.i.go(""" eval_expr(qq if !a == 3 then 4 else 5 end end) """) == 5
 
     def test_splicing_call(self, capsys):
         self.i.go(""" args := [2, 3] """)
-        assert self.i.go(""" qq(print(1, !!args, 4)) """) == (Sym("print"), [1, 2, 3, 4])
-        self.i.go(""" eval_expr(qq(print(1, !!args, 4))) """)
+        assert self.i.go(""" qq print(1, !!args, 4) end """) == (Sym("print"), [1, 2, 3, 4])
+        self.i.go(""" eval_expr(qq print(1, !!args, 4) end) """)
         assert capsys.readouterr().out == "1 2 3 4\n"
 
     def test_splicing_seq(self, capsys):
         self.i.go(""" stmts := [quote(print(2)), quote(print(3))] """)
-        seq_ast = self.i.go(""" qq(print(1); !!stmts; print(4)) """)
-        self.i.go(""" eval_expr(qq(print(1); !!stmts; print(4))) """)
+        seq_ast = self.i.go(""" qq print(1); !!stmts; print(4) end """)
+        self.i.go(""" eval_expr(qq print(1); !!stmts; print(4) end) """)
         assert capsys.readouterr().out == "1\n2\n3\n4\n"
 
     def test_errors(self):
         with pytest.raises(AssertionError, match="Undefined variable"):
-            self.i.go(""" qq(!c) """)
-        with pytest.raises(AssertionError, match="Unexpected token"):
-             self.i.go(""" qq(if) """)
+            self.i.go(""" qq !c end """)
+        with pytest.raises(AssertionError):
+             self.i.go(""" qq if end """)
 
 class TestMacroSamples(TestBase):
     def test_when(self):
         self.i.go("""
-            when := macro cond, body do qq(if !cond then !body else None end) end
+            when := macro cond, body do qq if !cond then !body else None end end end
         """)
         assert self.i.go(""" expand(when(2 == 2, 3)) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
         assert self.i.go(""" when(2 == 2, 3) """) == 3
@@ -1377,7 +1377,7 @@ class TestMacroSamples(TestBase):
     def test_deffunc_macro(self):
         self.i.go("""
             mdeffunc := macro name, params_, body do
-                qq(!name := func !!params_ do !body end)
+                qq !name := func !!params_ do !body end end
             end
         """)
         self.i.go(""" mdeffunc(myadd, [a, b], a + b) """)
@@ -1386,31 +1386,31 @@ class TestMacroSamples(TestBase):
     def test_defmacro_macro(self):
         self.i.go("""
             defmacro := macro name, params_, body do
-                qq(!name := macro !!params_ do !body end)
+                qq !name := macro !!params_ do !body end end
             end
         """)
-        self.i.go(""" defmacro(when, [cond, body], qq(if !cond then !body else None end)) """)
+        self.i.go(""" defmacro(when, [cond, body], qq if !cond then !body else None end end) """)
         assert self.i.go(""" when(2 == 2, 3) """) == 3
         assert self.i.go(""" when(2 == 3, 4 / 0) """) is None
         with pytest.raises(AssertionError, match="Argument mismatch"):
             self.i.go(""" when(2 == 2) """)
 
     def test_mscope(self, capsys):
-        self.i.go(""" mscope := macro body do qq(func do !body end ()) end """)
+        self.i.go(""" mscope := macro body do qq func do !body end () end end """)
         self.i.go(""" a := 2; mscope(print(a); a := 3; print(a)); print(a) """)
         assert capsys.readouterr().out == "2\n3\n2\n"
 
     def test_anaphoric_if_and_or(self):
         self.i.go("""
             aif := macro cnd, thn, els do
-                qq(if it := !cnd then !thn else !els end)
+                qq if it := !cnd then !thn else !els end end
             end
         """)
         assert self.i.go(""" aif(2, [True, it], [False, it]) """) == [True, 2]
         assert self.i.go(""" aif(0, [True, it], [False, it]) """) == [False, 0]
 
-        self.i.go(""" mand := macro a, b do qq(aif(!a, !b, it)) end """)
-        self.i.go(""" mor := macro a, b do qq(aif(!a, it, !b)) end """)
+        self.i.go(""" mand := macro a, b do qq aif(!a, !b, it) end end """)
+        self.i.go(""" mor := macro a, b do qq aif(!a, it, !b) end end """)
 
         assert self.i.go(""" mand(2, 3) """) == 3
         assert self.i.go(""" mand(0, 3) """) == 0
@@ -1423,7 +1423,7 @@ class TestMacroSamples(TestBase):
     def test_side_effect_macro(self):
         self.i.go("""
             deffunc ftwice params x do x + x end;
-            mtwice := macro x do qq(add(!x, !x)) end
+            mtwice := macro x do qq add(!x, !x) end end
         """)
         self.i.go(""" cnt := 0 """)
         assert self.i.go(""" ftwice(cnt = cnt + 1) """) == 2
@@ -1433,7 +1433,7 @@ class TestMacroSamples(TestBase):
         assert self.i.go(""" cnt """) == 2
 
     def test_capture(self):
-        self.i.go(""" capture := macro val do qq(x := !val) end """)
+        self.i.go(""" capture := macro val do qq x := !val end end """)
         self.i.go(""" x := 1 """)
         self.i.go(""" capture(2) """)
         assert self.i.go(""" x """) == 2
@@ -1441,7 +1441,7 @@ class TestMacroSamples(TestBase):
     def test_call_by_name(self):
         self.i.go("""
             call_by_name := macro name_str, *args do
-                qq( (!sym(qq(!name_str)))(!!args) )
+                qq (!sym(qq !name_str end))(!!args) end
             end
         """)
         assert self.i.go(""" call_by_name("add", 2, 3) """) == 5
@@ -1450,7 +1450,7 @@ class TestMacroSamples(TestBase):
 class TestCustomSyntax(TestBase):
     def test_when(self):
         self.i.go("""
-            _when := macro cond, body do qq(if !cond then !body else None end) end
+            _when := macro cond, body do qq if !cond then !body else None end end end
             #rule {when: [_when, EXPR, do, EXPR, end]}
         """)
         assert self.i.go(""" expand(_when(2 == 2, 3)) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
@@ -1472,11 +1472,6 @@ class TestCustomSyntax(TestBase):
 
     def test_mfor(self):
         self.i.go("""
-            #rule {qq: [qq, EXPR, end]}
-
-            _qqs := macro expr do qq qq scope !expr end end end end;
-            #rule {qqs: [_qqs, EXPR, end]}
-
             _mfor := macro var, coll, body do qqs
                 __for_coll := !coll;
                 __for_index := -1;
@@ -1498,11 +1493,6 @@ class TestCustomSyntax(TestBase):
 
     def test_aif_and_or(self):
         self.i.go("""
-            #rule {qq: [qq, EXPR, end]}
-
-            _qqs := macro expr do qq qq scope !expr end end end end;
-            #rule {qqs: [_qqs, EXPR, end]}
-
             _aif := macro cnd, thn, els do qqs if it := !cnd then !thn else !els end end end
             #rule {aif: [_aif, EXPR, then, EXPR, else, EXPR, end]}
         """)
@@ -1526,13 +1516,6 @@ class TestCustomSyntax(TestBase):
 
     def test_mdeffunc_defmacro(self):
         # _mdeffunc macro definition and rule
-        self.i.go("""
-            #rule {qq: [qq, EXPR, end]}
-
-            _qqs := macro expr do qq qq scope !expr end end end end
-            #rule {qqs: [_qqs, EXPR, end]}
-        """)
-
         self.i.go("""
             _mdeffunc := macro name, params_, body do
                 qq !name := func !!params_ do !body end end
@@ -1571,7 +1554,7 @@ class TestCustomSyntax(TestBase):
         # defmacro custom syntax
         assert self.i.go(""" expand(
             defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
-        ) """) == (Sym("define"), [Sym("mwhen2"), (Sym("macro"), [Sym("cond"), Sym("body")], (Sym("qq"), [(Sym("if"), (Sym("!"), [Sym("cond")]), (Sym("!"), [Sym("body")]), None)]))])
+        ) """) == (Sym("define"), [Sym("mwhen2"), (Sym("macro"), [Sym("cond"), Sym("body")], (Sym("__core_qq"), [(Sym("if"), (Sym("!"), [Sym("cond")]), (Sym("!"), [Sym("body")]), None)]))])
 
         self.i.go("""
             defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
@@ -1602,8 +1585,6 @@ class TestCustomSyntax(TestBase):
     def test_let_custom_rule(self):
         # Setup for let_func and let_scope
         self.i.go("""
-            #rule {qq: [qq, EXPR, end]}
-
             _let_func := macro bindings, body do qq
                 func !!map(bindings, func pair do pair[0] end) do
                     !body
@@ -1657,7 +1638,6 @@ class TestCustomSyntax(TestBase):
     def test_optional_arguments(self):
         # Setup for foo and mif
         self.i.go("""
-            #rule {qq: [qq, EXPR, end]}
             #rule {foo: [_foo, +[opt, EXPR], do, EXPR, end]}
 
             _mif := macro cnd, thn, elifs, els do scope

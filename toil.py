@@ -512,7 +512,7 @@ class Evaluator:
                 return env.val(name)
             case (Sym("quote"), [expr]):
                 return expr
-            case (Sym("qq"), [expr]):
+            case (Sym("__core_qq"), [expr]):
                 return self._evaluate_quasiquote(expr, env)
             case (Sym("define"), [left_expr, right_expr]):
                 return self._evaluate_define(left_expr, right_expr, env)
@@ -813,7 +813,11 @@ class Interpreter:
     def corelib(self):
         self.go("""
             #rule {scope: [__core_scope, EXPR, end]}
-            None
+
+            #rule {qq: [__core_qq, EXPR, end]}
+
+            __core_qqs := macro expr do qq qq scope !expr end end end end
+            #rule {qqs: [__core_qqs, EXPR, end]}
         """)
 
         return self
