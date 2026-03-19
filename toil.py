@@ -228,7 +228,6 @@ class Parser:
             case Sym("macro"): return self._func_macro(Sym("macro"))
             case Sym("if"): return self._if()
             case Sym("match"): return self._match()
-            case Sym("while"): return self._while()
             case Sym("for"): return self._for()
             case Sym("try"): return self._try()
             case Sym(name) if name in self._custom_rules:
@@ -305,14 +304,6 @@ class Parser:
             self._consume(Sym("end"))
         return (Sym("if"), cond_expr, then_expr, else_expr)
 
-    def _while(self):
-        self._advance()
-        cond_expr = self._expression()
-        self._consume(Sym("do"))
-        body_expr = self._expression()
-        self._consume(Sym("end"))
-        return (Sym("while"), cond_expr, body_expr)
-
     def _for(self):
         self._advance()
         var_expr = self._expression()
@@ -324,7 +315,7 @@ class Parser:
         return (Sym("__core_scope"), [(Sym("seq"), [
             (Sym("define"), [Sym("__for_coll"), coll_expr]),
             (Sym("define"), [Sym("__for_index"), -1]),
-            (Sym("while"),
+            (Sym("__core_while"), [
                 (Sym("less"), [(Sym("add"), [Sym("__for_index"), 1]), (Sym("len"), [Sym("__for_coll")])]),
                 (Sym("seq"), [
                     (Sym("assign"), [Sym("__for_index"), (Sym("add"), [Sym("__for_index"), 1])]),
@@ -333,7 +324,7 @@ class Parser:
                         body_expr
                     ])])
                 ])
-            )
+            ])
         ])])
 
     def _try(self):
@@ -512,7 +503,7 @@ class Evaluator:
                 return self._evaluate_if(cond_expr, then_expr, else_expr, env)
             case (Sym("match"), val_expr, cases):
                 return self._evaluate_match(val_expr, cases, env)
-            case (Sym("while"), cond_expr, body_expr):
+            case (Sym("__core_while"), [cond_expr, body_expr]):
                 return self._evaluate_while(cond_expr, body_expr, env)
             case (Sym("break"), args):
                 assert len(args) <= 1, f"Break takes zero or one argument @ evaluate(): {args}"
@@ -811,6 +802,8 @@ class Interpreter:
                 qq !name := func !!params_ do !body end end
             end
             #rule {deffunc: [__core_deffunc, EXPR, params, EXPRS, do, EXPR, end]}
+
+            #rule {while: [__core_while, EXPR, do, EXPR, end]}
         """)
 
         return self

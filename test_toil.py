@@ -116,7 +116,7 @@ class TestParse(TestBase):
         assert self.i.ast(""" a[0] = b[1] = 2 """) == (Sym("assign"), [(Sym("index"), [Sym("a"), 0]), (Sym("assign"), [(Sym("index"), [Sym("b"), 1]), 2])])
 
     def test_while(self):
-        assert self.i.ast(""" while i < 10 do i = i + 1 end """) == (Sym('while'), (Sym('less'), [Sym('i'), 10]), (Sym('assign'), [Sym('i'), (Sym('add'), [Sym('i'), 1])]))
+        assert self.i.ast(""" while i < 10 do i = i + 1 end """) == (Sym('__core_while'), [(Sym('less'), [Sym('i'), 10]), (Sym('assign'), [Sym('i'), (Sym('add'), [Sym('i'), 1])])])
 
     def test_call(self):
         assert self.i.ast(""" print() """) == (Sym("print"), [])
