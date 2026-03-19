@@ -227,7 +227,6 @@ class Parser:
             case Sym("func"): return self._func_macro(Sym("func"))
             case Sym("macro"): return self._func_macro(Sym("macro"))
             case Sym("deffunc"): return self._deffunc()
-            case Sym("scope"): return self._scope()
             case Sym("if"): return self._if()
             case Sym("match"): return self._match()
             case Sym("while"): return self._while()
@@ -302,12 +301,6 @@ class Parser:
         self._consume(Sym("end"))
         return (Sym("define"), [name, (Sym("func"), params, body_expr)])
 
-    def _scope(self):
-        self._advance()
-        body_expr = self._expression()
-        self._consume(Sym("end"))
-        return (Sym("scope"), body_expr)
-
     def _if(self):
         self._advance()
         cond_expr = self._expression()
@@ -340,20 +333,20 @@ class Parser:
         self._consume(Sym("do"))
         body_expr = self._expression()
         self._consume(Sym("end"))
-        return (Sym("scope"), (Sym("seq"), [
+        return (Sym("__core_scope"), [(Sym("seq"), [
             (Sym("define"), [Sym("__for_coll"), coll_expr]),
             (Sym("define"), [Sym("__for_index"), -1]),
             (Sym("while"),
                 (Sym("less"), [(Sym("add"), [Sym("__for_index"), 1]), (Sym("len"), [Sym("__for_coll")])]),
                 (Sym("seq"), [
                     (Sym("assign"), [Sym("__for_index"), (Sym("add"), [Sym("__for_index"), 1])]),
-                    (Sym("scope"), (Sym("seq"), [
+                    (Sym("__core_scope"), [(Sym("seq"), [
                         (Sym("define"), [var_expr, (Sym("index"), [Sym("__for_coll"), Sym("__for_index")])]),
                         body_expr
-                    ]))
+                    ])])
                 ])
             )
-        ]))
+        ])])
 
     def _try(self):
         self._advance()
@@ -553,7 +546,7 @@ class Evaluator:
             case (Sym("raise"), args):
                 assert len(args) <= 1, f"Raise takes zero or one argument @ evaluate(): {args}"
                 raise ToilException(self.evaluate(args[0], env) if args else None)
-            case (Sym("scope"), expr):
+            case (Sym("__core_scope"), [expr]):
                 return self.evaluate(expr, Environment(env))
             case (Sym("dot"), [target, attr]):
                 return self._evaluate_dot(target, attr, env)
@@ -817,6 +810,14 @@ class Interpreter:
         self._env = Environment(self._env)
         return self
 
+    def corelib(self):
+        self.go("""
+            #rule {scope: [__core_scope, EXPR, end]}
+            None
+        """)
+
+        return self
+
     def stdlib(self):
         self.go(""" __stdlib__ := None """)
         self.go("""
@@ -920,7 +921,7 @@ class Interpreter:
 if __name__ == "__main__":
     import sys
 
-    i = Interpreter().init_env().stdlib()
+    i = Interpreter().init_env().corelib().stdlib()
 
     def repl():
         while True:
@@ -1110,105 +1111,95 @@ if __name__ == "__main__":
     # # print(i.go(""" mwhen2(2 == 2) """)) # -> Error (Argument mismatch)
 
     # repeated arguments and let
-    i.go("""
-        _let_func := macro bindings, body do qq
-            func !!map(bindings, func pair do pair[0] end) do
-                !body
-            end (!!map(bindings, func pair do pair[1] end))
-        end end
-        #rule {let_func: [_let_func, *[var, EXPR, be, EXPR], do, EXPR, end]}
-    """)
+    # i.go("""
+    #     _let_func := macro bindings, body do qq
+    #         func !!map(bindings, func pair do pair[0] end) do
+    #             !body
+    #         end (!!map(bindings, func pair do pair[1] end))
+    #     end end
+    #     #rule {let_func: [_let_func, *[var, EXPR, be, EXPR], do, EXPR, end]}
+    # """)
 
-    print(i.go(""" expand(_let_func([[a, 4 + 5], [b, 6]], [a, b])) """))
-    # -> ((func, [a, b], [a, b]), [(add, [4, 5]), 6])
-    print(i.go(""" a := 2; b := 3; _let_func([[a, 4 + 5], [b, 6]], [a, b]) """)) # -> [9, 6]
-    print(i.go(""" a """)) # -> 2
+    # print(i.go(""" expand(_let_func([[a, 4 + 5], [b, 6]], [a, b])) """))
+    # # -> ((func, [a, b], [a, b]), [(add, [4, 5]), 6])
+    # print(i.go(""" a := 2; b := 3; _let_func([[a, 4 + 5], [b, 6]], [a, b]) """)) # -> [9, 6]
+    # print(i.go(""" a """)) # -> 2
 
-    print(i.go(""" expand(let_func var a be 4 + 5 var b be 6 do [a, b] end) """))
-    # -> ((func, [a, b], [a, b]), [(add, [4, 5]), 6])
-    print(i.go(""" a := 2; b := 3;
-        let_func
-            var a be 4 + 5
-            var b be 6
-        do
-            [a, b]
-        end
-    """)) # -> [9, 6]
-    print(i.go(""" a """)) # -> 2
+    # print(i.go(""" expand(let_func var a be 4 + 5 var b be 6 do [a, b] end) """))
+    # # -> ((func, [a, b], [a, b]), [(add, [4, 5]), 6])
+    # print(i.go(""" a := 2; b := 3;
+    #     let_func
+    #         var a be 4 + 5
+    #         var b be 6
+    #     do
+    #         [a, b]
+    #     end
+    # """)) # -> [9, 6]
+    # print(i.go(""" a """)) # -> 2
 
-    # Test zero and one argument (check * repetition)
-    print(i.go(""" let_func do 2 end """)) # -> 2
-    print(i.go(""" let_func var a be 2 do a * 3 end """)) # -> 6
-    print(i.go(""" let_func var a be 2 do let_func var b be 3 do a + b end end """)) # -> 5
+    # # Test zero and one argument (check * repetition)
+    # print(i.go(""" let_func do 2 end """)) # -> 2
+    # print(i.go(""" let_func var a be 2 do a * 3 end """)) # -> 6
+    # print(i.go(""" let_func var a be 2 do let_func var b be 3 do a + b end end """)) # -> 5
 
-    # Error cases for repetition
-    # i.go(""" let_func var a be 1 var b do a end """) # -> Error (Expected be)
-    # i.go(""" let_func var a = 1 do a end """) # -> Error (Expected be)
+    # # Error cases for repetition
+    # # i.go(""" let_func var a be 1 var b do a end """) # -> Error (Expected be)
+    # # i.go(""" let_func var a = 1 do a end """) # -> Error (Expected be)
 
-    i.go("""
-        _let_scope := macro bindings, body do qq
-            scope
-                !!map(bindings, func binding do
-                    qq !binding[0] := !binding[1] end
-                end);
-                !body
-            end
-        end end
-        #rule {let_scope: [_let_scope, *[var, EXPR, be, EXPR], do, EXPR, end]}
-    """)
-    print(i.go(""" expand(_let_scope([[a, 4 + 5], [b, a + 6]], [a, b])) """)) # -> (scope, (seq, [(define, [a, (add, [4, 5])]), (define, [b, (add, [a, 6])]), [a, b]]))
-    print(i.go(""" a := 2; b := 3; _let_scope([[a, 4 + 5], [b, a + 6]], [a, b]) """)) # -> [9, 15]
-    print(i.go(""" a """)) # -> 2 (outer scope `a` is unchanged)
-    print(i.go(""" expand(let_scope var a be 4 + 5 var b be a + 6 do [a, b] end) """)) # -> (scope, (seq, [(define, [a, (add, [4, 5])]), (define, [b, (add, [a, 6])]), [a, b]]))
-    print(i.go(""" a := 2; b := 3;
-        let_scope
-            var a be 4 + 5
-            var b be a + 6
-        do
-            [a, b]
-        end
-    """)) # -> [9, 15]
-    print(i.go(""" a """)) # -> 2 (outer scope `a` is unchanged)
+    # i.go("""
+    #     _let_scope := macro bindings, body do qq
+    #         scope
+    #             !!map(bindings, func binding do
+    #                 qq !binding[0] := !binding[1] end
+    #             end);
+    #             !body
+    #         end
+    #     end end
+    #     #rule {let_scope: [_let_scope, *[var, EXPR, be, EXPR], do, EXPR, end]}
+    # """)
+    # print(i.go(""" expand(_let_scope([[a, 4 + 5], [b, a + 6]], [a, b])) """)) # -> (scope, (seq, [(define, [a, (add, [4, 5])]), (define, [b, (add, [a, 6])]), [a, b]]))
+    # print(i.go(""" a := 2; b := 3; _let_scope([[a, 4 + 5], [b, a + 6]], [a, b]) """)) # -> [9, 15]
+    # print(i.go(""" a """)) # -> 2 (outer scope `a` is unchanged)
+    # print(i.go(""" expand(let_scope var a be 4 + 5 var b be a + 6 do [a, b] end) """)) # -> (scope, (seq, [(define, [a, (add, [4, 5])]), (define, [b, (add, [a, 6])]), [a, b]]))
+    # print(i.go(""" a := 2; b := 3;
+    #     let_scope
+    #         var a be 4 + 5
+    #         var b be a + 6
+    #     do
+    #         [a, b]
+    #     end
+    # """)) # -> [9, 15]
+    # print(i.go(""" a """)) # -> 2 (outer scope `a` is unchanged)
 
-    # Optional arguments
-
-    i.go("""
-        #rule {foo: [_foo, +[opt, EXPR], do, EXPR, end]}
-        None
-    """)
-    print(i.ast(""" foo do 4 end """)) # -> (_foo, [[], 4])
-    print(i.ast(""" foo opt 2 + 3 do 4 end """)) # -> (_foo, [[(add, [2, 3])], 4])
-    # # print(i.ast(""" foo opt 2 + 3 opt 4 + 5 do 6 end """)) # -> Error
-
-    # if by macro
-    i.go("""
-        _mif := macro cnd, thn, elifs, els do scope
-            e := if els == [] then None else qq !els[0] end end;
-            for [cnd, thn] in elifs.reverse() do
-                e = qq if !cnd then !thn else !(e) end end
-            end;
-            qq if !cnd then !thn else !(e) end end
-        end end
-        #rule {mif: [_mif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], +[else, EXPR], end]}
-    """)
-    print(i.ast(""" mif 2 == 3 then 4 end """)) # -> (_mif, [(equal, [2, 3]), 4, [], []])
-    print(i.ast(""" mif 2 == 3 then 4 else 5 end """)) # -> (_mif, [(equal, [2, 3]), 4, [], [5]])
-    print(i.ast(""" mif 2 == 3 then 4 elif 2 == 2 then 5 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [2, 2]), 5]], []])
-    print(i.ast(""" mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [2, 2]), 5]], [6]])
-    print(i.ast(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [3, 4]), 5], [(equal, [2, 2]), 6]], []])
-    print(i.ast(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [3, 4]), 5], [(equal, [2, 2]), 6]], [7]])
-    print(i.go(""" expand(mif 2 == 3 then 4 end) """)) # -> (if, (equal, [2, 3]), 4, None)
-    print(i.go(""" expand(mif 2 == 3 then 4 else 5 end) """)) # -> (if, (equal, [2, 3]), 4, 5)
-    print(i.go(""" expand(mif 2 == 3 then 4 elif 2 == 2 then 5 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [2, 2]), 5, None))
-    print(i.go(""" expand(mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [2, 2]), 5, 6))
-    print(i.go(""" expand(mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [3, 4]), 5, (if, (equal, [2, 2]), 6, None)))
-    print(i.go(""" expand(mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [3, 4]), 5, (if, (equal, [2, 2]), 6, 7)))
-    print(i.go(""" mif 2 == 3 then 4 end """)) # -> None
-    print(i.go(""" mif 2 == 3 then 4 else 5 end """)) # -> 5
-    print(i.go(""" mif 2 == 3 then 4 elif 2 == 2 then 5 end """)) # -> 5
-    print(i.go(""" mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """)) # -> 5
-    print(i.go(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """)) # -> 6
-    print(i.go(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """)) # -> 6
+    # # if by macro
+    # i.go("""
+    #     _mif := macro cnd, thn, elifs, els do scope
+    #         e := if els == [] then None else qq !els[0] end end;
+    #         for [cnd, thn] in elifs.reverse() do
+    #             e = qq if !cnd then !thn else !(e) end end
+    #         end;
+    #         qq if !cnd then !thn else !(e) end end
+    #     end end
+    #     #rule {mif: [_mif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], +[else, EXPR], end]}
+    # """)
+    # print(i.ast(""" mif 2 == 3 then 4 end """)) # -> (_mif, [(equal, [2, 3]), 4, [], []])
+    # print(i.ast(""" mif 2 == 3 then 4 else 5 end """)) # -> (_mif, [(equal, [2, 3]), 4, [], [5]])
+    # print(i.ast(""" mif 2 == 3 then 4 elif 2 == 2 then 5 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [2, 2]), 5]], []])
+    # print(i.ast(""" mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [2, 2]), 5]], [6]])
+    # print(i.ast(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [3, 4]), 5], [(equal, [2, 2]), 6]], []])
+    # print(i.ast(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [3, 4]), 5], [(equal, [2, 2]), 6]], [7]])
+    # print(i.go(""" expand(mif 2 == 3 then 4 end) """)) # -> (if, (equal, [2, 3]), 4, None)
+    # print(i.go(""" expand(mif 2 == 3 then 4 else 5 end) """)) # -> (if, (equal, [2, 3]), 4, 5)
+    # print(i.go(""" expand(mif 2 == 3 then 4 elif 2 == 2 then 5 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [2, 2]), 5, None))
+    # print(i.go(""" expand(mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [2, 2]), 5, 6))
+    # print(i.go(""" expand(mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [3, 4]), 5, (if, (equal, [2, 2]), 6, None)))
+    # print(i.go(""" expand(mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [3, 4]), 5, (if, (equal, [2, 2]), 6, 7)))
+    # print(i.go(""" mif 2 == 3 then 4 end """)) # -> None
+    # print(i.go(""" mif 2 == 3 then 4 else 5 end """)) # -> 5
+    # print(i.go(""" mif 2 == 3 then 4 elif 2 == 2 then 5 end """)) # -> 5
+    # print(i.go(""" mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """)) # -> 5
+    # print(i.go(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """)) # -> 6
+    # print(i.go(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """)) # -> 6
 
     # Error cases for mif
     # print(i.ast(""" mif then 4 end """)) # -> Error (Unexpected token)

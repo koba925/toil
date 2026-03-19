@@ -5,7 +5,7 @@ from toil import Interpreter, Sym
 class TestBase:
     @pytest.fixture(autouse=True)
     def set_interpreter(self):
-        self.i = Interpreter().init_env().stdlib()
+        self.i = Interpreter().init_env().corelib().stdlib()
 
 
 class TestScan(TestBase):
@@ -217,16 +217,16 @@ class TestEvaluate(TestBase):
     def test_evaluate_scope(self, capsys):
         self.i.evaluate((Sym("define"), [Sym("a"), 2]))
         assert self.i.evaluate(Sym("a")) == 2
-        assert self.i.evaluate((Sym("scope"), Sym("a"))) == 2
+        assert self.i.evaluate((Sym("__core_scope"), [Sym("a")])) == 2
 
-        assert self.i.evaluate((Sym("scope"), (Sym("seq"), [
+        assert self.i.evaluate((Sym("__core_scope"), [(Sym("seq"), [
             (Sym("print"), [Sym("a")]),
             (Sym("define"), [Sym("a"), 3]),
             (Sym("print"), [Sym("a")]),
             (Sym("define"), [Sym("b"), 4]),
             (Sym("print"), [Sym("b")]),
             Sym("b")
-        ]))) == 4
+        ])])) == 4
         assert capsys.readouterr().out == "2\n3\n4\n"
 
         assert self.i.evaluate(Sym("a")) == 2
@@ -282,10 +282,10 @@ class TestEvaluate(TestBase):
         self.i.evaluate((Sym("define"), [Sym("x"), 2]))
         self.i.evaluate((Sym("define"), [Sym("return_x"), (Sym("func"), [], Sym("x"))]))
         assert self.i.evaluate((Sym("return_x"), [])) == 2
-        assert self.i.evaluate((Sym("scope"), (Sym("seq"), [
+        assert self.i.evaluate((Sym("__core_scope"), [(Sym("seq"), [
             (Sym("define"), [Sym("x"), 3]),
             (Sym("return_x"), [])
-        ]))) == 2
+        ])])) == 2
         assert self.i.evaluate(Sym("x")) == 2
 
     def test_adder(self):
@@ -1275,11 +1275,11 @@ text
 
         # Anaphoric if
         self.i.go("""
-            defmacro(aif, [cnd, thn, els], expr(sym("scope"), expr(sym("if"),
+            defmacro(aif, [cnd, thn, els], expr(sym("__core_scope"), [expr(sym("if"),
                 expr(sym("define"), [sym("it"), cnd]),
                 thn,
                 els
-            )))
+            )]))
         """)
         assert self.i.go(""" aif(2, [True, it], [False, it]) """) == [True, 2]
         assert self.i.go(""" aif(0, [True, it], [False, it]) """) == [False, 0]
@@ -1640,7 +1640,7 @@ class TestCustomSyntax(TestBase):
 
         # let_scope tests (sequential binding)
         assert self.i.go(""" expand(let_scope var a be 4 + 5 var b be a + 6 do [a, b] end) """) == \
-               (Sym('scope'), (Sym('seq'), [(Sym('define'), [Sym('a'), (Sym('add'), [4, 5])]), (Sym('define'), [Sym('b'), (Sym('add'), [Sym('a'), 6])]), [Sym('a'), Sym('b')]]))
+               (Sym('__core_scope'), [(Sym('seq'), [(Sym('define'), [Sym('a'), (Sym('add'), [4, 5])]), (Sym('define'), [Sym('b'), (Sym('add'), [Sym('a'), 6])]), [Sym('a'), Sym('b')]])])
 
         self.i.go(""" a := 2 """)
         # 'b' is bound to the inner 'a' (9), demonstrating sequential binding
