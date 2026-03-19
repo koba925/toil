@@ -226,7 +226,6 @@ class Parser:
             case s if type(s) == str: return self._advance()
             case Sym("func"): return self._func_macro(Sym("func"))
             case Sym("macro"): return self._func_macro(Sym("macro"))
-            case Sym("deffunc"): return self._deffunc()
             case Sym("if"): return self._if()
             case Sym("match"): return self._match()
             case Sym("while"): return self._while()
@@ -289,17 +288,6 @@ class Parser:
         body_expr = self._expression()
         self._consume(Sym("end"))
         return (op, params, body_expr)
-
-    def _deffunc(self):
-        self._advance()
-        name = self._advance()
-        assert is_name(name), f"Expected function name @ deffunc: {name}"
-        self._consume(Sym("params"))
-        params = self._comma_separated_exprs(Sym("do"))
-        self._consume(Sym("do"))
-        body_expr = self._expression()
-        self._consume(Sym("end"))
-        return (Sym("define"), [name, (Sym("func"), params, body_expr)])
 
     def _if(self):
         self._advance()
@@ -816,8 +804,13 @@ class Interpreter:
 
             #rule {qq: [__core_qq, EXPR, end]}
 
-            __core_qqs := macro expr do qq qq scope !expr end end end end
+            __core_qqs := macro expr do qq qq scope !expr end end end end;
             #rule {qqs: [__core_qqs, EXPR, end]}
+
+            __core_deffunc := macro name, params_, body do
+                qq !name := func !!params_ do !body end end
+            end
+            #rule {deffunc: [__core_deffunc, EXPR, params, EXPRS, do, EXPR, end]}
         """)
 
         return self
@@ -954,47 +947,6 @@ if __name__ == "__main__":
 
     # Example
 
-    # i.go("""
-    #     _when := macro cond, body do qq(if !cond then !body else None end) end
-    #     #rule {when: [_when, EXPR, do, EXPR, end]}
-    # """)
-    # print(i.go(""" expand(_when(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
-    # print(i.go(""" _when(2 == 2, 3) """)) # -> 3
-    # print(i.go(""" _when(2 == 3, 4 / 0) """)) # -> None
-    # print(i.go(""" expand(when 2 == 2 do 3 end ) """)) # -> (if, (equal, [2, 2]), 3, None)
-    # print(i.go(""" when 2 == 2 do 3 end """)) # -> 3
-    # print(i.go(""" when 2 == 3 do 4 / 0 end """)) # -> None
-
-    # # i.go(""" #rule if """) # -> Error
-    # # i.go(""" #rule [_when, EXPR, do, EXPR, end] """) # -> Error
-    # # i.go(""" when do 4 end""") # -> Error
-    # # i.go(""" when 2 == 3 4 end """) # -> Error
-    # # i.go(""" when 2 == 3 do end """) # -> Error
-    # # i.go(""" when 2 == 3 do 4 """) # -> Error
-
-    # # Test rule redefinition
-    # i.go("""
-    #     _while := macro cond, body do qq(while !cond do !body end) end
-    #     #rule {when: [_while, EXPR, do, EXPR, end]}
-    # """)
-    # print(i.go("""
-    #     i := 0;
-    #     sum := 0;
-    #     when i < 5 do
-    #         sum = sum + i;
-    #         i = i + 1
-    #     end;
-    #     sum
-    # """)) # -> 10
-
-    # quasiquote rule and macro
-    i.go("""
-        #rule {qq: [qq, EXPR, end]}
-
-        _qqs := macro expr do qq qq scope !expr end end end end
-        #rule {qqs: [_qqs, EXPR, end]}
-    """)
-
     # # for by macro
 
     # i.go("""
@@ -1053,14 +1005,6 @@ if __name__ == "__main__":
     # print(i.go(""" mor(2, 3) """)) # -> 2
     # print(i.go(""" 0 or 3 """)) # -> 3
     # print(i.go(""" mor(0, 3) """)) # -> 3
-
-    # # syntax sugar (deffunc)
-    # i.go("""
-    #     _mdeffunc := macro name, params_, body do
-    #         qq !name := func !!params_ do !body end end
-    #     end
-    #     #rule {mdeffunc: [_mdeffunc, EXPR, params, EXPRS, do, EXPR, end]}
-    # """)
 
     # print(i.go(""" expand(_mdeffunc(myadd, [a, b], a + b)) """)) # -> (define, [myadd, (func, [a, b], (add, [a, b]))])
     # print(i.ast(""" _mdeffunc(myadd, [a, b], a + b) """)) # -> (define, [myadd, (func, [a, b], (add, [a, b]))])

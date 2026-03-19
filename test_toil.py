@@ -138,25 +138,25 @@ class TestParse(TestBase):
             self.i.ast(""" func a do 2 """)
 
     def test_deffunc(self):
-        assert self.i.ast(""" deffunc two params do 2 end """) == (
+        assert self.i.go(""" expand(deffunc two params do 2 end) """) == (
             Sym('define'), [Sym('two'), (Sym('func'), [], 2)])
-        assert self.i.ast("""
+        assert self.i.go(""" expand(
              deffunc add2 params a do
                 a + 2
              end
-        """) == (Sym('define'), [Sym('add2'), (Sym('func'), [Sym('a')], (Sym('add'), [Sym('a'), 2]))])
-        assert self.i.ast("""
+        )""") == (Sym('define'), [Sym('add2'), (Sym('func'), [Sym('a')], (Sym('add'), [Sym('a'), 2]))])
+        assert self.i.go(""" expand(
             deffunc sum params a, b, c do
                 a + b + c
             end
-        """) == (Sym('define'), [Sym('sum'), (Sym('func'), [Sym('a'), Sym('b'), Sym('c')], (Sym('add'), [(Sym('add'), [Sym('a'), Sym('b')]), Sym('c')]))])
+        ) """) == (Sym('define'), [Sym('sum'), (Sym('func'), [Sym('a'), Sym('b'), Sym('c')], (Sym('add'), [(Sym('add'), [Sym('a'), Sym('b')]), Sym('c')]))])
 
         with pytest.raises(AssertionError):
-            self.i.ast(""" deffunc add2 a do a + 2 end """)
+            self.i.go(""" deffunc add2 a do a + 2 end """)
         with pytest.raises(AssertionError):
-            self.i.ast(""" deffunc add2 params a a + 2 end """)
+            self.i.go(""" deffunc add2 params a a + 2 end """)
         with pytest.raises(AssertionError):
-            self.i.ast(""" deffunc 2 params do 3 end """)
+            self.i.go(""" deffunc 2 params do 3 end """)
 
     def test_no_token(self):
         with pytest.raises(AssertionError):
