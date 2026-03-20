@@ -128,9 +128,9 @@ class TestParse(TestBase):
         assert self.i.ast(""" a[1][2] """) == (Sym("index"), [(Sym("index"), [Sym("a"), 1]), 2])
 
     def test_func(self):
-        assert self.i.ast(""" func do 2 end """) == (Sym("func"), [], 2)
-        assert self.i.ast(""" func a do a + 2 end """) == (Sym("func"), [Sym("a")], (Sym("add"), [Sym("a"), 2]))
-        assert self.i.ast(""" func a, b do a + b end """) == (Sym("func"), [Sym("a"), Sym("b")], (Sym("add"), [Sym("a"), Sym("b")]))
+        assert self.i.ast(""" func do 2 end """) == (Sym("__core_func"), [[], 2])
+        assert self.i.ast(""" func a do a + 2 end """) == (Sym("__core_func"), [[Sym("a")], (Sym("add"), [Sym("a"), 2])])
+        assert self.i.ast(""" func a, b do a + b end """) == (Sym("__core_func"), [[Sym("a"), Sym("b")], (Sym("add"), [Sym("a"), Sym("b")])])
 
         with pytest.raises(AssertionError):
             self.i.ast(""" func a 2 end """)
@@ -139,17 +139,17 @@ class TestParse(TestBase):
 
     def test_deffunc(self):
         assert self.i.go(""" expand(deffunc two params do 2 end) """) == (
-            Sym('define'), [Sym('two'), (Sym('func'), [], 2)])
+            Sym('define'), [Sym('two'), (Sym('__core_func'), [[], 2])])
         assert self.i.go(""" expand(
              deffunc add2 params a do
                 a + 2
              end
-        )""") == (Sym('define'), [Sym('add2'), (Sym('func'), [Sym('a')], (Sym('add'), [Sym('a'), 2]))])
+        )""") == (Sym('define'), [Sym('add2'), (Sym('__core_func'), [[Sym('a')], (Sym('add'), [Sym('a'), 2])])])
         assert self.i.go(""" expand(
             deffunc sum params a, b, c do
                 a + b + c
             end
-        ) """) == (Sym('define'), [Sym('sum'), (Sym('func'), [Sym('a'), Sym('b'), Sym('c')], (Sym('add'), [(Sym('add'), [Sym('a'), Sym('b')]), Sym('c')]))])
+        ) """) == (Sym('define'), [Sym('sum'), (Sym('__core_func'), [[Sym('a'), Sym('b'), Sym('c')], (Sym('add'), [(Sym('add'), [Sym('a'), Sym('b')]), Sym('c')])])])
 
         with pytest.raises(AssertionError):
             self.i.go(""" deffunc add2 a do a + 2 end """)
@@ -251,36 +251,37 @@ class TestEvaluate(TestBase):
         assert capsys.readouterr().out == "10\n"
 
     def test_user_func(self):
-        self.i.evaluate((Sym("define"), [Sym("add2"), (Sym("func"), [Sym("a")],
-            (Sym("add"), [Sym("a"), 2])
+        self.i.evaluate((Sym("define"), [Sym("add2"), (Sym("__core_func"),
+            [[Sym("a")], (Sym("add"), [Sym("a"), 2])]
         )]))
         assert self.i.evaluate((Sym("add2"), [3])) == 5
 
-        self.i.evaluate((Sym("define"), [Sym("sum3"), (Sym("func"),[Sym("a"), Sym("b"), Sym("c")],
-            (Sym("add"), [Sym("a"), (Sym("add"), [Sym("b"), Sym("c")])])
+        self.i.evaluate((Sym("define"), [Sym("sum3"), (Sym("__core_func"),
+            [[Sym("a"), Sym("b"), Sym("c")],(Sym("add"), [Sym("a"), (Sym("add"), [Sym("b"), Sym("c")])])]
         )]))
         assert self.i.evaluate((Sym("sum3"), [2, 3, 4])) == 9
 
     def test_recursion(self):
-        self.i.evaluate((Sym("define"), [Sym("fac"), (Sym("func"),[Sym("n")],
+        self.i.evaluate((Sym("define"), [Sym("fac"), (Sym("__core_func"), [
+            [Sym("n")],
             (Sym("if"), (Sym("equal"), [Sym("n"), 1]),
                 1,
                 (Sym("mul"), [Sym("n"), (Sym("fac"), [(Sym("sub"), [Sym("n"), 1])])])
             )
-        )]))
+        ])]))
         assert self.i.evaluate((Sym("fac"), [1])) == 1
         assert self.i.evaluate((Sym("fac"), [3])) == 6
         assert self.i.evaluate((Sym("fac"), [5])) == 120
 
     def test_scope_leak(self):
         self.i.evaluate((Sym("define"), [Sym("x"), 2]))
-        self.i.evaluate((Sym("define"), [Sym("f"), (Sym("func"), [Sym("x")], 3)]))
+        self.i.evaluate((Sym("define"), [Sym("f"), (Sym("__core_func"), [[Sym("x")], 3])]))
         self.i.evaluate((Sym("f"), [4]))
         assert self.i.evaluate(Sym("x")) == 2
 
     def test_closure(self):
         self.i.evaluate((Sym("define"), [Sym("x"), 2]))
-        self.i.evaluate((Sym("define"), [Sym("return_x"), (Sym("func"), [], Sym("x"))]))
+        self.i.evaluate((Sym("define"), [Sym("return_x"), (Sym("__core_func"), [[], Sym("x")])]))
         assert self.i.evaluate((Sym("return_x"), [])) == 2
         assert self.i.evaluate((Sym("__core_scope"), [(Sym("seq"), [
             (Sym("define"), [Sym("x"), 3]),
@@ -289,9 +290,10 @@ class TestEvaluate(TestBase):
         assert self.i.evaluate(Sym("x")) == 2
 
     def test_adder(self):
-        self.i.evaluate((Sym("define"), [Sym("make_adder"), (Sym("func"), [Sym("n")],
-            (Sym("func"), [Sym("m")], (Sym("add"), [Sym("n"), Sym("m")])))])
-        )
+        self.i.evaluate((Sym("define"), [Sym("make_adder"), (Sym("__core_func"), [
+            [Sym("n")],
+            (Sym("__core_func"), [[Sym("m")], (Sym("add"), [Sym("n"), Sym("m")])])
+        ])]))
         self.i.evaluate((Sym("define"), [Sym("add2"), (Sym("make_adder"), [2])]))
         self.i.evaluate((Sym("define"), [Sym("add3"), (Sym("make_adder"), [3])]))
 
@@ -299,14 +301,16 @@ class TestEvaluate(TestBase):
         assert self.i.evaluate((Sym("add3"), [4])) == 7
 
     def test_shadowing(self):
-        self.i.evaluate((Sym("define"), [Sym("make_shadow"), (Sym("func"), [Sym("x")],
-            (Sym("func"), [],
+        self.i.evaluate((Sym("define"), [Sym("make_shadow"), (Sym("__core_func"), [
+            [Sym("x")],
+            (Sym("__core_func"), [
+                [],
                 (Sym("seq"), [
                     (Sym("define"), [Sym("x"), 3]),
                     Sym("x")
                 ])
-            )
-        )]))
+            ])
+        ])]))
         self.i.evaluate((Sym("define"), [Sym("g"), (Sym("make_shadow"), [2])]))
         assert self.i.evaluate((Sym("g"), [])) == 3
 
@@ -1244,8 +1248,8 @@ text
     def test_macro(self, capsys):
         # Basic macro (when) vs function (fwhen)
         self.i.go("""
-            when := macro cond, body do expr(sym("if"), cond, body, None) end;
-            fwhen := func cond, body do if cond then body else None end end
+            defmacro when params cond, body do expr(sym("if"), cond, body, None) end;
+            deffunc fwhen params cond, body do if cond then body else None end end
         """)
         assert self.i.go(""" expand(when(2 == 2, 3)) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
         assert self.i.go(""" when(2 == 2, 3) """) == 3
@@ -1255,39 +1259,33 @@ text
         with pytest.raises(ZeroDivisionError):
             self.i.go(""" fwhen(2 == 3, 4 / 0) """)
 
-        # Macro defining macro (defmacro)
-        self.i.go("""
-            defmacro := macro name, params_, body do
-                expr(sym("define"), [name, expr(sym("macro"), params_, body)])
-            end
-        """)
-        self.i.go(""" defmacro(mwhen, [cond, body], expr(sym("if"), cond, body, None)) """)
+        self.i.go(""" defmacro mwhen params cond, body do expr(sym("if"), cond, body, None) end """)
         assert self.i.go(""" mwhen(2 == 2, 3) """) == 3
         with pytest.raises(AssertionError, match="Argument mismatch"):
             self.i.go(""" mwhen(2 == 2) """)
 
         # Macro for scope
         self.i.go("""
-            defmacro(mscope, [body], expr(expr(sym("func"), [], body), []))
+            defmacro mscope params body do expr(expr(sym("__core_func"), [[], body]), []) end
         """)
         self.i.go(""" a := 2; mscope(print(a); a := 3; print(a)); print(a) """)
         assert capsys.readouterr().out == "2\n3\n2\n"
 
         # Anaphoric if
         self.i.go("""
-            defmacro(aif, [cnd, thn, els], expr(sym("__core_scope"), [expr(sym("if"),
+            defmacro aif params cnd, thn, els do expr(sym("__core_scope"), [expr(sym("if"),
                 expr(sym("define"), [sym("it"), cnd]),
                 thn,
                 els
-            )]))
+            )]) end
         """)
         assert self.i.go(""" aif(2, [True, it], [False, it]) """) == [True, 2]
         assert self.i.go(""" aif(0, [True, it], [False, it]) """) == [False, 0]
 
         # and/or using aif
         self.i.go("""
-            defmacro(mand, [a, b], expr(sym("aif"), [a, b, sym("it")]));
-            defmacro(mor, [a, b], expr(sym("aif"), [a, sym("it"), b]))
+            defmacro mand params a, b do expr(sym("aif"), [a, b, sym("it")]) end;
+            defmacro mor params a, b do expr(sym("aif"), [a, sym("it"), b]) end
         """)
         assert self.i.go(""" mand(2, 3) """) == 3
         assert self.i.go(""" mand(0, 3) """) == 0
@@ -1297,7 +1295,7 @@ text
         # Side effect in macro argument
         self.i.go("""
             deffunc ftwice params x do x + x end;
-            defmacro(mtwice, [x], expr(sym("add"), [x, x]))
+            defmacro mtwice params x do expr(sym("add"), [x, x]) end
         """)
         self.i.go(""" cnt := 0 """)
         assert self.i.go(""" ftwice(cnt = cnt + 1) """) == 2
@@ -1308,7 +1306,7 @@ text
         assert self.i.go(""" cnt """) == 2
 
         # Variable capture (Non-hygienic)
-        self.i.go(""" defmacro(capture, [val], expr(sym("define"), [sym("x"), val])) """)
+        self.i.go(""" defmacro capture params val do expr(sym("define"), [sym("x"), val]) end """)
         self.i.go(""" x := 1 """)
         self.i.go(""" capture(2) """)
         assert self.i.go(""" x """) == 2
@@ -1385,11 +1383,11 @@ class TestMacroSamples(TestBase):
 
     def test_defmacro_macro(self):
         self.i.go("""
-            defmacro := macro name, params_, body do
+            mdefmacro := macro name, params_, body do
                 qq !name := macro !!params_ do !body end end
             end
         """)
-        self.i.go(""" defmacro(when, [cond, body], qq if !cond then !body else None end end) """)
+        self.i.go(""" mdefmacro(when, [cond, body], qq if !cond then !body else None end end) """)
         assert self.i.go(""" when(2 == 2, 3) """) == 3
         assert self.i.go(""" when(2 == 3, 4 / 0) """) is None
         with pytest.raises(AssertionError, match="Argument mismatch"):
@@ -1523,13 +1521,17 @@ class TestCustomSyntax(TestBase):
             #rule {mdeffunc: [_mdeffunc, EXPR, params, EXPRS, do, EXPR, end]}
         """)
         assert self.i.go(""" expand(_mdeffunc(myadd, [a, b], a + b)) """) == \
-               (Sym("define"), [Sym("myadd"), (Sym("func"), [Sym("a"), Sym("b")], (Sym("add"), [Sym("a"), Sym("b")]))])
+                (Sym("define"), [Sym("myadd"), (Sym("__core_func"), [
+                   [Sym("a"), Sym("b")], (Sym("add"), [Sym("a"), Sym("b")])
+                ])])
         self.i.go(""" _mdeffunc(myadd, [a, b], a + b) """)
         assert self.i.go(""" myadd(2, 3) """) == 5
 
         # mdeffunc custom syntax
         assert self.i.go(""" expand(mdeffunc myadd2 params a, b do a + b end) """) == \
-               (Sym("define"), [Sym("myadd2"), (Sym("func"), [Sym("a"), Sym("b")], (Sym("add"), [Sym("a"), Sym("b")]))])
+                (Sym("define"), [Sym("myadd2"), (Sym("__core_func"), [
+                   [Sym("a"), Sym("b")], (Sym("add"), [Sym("a"), Sym("b")])
+                ])])
         self.i.go(""" mdeffunc myadd2 params a, b do a + b end """)
         assert self.i.go(""" myadd2(2, 3) """) == 5
 
@@ -1542,7 +1544,10 @@ class TestCustomSyntax(TestBase):
         """)
         assert self.i.go(""" expand(
             _defmacro(mwhen, [cond, body], expr(sym("if"), cond, body, None))
-        ) """) == (Sym("define"), [Sym("mwhen"), (Sym("macro"), [Sym("cond"), Sym("body")], (Sym("expr"), [(Sym("sym"), ["if"]), Sym("cond"), Sym("body"), None]))])
+        ) """) == (Sym("define"), [Sym("mwhen"), (Sym("__core_macro"), [
+            [Sym("cond"), Sym("body")],
+            (Sym("expr"), [(Sym("sym"), ["if"]), Sym("cond"), Sym("body"), None])
+        ])])
 
         self.i.go(""" _defmacro(mwhen, [cond, body], qq if !cond then !body else None end end) """)
         assert self.i.go(""" expand(mwhen(2 == 2, 3)) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
@@ -1554,7 +1559,10 @@ class TestCustomSyntax(TestBase):
         # defmacro custom syntax
         assert self.i.go(""" expand(
             defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
-        ) """) == (Sym("define"), [Sym("mwhen2"), (Sym("macro"), [Sym("cond"), Sym("body")], (Sym("__core_qq"), [(Sym("if"), (Sym("!"), [Sym("cond")]), (Sym("!"), [Sym("body")]), None)]))])
+        ) """) == (Sym("define"), [Sym("mwhen2"), (Sym("__core_macro"), [
+            [Sym("cond"), Sym("body")],
+            (Sym("__core_qq"), [(Sym("if"), (Sym("!"), [Sym("cond")]), (Sym("!"), [Sym("body")]), None)])
+        ])])
 
         self.i.go("""
             defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
@@ -1605,7 +1613,10 @@ class TestCustomSyntax(TestBase):
 
         # let_func tests (parallel binding)
         assert self.i.go(""" expand(let_func var a be 4 + 5 var b be 6 do [a, b] end) """) == \
-               ((Sym("func"), [Sym("a"), Sym("b")], [Sym("a"), Sym("b")]), [(Sym("add"), [4, 5]), 6])
+                ((Sym("__core_func"), [
+                   [Sym("a"), Sym("b")],
+                   [Sym("a"), Sym("b")]]
+                ), [(Sym("add"), [4, 5]), 6])
 
         self.i.go(""" a := 2 """)
         # 'b' is bound to the outer 'a' (2), demonstrating parallel binding

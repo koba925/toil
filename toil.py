@@ -223,12 +223,9 @@ class Parser:
             case Sym("["): return self._array()
             case Sym("{"): return self._dic()
             case None | bool() | int(): return self._advance()
-            case s if type(s) == str: return self._advance()
-            case Sym("func"): return self._func_macro(Sym("func"))
-            case Sym("macro"): return self._func_macro(Sym("macro"))
+            case s if type(s) is str: return self._advance()
             case Sym("if"): return self._if()
             case Sym("match"): return self._match()
-            case Sym("for"): return self._for()
             case Sym("try"): return self._try()
             case Sym(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
@@ -280,14 +277,6 @@ class Parser:
         self._advance()
         return dic
 
-    def _func_macro(self, op):
-        self._advance()
-        params = self._comma_separated_exprs(Sym("do"))
-        self._consume(Sym("do"))
-        body_expr = self._expression()
-        self._consume(Sym("end"))
-        return (op, params, body_expr)
-
     def _if(self):
         self._advance()
         cond_expr = self._expression()
@@ -303,29 +292,6 @@ class Parser:
             else_expr = None
             self._consume(Sym("end"))
         return (Sym("if"), cond_expr, then_expr, else_expr)
-
-    def _for(self):
-        self._advance()
-        var_expr = self._expression()
-        self._consume(Sym("in"))
-        coll_expr = self._expression()
-        self._consume(Sym("do"))
-        body_expr = self._expression()
-        self._consume(Sym("end"))
-        return (Sym("__core_scope"), [(Sym("seq"), [
-            (Sym("define"), [Sym("__for_coll"), coll_expr]),
-            (Sym("define"), [Sym("__for_index"), -1]),
-            (Sym("__core_while"), [
-                (Sym("less"), [(Sym("add"), [Sym("__for_index"), 1]), (Sym("len"), [Sym("__for_coll")])]),
-                (Sym("seq"), [
-                    (Sym("assign"), [Sym("__for_index"), (Sym("add"), [Sym("__for_index"), 1])]),
-                    (Sym("__core_scope"), [(Sym("seq"), [
-                        (Sym("define"), [var_expr, (Sym("index"), [Sym("__for_coll"), Sym("__for_index")])]),
-                        body_expr
-                    ])])
-                ])
-            ])
-        ])])
 
     def _try(self):
         self._advance()
@@ -511,14 +477,14 @@ class Evaluator:
             case (Sym("continue"), args):
                 assert len(args) == 0, f"Continue takes no arguments @ evaluate(): {args}"
                 raise ContinueException()
-            case (Sym("func"), params, body):
+            case (Sym("__core_func"), [params, body]):
                 return (Sym("closure"), params, body, env)
             case (Sym("return"), args):
                 assert len(args) <= 1, f"Return takes zero or one argument @ evaluate(): {args}"
                 raise ReturnException(self.evaluate(args[0], env) if args else None)
             case (Sym("expand"), [(op_expr, args_expr)]):
                 return self._eval_expand(op_expr, args_expr, env)
-            case (Sym("macro"), params, body):
+            case (Sym("__core_macro"), [params, body]):
                 return (Sym("mclosure"), params, body, env)
             case (Sym("try"), body_expr, clauses):
                 return self._evaluate_try(body_expr, clauses, env)
@@ -791,19 +757,40 @@ class Interpreter:
 
     def corelib(self):
         self.go("""
+            #rule {func: [__core_func, EXPRS, do, EXPR, end]}
+            #rule {macro: [__core_macro, EXPRS, do, EXPR, end]}
+
             #rule {scope: [__core_scope, EXPR, end]}
 
             #rule {qq: [__core_qq, EXPR, end]}
+
+            __core_defmacro := macro name, params_, body do
+                qq !name := macro !!params_ do !body end end
+            end;
+            #rule {defmacro: [__core_defmacro, EXPR, params, EXPRS, do, EXPR, end]}
 
             __core_qqs := macro expr do qq qq scope !expr end end end end;
             #rule {qqs: [__core_qqs, EXPR, end]}
 
             __core_deffunc := macro name, params_, body do
                 qq !name := func !!params_ do !body end end
-            end
+            end;
             #rule {deffunc: [__core_deffunc, EXPR, params, EXPRS, do, EXPR, end]}
 
             #rule {while: [__core_while, EXPR, do, EXPR, end]}
+
+            __core_for := macro var, coll, body do qqs
+                __core_for_coll := !coll;
+                __core_for_index := -1;
+                while __core_for_index + 1 < len(__core_for_coll) do
+                    __core_for_index = __core_for_index + 1;
+                    scope
+                        !var := __core_for_coll[__core_for_index];
+                        !body
+                    end
+                end
+            end end
+            #rule {for: [__core_for, EXPR, in, EXPR, do, EXPR, end]}
         """)
 
         return self
@@ -940,37 +927,6 @@ if __name__ == "__main__":
 
     # Example
 
-    # # for by macro
-
-    # i.go("""
-    #     _mfor := macro var, coll, body do qqs
-    #         __for_coll := !coll;
-    #         __for_index := -1;
-    #         while __for_index + 1 < len(__for_coll) do
-    #             __for_index = __for_index + 1;
-    #             scope
-    #                 !var := __for_coll[__for_index];
-    #                 !body
-    #             end
-    #         end
-    #     end end
-    #     #rule {mfor: [_mfor, EXPR, in, EXPR, do, EXPR, end]}
-    # """)
-
-    # print(i.go(""" expand(_mfor(n, [2, 3, 4], sum = sum + n)) """)) # -> (scope, (seq, [(define, [__for_coll, [2, 3, 4]]), (define, [__for_index, -1]), (while, (less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (scope, (seq, [(define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])]))]))]))
-    # print(i.go("""
-    #         sum := 0;
-    #         _mfor(n, [2, 3, 4], sum = sum + n);
-    #         sum
-    # """)) # -> 9
-    # print(i.go(""" expand(mfor n in [2, 3, 4] do sum = sum + n end) """)) # -> (scope, (seq, [(define, [__for_coll, [2, 3, 4]]), (define, [__for_index, -1]), (while, (less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (scope, (seq, [(define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])]))]))]))
-    # print(i.go("""
-    #         sum := 0;
-    #         mfor n in [2, 3, 4] do sum = sum + n end;
-    #         sum
-    # """)) # -> 9
-    # print(i.ast(""" for n in [2, 3, 4] do sum = sum + n end """)) # -> (scope, (seq, [(define, [__for_coll, [2, 3, 4]]), (define, [__for_index, -1]), (while, (less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (scope, (seq, [(define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])]))]))]))
-
     # # anaphoric if
     # i.go("""
     #     _aif := macro cnd, thn, els do qqs
@@ -998,119 +954,6 @@ if __name__ == "__main__":
     # print(i.go(""" mor(2, 3) """)) # -> 2
     # print(i.go(""" 0 or 3 """)) # -> 3
     # print(i.go(""" mor(0, 3) """)) # -> 3
-
-    # print(i.go(""" expand(_mdeffunc(myadd, [a, b], a + b)) """)) # -> (define, [myadd, (func, [a, b], (add, [a, b]))])
-    # print(i.ast(""" _mdeffunc(myadd, [a, b], a + b) """)) # -> (define, [myadd, (func, [a, b], (add, [a, b]))])
-    # i.go(""" _mdeffunc(myadd, [a, b], a + b) """)
-    # print(i.go(""" myadd(2, 3) """)) # -> 5
-
-    # print(i.go(""" expand(mdeffunc myadd2 params a, b do a + b end) """)) # -> (define, [myadd2, (func, [a, b], (add, [a, b]))])
-    # print(i.ast(""" mdeffunc myadd2 params a, b do a + b end """)) # -> (define, [myadd2, (func, [a, b], (add, [a, b]))])
-    # i.go(""" mdeffunc myadd2 params a, b do a + b end """)
-    # print(i.go(""" myadd2(2, 3) """)) # -> 5
-
-    # # syntax sugar (defmacro)
-    # i.go("""
-    #     _defmacro := macro name, params_, body do
-    #         qq !name := macro !!params_ do !body end end
-    #     end
-    #     #rule {defmacro: [_defmacro, EXPR, params, EXPRS, do, EXPR, end]}
-    # """)
-    # print(i.go(""" expand(
-    #     _defmacro(mwhen, [cond, body], expr(sym("if"), cond, body, None))
-    # ) """))
-    # # ->
-
-    # # Test EXPRS with zero and one parameter
-    # i.go(""" mdeffunc zero_params params do 2 end """)
-    # print(i.go(""" zero_params() """)) # -> 2
-
-    # i.go(""" mdeffunc one_param params x do x * 2 end """)
-    # print(i.go(""" one_param(3) """)) # -> 6
-
-    # print(i.go(""" expand(
-    #     _defmacro(mwhen, [cond, body], qq if !cond then !body else None end end)
-    # ) """))
-    # i.go(""" _defmacro(mwhen, [cond, body], qq if !cond then !body else None end end) """)
-    # print(i.go(""" expand(mwhen(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
-    # print(i.go(""" mwhen(2 == 2, 3) """)) # -> 3
-    # print(i.go(""" mwhen(2 == 3, 4 / 0) """)) # -> None
-    # # print(i.go(""" mwhen(2 == 2) """)) # -> Error (Argument mismatch)
-
-    # print(i.go(""" expand(
-    #     defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
-    # ) """))
-    # i.go("""
-    #     defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
-    # """)
-    # print(i.go(""" expand(mwhen2(2 == 2, 3)) """)) # -> (if, (equal, [2, 2]), 3, None)
-    # print(i.go(""" mwhen2(2 == 2, 3) """)) # -> 3
-    # print(i.go(""" mwhen2(2 == 3, 4 / 0) """)) # -> None
-    # # print(i.go(""" mwhen2(2 == 2) """)) # -> Error (Argument mismatch)
-
-    # # i.go(""" mdeffunc trailing_comma params a, b, do a + b end """) # -> Error
-    # # print(i.go(""" mwhen2(2 == 2) """)) # -> Error (Argument mismatch)
-
-    # repeated arguments and let
-    # i.go("""
-    #     _let_func := macro bindings, body do qq
-    #         func !!map(bindings, func pair do pair[0] end) do
-    #             !body
-    #         end (!!map(bindings, func pair do pair[1] end))
-    #     end end
-    #     #rule {let_func: [_let_func, *[var, EXPR, be, EXPR], do, EXPR, end]}
-    # """)
-
-    # print(i.go(""" expand(_let_func([[a, 4 + 5], [b, 6]], [a, b])) """))
-    # # -> ((func, [a, b], [a, b]), [(add, [4, 5]), 6])
-    # print(i.go(""" a := 2; b := 3; _let_func([[a, 4 + 5], [b, 6]], [a, b]) """)) # -> [9, 6]
-    # print(i.go(""" a """)) # -> 2
-
-    # print(i.go(""" expand(let_func var a be 4 + 5 var b be 6 do [a, b] end) """))
-    # # -> ((func, [a, b], [a, b]), [(add, [4, 5]), 6])
-    # print(i.go(""" a := 2; b := 3;
-    #     let_func
-    #         var a be 4 + 5
-    #         var b be 6
-    #     do
-    #         [a, b]
-    #     end
-    # """)) # -> [9, 6]
-    # print(i.go(""" a """)) # -> 2
-
-    # # Test zero and one argument (check * repetition)
-    # print(i.go(""" let_func do 2 end """)) # -> 2
-    # print(i.go(""" let_func var a be 2 do a * 3 end """)) # -> 6
-    # print(i.go(""" let_func var a be 2 do let_func var b be 3 do a + b end end """)) # -> 5
-
-    # # Error cases for repetition
-    # # i.go(""" let_func var a be 1 var b do a end """) # -> Error (Expected be)
-    # # i.go(""" let_func var a = 1 do a end """) # -> Error (Expected be)
-
-    # i.go("""
-    #     _let_scope := macro bindings, body do qq
-    #         scope
-    #             !!map(bindings, func binding do
-    #                 qq !binding[0] := !binding[1] end
-    #             end);
-    #             !body
-    #         end
-    #     end end
-    #     #rule {let_scope: [_let_scope, *[var, EXPR, be, EXPR], do, EXPR, end]}
-    # """)
-    # print(i.go(""" expand(_let_scope([[a, 4 + 5], [b, a + 6]], [a, b])) """)) # -> (scope, (seq, [(define, [a, (add, [4, 5])]), (define, [b, (add, [a, 6])]), [a, b]]))
-    # print(i.go(""" a := 2; b := 3; _let_scope([[a, 4 + 5], [b, a + 6]], [a, b]) """)) # -> [9, 15]
-    # print(i.go(""" a """)) # -> 2 (outer scope `a` is unchanged)
-    # print(i.go(""" expand(let_scope var a be 4 + 5 var b be a + 6 do [a, b] end) """)) # -> (scope, (seq, [(define, [a, (add, [4, 5])]), (define, [b, (add, [a, 6])]), [a, b]]))
-    # print(i.go(""" a := 2; b := 3;
-    #     let_scope
-    #         var a be 4 + 5
-    #         var b be a + 6
-    #     do
-    #         [a, b]
-    #     end
-    # """)) # -> [9, 15]
-    # print(i.go(""" a """)) # -> 2 (outer scope `a` is unchanged)
 
     # # if by macro
     # i.go("""
