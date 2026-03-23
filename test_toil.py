@@ -1007,6 +1007,26 @@ text
         assert self.i.walk(""" match {a: 2, b: 3, c: 4} case {a, *rest, c} then [a, rest, c] end """) == [2, {'b': 3}, 4]
         assert self.i.walk(""" match {a: 2} case {b: 3} then 4 end """) is None
 
+    def test_ast_pattern_match(self):
+        self.i.walk("""
+            f := func ast do
+                match ast
+                    case expr(sym("add"), [left, right]) then left + right
+                    case expr(sym("sub"), [left, right]) then left - right
+                    case expr(op, args) then [op, args]
+                    case _ then None
+                end
+            end
+        """)
+        assert self.i.walk(""" f(quote(2 + 3)) """) == 5
+        assert self.i.walk(""" f(quote(5 - 2)) """) == 3
+        assert self.i.walk(""" f(quote(2 * 3)) """) == [Sym("mul"), [2, 3]]
+        assert self.i.walk(""" f(2) """) is None
+
+        assert self.i.walk(""" f(expr(sym("add"), [2, 3])) """) == 5
+        assert self.i.walk(""" f(expr("add", [2, 3])) """) == ["add", [2, 3]]
+        assert self.i.walk(""" f([sym("add"), [2, 3]]) """) == None
+
     def test_dict_module(self):
         self.i.walk(""" gcd := import("lib/gcd_dict.toil") """)
         assert self.i.walk(""" gcd.recur(24, 36) """) == 12

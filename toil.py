@@ -641,7 +641,19 @@ class Evaluator:
             case dict():
                 if not isinstance(value, dict): return False
                 return match_dict()
+            case (Sym("sym"), [name_expr]):
+                if not isinstance(name_expr, str): return False
+                if not isinstance(value, Sym): return False
+                return name_expr == value
+            case (Sym("expr"), args):
+                if not isinstance(value, tuple): return False
+                if len(args) != len(value): return False
+                for sub_pattern, sub_value in zip(args, value):
+                    if not self._match_pattern(sub_pattern, sub_value, env):
+                        return False
+                return True
             case _:
+                if type(pattern) is not type(value): return False
                 return pattern == value
 
 class Interpreter:
@@ -905,5 +917,34 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.walk(""" if True then 2 else 3 end """))
-    print(i.walk(""" if False then 2 elif True then 3 else 4 end """))
+    i.walk("""
+        f := func ast do
+            match ast
+                case expr(sym("add"), [left, right]) then left + right
+                case expr(sym("sub"), [left, right]) then left - right
+                case expr(op, args) then [op, args]
+                case _ then None
+            end
+        end
+    """)
+
+    print(i.walk(""" f(quote(2 + 3)) """))
+    # -> 5
+
+    print(i.walk(""" f(quote(5 - 2)) """))
+    # -> 3
+
+    print(i.walk(""" f(quote(2 * 3)) """))
+    # -> [mul, [2, 3]]
+
+    print(i.walk(""" f(2) """))
+    # -> None
+
+    print(i.walk(""" f(expr(sym("add"), [2, 3])) """))
+    # -> 5
+
+    print(i.walk(""" f(expr("add", [2, 3])) """))
+    # -> ['add', [2, 3]]
+
+    print(i.walk(""" f([sym("add"), [2, 3]]) """))
+    # -> None
