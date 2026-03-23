@@ -353,10 +353,10 @@ class TestEvaluate(TestBase):
     def test_array_error(self):
         self.i.evaluate((Sym("define"), [Sym("a"), [1, 2]]))
 
-        with pytest.raises(AssertionError, match="Illegal indexing"):
+        with pytest.raises(AssertionError, match="Invalid indexing"):
             self.i.evaluate((Sym("assign"), [(Sym("index"), [None, 0]), 1]))
 
-        with pytest.raises(AssertionError, match="Illegal indexing"):
+        with pytest.raises(AssertionError, match="Invalid indexing"):
             self.i.evaluate((Sym("assign"), [(Sym("index"), [Sym("a"), None]), 1]))
 
 class TestGo(TestBase):
@@ -971,10 +971,10 @@ text
         assert self.i.walk(""" k """) == 'aaa'
         assert self.i.walk(""" v """) == 2
 
-        with pytest.raises(AssertionError, match="Illegal key"):
+        with pytest.raises(AssertionError, match="Invalid key"):
             self.i.walk(""" {1: 2} """)
 
-        with pytest.raises(AssertionError, match="Illegal indexing"):
+        with pytest.raises(AssertionError, match="Invalid indexing"):
             self.i.walk(""" a[0] = 1 """)
 
     def test_dot_notation(self):
@@ -984,7 +984,7 @@ text
         self.i.walk(""" a.ddd = 6 """)
         assert self.i.walk(""" a """) == {'aaa': 2, 'bbb': 4, 'ddd': 6}
 
-        with pytest.raises(AssertionError, match="Illegal property"):
+        with pytest.raises(AssertionError, match="Invalid property"):
             self.i.walk(""" a.1 """)
 
         with pytest.raises(AssertionError):
@@ -1042,7 +1042,7 @@ text
         self.i.walk(""" d := { len: func self do "local" end } """)
         assert self.i.walk(""" d.len() """) == "local"
 
-        with pytest.raises(AssertionError, match="Illegal operator"):
+        with pytest.raises(AssertionError, match="Invalid operator"):
             self.i.walk(""" d := { val: 123 }; d.val() """)
         with pytest.raises(AssertionError, match="Undefined variable"):
             self.i.walk(""" 2.non_existent() """)

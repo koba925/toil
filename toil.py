@@ -205,7 +205,7 @@ class Parser:
                 case Sym("."):
                     self._advance()
                     assert type(self._current_token()) is Sym, \
-                        f"Illegal property @ _call_index_dot(): {self._current_token()}"
+                        f"Invalid property @ _call_index_dot(): {self._current_token()}"
                     attr = self._advance()
                     target = (Sym("dot"), [target, str(attr)])
         return target
@@ -254,8 +254,8 @@ class Parser:
                     key = self._advance()
                     self._consume(Sym(":"))
                     dic[key] = self._expression()
-                case illegal:
-                    assert False, f"Illegal key @ _dic(): {illegal}"
+                case Invalid:
+                    assert False, f"Invalid key @ _dic(): {Invalid}"
 
         self._advance()
         dic = {}
@@ -321,9 +321,9 @@ class Parser:
         else:
             return sub_elem()
 
-    def _comma_separated_exprs(self, terminate):
+    def _comma_separated_exprs(self, terminator):
         cse = []
-        if self._current_token() != terminate:
+        if self._current_token() != terminator:
             cse.append(self._expression())
             while self._current_token() == Sym(","):
                 self._advance()
@@ -474,7 +474,7 @@ class Evaluator:
         right_val = self.evaluate(right_expr, env)
         if self._match_pattern(left_expr, right_val, env):
             return right_val
-        assert False, f"Doesn't match @ _evaluate_define(): {left_expr}, {right_val}"
+        assert False, f"Pattern mismatch @ _evaluate_define(): {left_expr}, {right_val}"
 
     def _evaluate_assign(self, left_expr, right_expr, env):
         right_val = self.evaluate(right_expr, env)
@@ -490,10 +490,10 @@ class Evaluator:
                     case dict(), str():
                         coll_val[index_val] = right_val
                     case _:
-                        assert False, f"Illegal indexing @ _evaluate_assign(): {coll_val}"
+                        assert False, f"Invalid indexing @ _evaluate_assign(): {coll_val}"
                 return right_val
             case unexpected:
-                assert False, f"Illegal assign target @ _evaluate_assign(): {unexpected}"
+                assert False, f"Invalid assign target @ _evaluate_assign(): {unexpected}"
 
     def _evaluate_seq(self, exprs, env):
         val = None
@@ -568,7 +568,7 @@ class Evaluator:
                 new_env = Environment(mclosure_env)
                 return self._expand(params, args_expr, body_expr, new_env)
             case _:
-                assert False, f"Expanding non-macro @ expand(): {op_expr}"
+                assert False, f"Cannot expand non-macro @ expand(): {op_expr}"
 
     def _expand(self, params, args_expr, body_expr, env):
         if self._match_pattern(params, args_expr, env):
@@ -589,7 +589,7 @@ class Evaluator:
                     except ReturnException as e: return e.val
                 assert False, f"Argument mismatch @ apply(): {params}, {args_val}"
             case _:
-                assert False, f"Illegal operator @ apply(): {op_val}"
+                assert False, f"Invalid operator @ apply(): {op_val}"
 
     def _match_pattern(self, pattern, value, env):
         def match_list():
