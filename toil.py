@@ -217,7 +217,6 @@ class Parser:
             case Sym("{"): return self._dic()
             case None | bool() | int(): return self._advance()
             case s if type(s) is str: return self._advance()
-            case Sym("match"): return self._match()
             case Sym(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
             case Sym(name) if is_name(name): return self._advance()
@@ -363,8 +362,9 @@ class Environment:
         self._vars = {}
 
     def __repr__(self):
-        content = "__builtins__" if Sym("__builtins__") in self._vars else \
-                  "__stdlib__" if Sym("__stdlib__") in self._vars else \
+        content = "__builtins" if Sym("__builtins") in self._vars else \
+                  "__corelib" if Sym("__corelib") in self._vars else \
+                  "__stdlib" if Sym("__stdlib") in self._vars else \
                   ", ".join(self._vars)
         return f"[{content}]" + (f" < {self._parent}" if self._parent else "")
 
@@ -429,8 +429,8 @@ class Evaluator:
                 return self._evaluate_seq(exprs, env)
             case (Sym("__core_if"), [cond_expr, then_expr, else_expr]):
                 return self._evaluate_if(cond_expr, then_expr, else_expr, env)
-            case (Sym("match"), val_expr, cases):
-                return self._evaluate_match(val_expr, cases, env)
+            case (Sym("__core_match"), [val_expr, cases_expr]):
+                return self._evaluate_match(val_expr, cases_expr, env)
             case (Sym("__core_while"), [cond_expr, body_expr]):
                 return self._evaluate_while(cond_expr, body_expr, env)
             case (Sym("break"), args):
@@ -448,15 +448,15 @@ class Evaluator:
                 return self._eval_expand(op_expr, args_expr, env)
             case (Sym("__core_macro"), [params, body]):
                 return (Sym("mclosure"), params, body, env)
-            case (Sym("__core_try"), [body_expr, clauses]):
-                return self._evaluate_try(body_expr, clauses, env)
+            case (Sym("__core_try"), [body_expr, clauses_expr]):
+                return self._evaluate_try(body_expr, clauses_expr, env)
             case (Sym("raise"), args):
                 assert len(args) <= 1, f"Raise takes zero or one argument @ evaluate(): {args}"
                 raise ToilException(self.evaluate(args[0], env) if args else None)
             case (Sym("__core_scope"), [expr]):
                 return self.evaluate(expr, Environment(env))
-            case (Sym("dot"), [target, attr]):
-                return self._evaluate_dot(target, attr, env)
+            case (Sym("dot"), [target_expr, attr_expr]):
+                return self._evaluate_dot(target_expr, attr_expr, env)
             case (op_expr, args_expr) if isinstance(expr, tuple):
                 return self._eval_op(op_expr, args_expr, env)
             case unexpected:
@@ -521,9 +521,9 @@ class Evaluator:
         else:
             return self.evaluate(else_expr, new_env)
 
-    def _evaluate_match(self, val_expr, cases, env):
+    def _evaluate_match(self, val_expr, cases_expr, env):
         val = self.evaluate(val_expr, env)
-        for pattern, body_expr in cases:
+        for pattern, body_expr in cases_expr:
             new_env = Environment(env)
             if self._match_pattern(pattern, val, new_env):
                 return self.evaluate(body_expr, new_env)
@@ -537,26 +537,26 @@ class Evaluator:
             except BreakException as e: return e.val
         return None
 
-    def _evaluate_try(self, body_expr, clauses, env):
+    def _evaluate_try(self, body_expr, clauses_expr, env):
         try:
             return self.evaluate(body_expr, env)
         except ToilException as toil_exception:
-            for cond_expr, except_expr in clauses:
+            for cond_expr, except_expr in clauses_expr:
                 if self._match_pattern(cond_expr, toil_exception.e, env):
                     return self.evaluate(except_expr, env)
             raise toil_exception
 
-    def _evaluate_dot(self, target, attr, env):
-        target_val = self.evaluate(target, env)
+    def _evaluate_dot(self, target_expr, attr_expr, env):
+        target_val = self.evaluate(target_expr, env)
         match target_val:
-            case dict() if attr in target_val:
-                attr_val = target_val[attr]
+            case dict() if attr_expr in target_val:
+                attr_val = target_val[attr_expr]
                 match attr_val:
                     case (Sym("closure"), [Sym("self"), *_], _, _):
                         return lambda args: self.apply(attr_val, [target_val] + args)
                 return attr_val
 
-        attr_val = env.val(attr)
+        attr_val = env.val(attr_expr)
         match attr_val:
             case c if callable(c):
                 return lambda args: c([target_val] + args)
@@ -669,7 +669,7 @@ class Interpreter:
         return Evaluator().evaluate(ast, module_env)
 
     def init_env(self):
-        self._env.define(Sym("__builtins__"), None)
+        self._env.define(Sym("__builtins"), None)
 
         self._env.define(Sym("import"), lambda args: self._import(args[0]))
 
@@ -719,6 +719,8 @@ class Interpreter:
 
     def corelib(self):
         self.go("""
+            __corelib := None;
+
             #rule {func: [__core_func, EXPRS, do, EXPR, end]}
             #rule {macro: [__core_macro, EXPRS, do, EXPR, end]}
 
@@ -741,6 +743,20 @@ class Interpreter:
 
             #rule {pif: [__core_if, EXPR, then, EXPR, else, EXPR, end]}
 
+            __core_if_macro := macro cnd, thn, elifs, els do scope
+                e := pif els == [] then None else els[0] end;
+                i := len(elifs) - 1;
+                while i >= 0 do
+                    [elif_cnd, elif_thn] := elifs[i];
+                    e = qq pif !elif_cnd then !elif_thn else !e end end;
+                    i = i - 1
+                end;
+                qq pif !cnd then !thn else !e end end
+            end end;
+            #rule {if: [__core_if_macro, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], +[else, EXPR], end]}
+
+            #rule {match: [__core_match, EXPR, *[case, EXPR, then, EXPR], end]}
+
             _aif := macro cnd, thn, els do qqs
                 pif it := !cnd then !thn else !els end
             end end;
@@ -761,31 +777,23 @@ class Interpreter:
                         !body
                     end
                 end
-            end end;
-            #rule {for: [__core_for, EXPR, in, EXPR, do, EXPR, end]}
-
-            __core_if_macro := macro cnd, thn, elifs, els do scope
-                e := pif els == [] then None else qq !els[0] end end;
-                for [cnd, thn] in elifs.reverse() do
-                    e = qq pif !cnd then !thn else !(e) end end
-                end;
-                qq pif !cnd then !thn else !(e) end end
             end end
-            #rule {if: [__core_if_macro, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], +[else, EXPR], end]}
+            #rule {for: [__core_for, EXPR, in, EXPR, do, EXPR, end]}
 
             #rule {try: [__core_try, EXPR, *[except, EXPR, then, EXPR], end]}
         """)
 
+        self._env = Environment(self._env)
         return self
 
     def stdlib(self):
-        self.go(""" __stdlib__ := None """)
         self.go("""
+            __stdlib := None;
+
             deffunc first params a do a[0] end;
             deffunc rest params a do slice(a, 1, None) end;
-            deffunc last params a do a[-1] end
-        """)
-        self.go("""
+            deffunc last params a do a[-1] end;
+
             deffunc map params a, f do
                 b := []; l := len(a);
                 i := 0; while i < l do
@@ -793,9 +801,8 @@ class Interpreter:
                     i = i + 1
                 end;
                 b
-            end
-        """)
-        self.go("""
+            end;
+
             deffunc filter params a, f do
                 b := []; l := len(a);
                 i := 0; while i < l do
@@ -803,9 +810,8 @@ class Interpreter:
                     i = i + 1
                 end;
                 b
-            end
-        """)
-        self.go("""
+            end;
+
             deffunc zip params a, b do
                 z := []; la := len(a); lb := len(b);
                 i := 0; while i < la and i < lb do
@@ -813,9 +819,8 @@ class Interpreter:
                     i = i + 1
                 end;
                 z
-            end
-        """)
-        self.go("""
+            end;
+
             deffunc reduce params a, f, init do
                 acc := init; l := len(a);
                 i := 0; while i < l do
@@ -823,9 +828,8 @@ class Interpreter:
                     i = i + 1
                 end;
                 acc
-            end
-        """)
-        self.go("""
+            end;
+
             deffunc reverse params a do
                 b := []; i := len(a) - 1;
                 while i >= 0 do
@@ -833,9 +837,8 @@ class Interpreter:
                     i = i - 1
                 end;
                 b
-            end
-        """)
-        self.go("""
+            end;
+
             deffunc range params start, stop do
                 b := [];
                 i := start; while i < stop do
@@ -843,9 +846,8 @@ class Interpreter:
                     i = i + 1
                 end;
                 b
-            end
-        """)
-        self.go("""
+            end;
+
             deffunc enumerate params a do
                 zip(range(0, len(a)), a)
             end
@@ -909,3 +911,6 @@ if __name__ == "__main__":
             run(sys.argv[1])
 
     # Example
+
+    print(i.go(""" if True then 2 else 3 end """))
+    print(i.go(""" if False then 2 elif True then 3 else 4 end """))
