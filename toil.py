@@ -295,19 +295,6 @@ class Parser:
         args = match_args(rule[1:])
         return (op, args)
 
-    def _match(self):
-        self._advance()
-        val_expr = self._expression()
-        cases = []
-        while self._current_token() == Sym("case"):
-            self._advance()
-            pattern = self._expression()
-            self._consume(Sym("then"))
-            body_expr = self._expression()
-            cases.append((pattern, body_expr))
-        self._consume(Sym("end"))
-        return (Sym("match"), val_expr, cases)
-
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
         while type(self._current_token()) is Sym and \
@@ -718,7 +705,7 @@ class Interpreter:
         return self
 
     def corelib(self):
-        self.go("""
+        self.walk("""
             __corelib := None;
 
             #rule {func: [__core_func, EXPRS, do, EXPR, end]}
@@ -744,14 +731,20 @@ class Interpreter:
             #rule {pif: [__core_if, EXPR, then, EXPR, else, EXPR, end]}
 
             __core_if_macro := macro cnd, thn, elifs, els do scope
-                e := pif els == [] then None else els[0] end;
+                __core_if_expr := pif els == [] then None else els[0] end;
                 i := len(elifs) - 1;
                 while i >= 0 do
-                    [elif_cnd, elif_thn] := elifs[i];
-                    e = qq pif !elif_cnd then !elif_thn else !e end end;
+                    [__core_if_elif_cnd, __core_if_elif_thn] := elifs[i];
+                    __core_if_expr = qq
+                        pif !__core_if_elif_cnd then
+                            !__core_if_elif_thn
+                        else
+                            !__core_if_expr
+                        end
+                    end;
                     i = i - 1
                 end;
-                qq pif !cnd then !thn else !e end end
+                qq pif !cnd then !thn else !__core_if_expr end end
             end end;
             #rule {if: [__core_if_macro, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], +[else, EXPR], end]}
 
@@ -787,7 +780,7 @@ class Interpreter:
         return self
 
     def stdlib(self):
-        self.go("""
+        self.walk("""
             __stdlib := None;
 
             deffunc first params a do a[0] end;
@@ -877,7 +870,7 @@ class Interpreter:
         except ContinueException: assert False, "Continue at top level @ evaluate()"
         except BreakException: assert False, "Break at top level @ evaluate()"
 
-    def go(self, src):
+    def walk(self, src):
         return self.evaluate(self.ast(src))
 
 if __name__ == "__main__":
@@ -901,7 +894,7 @@ if __name__ == "__main__":
 
     def run(filename):
         with open(filename, "r") as f:
-            result = i.go(f.read())
+            result = i.walk(f.read())
         exit(result if isinstance(result, int) else 0)
 
     if len(sys.argv) > 1:
@@ -912,5 +905,5 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.go(""" if True then 2 else 3 end """))
-    print(i.go(""" if False then 2 elif True then 3 else 4 end """))
+    print(i.walk(""" if True then 2 else 3 end """))
+    print(i.walk(""" if False then 2 elif True then 3 else 4 end """))
