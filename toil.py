@@ -156,16 +156,9 @@ class Parser:
         }, self._and_or)
 
     def _and_or(self):
-        left = self._not()
-        while type(self._current_token()) is Sym and \
-                (op := self._current_token()) in (Sym("and"), Sym("or")):
-            self._advance()
-            right = self._not()
-            if op == Sym("and"):
-                left = (Sym("if"), left, right, left)
-            else:
-                left = (Sym("if"), left, left, right)
-        return left
+        return self._binary_left({
+            Sym("and"): Sym("and"), Sym("or"): Sym("or"),
+        }, self._not)
 
     def _not(self):
         return self._unary({
@@ -224,9 +217,7 @@ class Parser:
             case Sym("{"): return self._dic()
             case None | bool() | int(): return self._advance()
             case s if type(s) is str: return self._advance()
-            case Sym("if"): return self._if()
             case Sym("match"): return self._match()
-            case Sym("try"): return self._try()
             case Sym(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
             case Sym(name) if is_name(name): return self._advance()
@@ -276,35 +267,6 @@ class Parser:
                 _parse_key_value(dic)
         self._advance()
         return dic
-
-    def _if(self):
-        self._advance()
-        cond_expr = self._expression()
-        self._consume(Sym("then"))
-        then_expr = self._expression()
-        if self._current_token() == Sym("elif"):
-            else_expr = self._if()
-        elif self._current_token() == Sym("else"):
-            self._advance()
-            else_expr = self._expression()
-            self._consume(Sym("end"))
-        else:
-            else_expr = None
-            self._consume(Sym("end"))
-        return (Sym("if"), cond_expr, then_expr, else_expr)
-
-    def _try(self):
-        self._advance()
-        body_expr = self._expression()
-        clauses = []
-        while self._current_token() == Sym("except"):
-            self._advance()
-            cond_expr = self._expression()
-            self._consume(Sym("then"))
-            except_expr = self._expression()
-            clauses.append((cond_expr, except_expr))
-        self._consume(Sym("end"))
-        return (Sym("try"), body_expr, clauses)
 
     def _custom(self, rule):
         def match_args(rule):
@@ -465,7 +427,7 @@ class Evaluator:
                 return self._evaluate_assign(left_expr, right_expr, env)
             case (Sym("seq"), exprs):
                 return self._evaluate_seq(exprs, env)
-            case (Sym("if"), cond_expr, then_expr, else_expr):
+            case (Sym("__core_if"), [cond_expr, then_expr, else_expr]):
                 return self._evaluate_if(cond_expr, then_expr, else_expr, env)
             case (Sym("match"), val_expr, cases):
                 return self._evaluate_match(val_expr, cases, env)
@@ -486,7 +448,7 @@ class Evaluator:
                 return self._eval_expand(op_expr, args_expr, env)
             case (Sym("__core_macro"), [params, body]):
                 return (Sym("mclosure"), params, body, env)
-            case (Sym("try"), body_expr, clauses):
+            case (Sym("__core_try"), [body_expr, clauses]):
                 return self._evaluate_try(body_expr, clauses, env)
             case (Sym("raise"), args):
                 assert len(args) <= 1, f"Raise takes zero or one argument @ evaluate(): {args}"
@@ -777,6 +739,16 @@ class Interpreter:
             end;
             #rule {deffunc: [__core_deffunc, EXPR, params, EXPRS, do, EXPR, end]}
 
+            #rule {pif: [__core_if, EXPR, then, EXPR, else, EXPR, end]}
+
+            _aif := macro cnd, thn, els do qqs
+                pif it := !cnd then !thn else !els end
+            end end;
+            #rule {aif: [_aif, EXPR, then, EXPR, else, EXPR, end]}
+
+            and := macro a, b do qq aif !a then !b else it end end end;
+            or := macro a, b do qq aif !a then it else !b end end end;
+
             #rule {while: [__core_while, EXPR, do, EXPR, end]}
 
             __core_for := macro var, coll, body do qqs
@@ -789,8 +761,19 @@ class Interpreter:
                         !body
                     end
                 end
-            end end
+            end end;
             #rule {for: [__core_for, EXPR, in, EXPR, do, EXPR, end]}
+
+            __core_if_macro := macro cnd, thn, elifs, els do scope
+                e := pif els == [] then None else qq !els[0] end end;
+                for [cnd, thn] in elifs.reverse() do
+                    e = qq pif !cnd then !thn else !(e) end end
+                end;
+                qq pif !cnd then !thn else !(e) end end
+            end end
+            #rule {if: [__core_if_macro, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], +[else, EXPR], end]}
+
+            #rule {try: [__core_try, EXPR, *[except, EXPR, then, EXPR], end]}
         """)
 
         return self
@@ -926,67 +909,3 @@ if __name__ == "__main__":
             run(sys.argv[1])
 
     # Example
-
-    # # anaphoric if
-    # i.go("""
-    #     _aif := macro cnd, thn, els do qqs
-    #         if it := !cnd then !thn else !els end
-    #     end end
-    #     #rule {aif: [_aif, EXPR, then, EXPR, else, EXPR, end]}
-    # """)
-    # print(i.go(""" expand(aif 2 then [True, it] else [False, it] end) """)) # -> (scope, (if, (define, [it, 2]), [True, it], [False, it]))
-    # print(i.go(""" aif 2 then [True, it] else [False, it] end """)) # -> [True, 2]
-    # print(i.go(""" aif 0 then [True, it] else [False, it] end """)) # -> [False, 0]
-
-    # # and/or by anaphoric if
-    # i.go("""
-    #     mand := macro a, b do qq aif !a then !b else it end end end;
-    #     mor := macro a, b do qq aif !a then it else !b end end end
-    # """)
-    # print(i.go(""" expand(mand(2, 3)) """)) # -> (aif, [2, 3, it])
-    # print(i.go(""" expand(mor(2, 3)) """)) # -> (aif, [2, it, 3])
-    # # print(i.go(""" expand(expand(mand(2, 3))) """)) # -> Error
-    # print(i.go(""" 2 and 3 """)) # -> 3
-    # print(i.go(""" mand(2, 3) """)) # -> 3
-    # print(i.go(""" 0 and 3 """)) # -> 0
-    # print(i.go(""" mand(0, 3) """)) # -> 0
-    # print(i.go(""" 2 or 3 """)) # -> 2
-    # print(i.go(""" mor(2, 3) """)) # -> 2
-    # print(i.go(""" 0 or 3 """)) # -> 3
-    # print(i.go(""" mor(0, 3) """)) # -> 3
-
-    # # if by macro
-    # i.go("""
-    #     _mif := macro cnd, thn, elifs, els do scope
-    #         e := if els == [] then None else qq !els[0] end end;
-    #         for [cnd, thn] in elifs.reverse() do
-    #             e = qq if !cnd then !thn else !(e) end end
-    #         end;
-    #         qq if !cnd then !thn else !(e) end end
-    #     end end
-    #     #rule {mif: [_mif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], +[else, EXPR], end]}
-    # """)
-    # print(i.ast(""" mif 2 == 3 then 4 end """)) # -> (_mif, [(equal, [2, 3]), 4, [], []])
-    # print(i.ast(""" mif 2 == 3 then 4 else 5 end """)) # -> (_mif, [(equal, [2, 3]), 4, [], [5]])
-    # print(i.ast(""" mif 2 == 3 then 4 elif 2 == 2 then 5 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [2, 2]), 5]], []])
-    # print(i.ast(""" mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [2, 2]), 5]], [6]])
-    # print(i.ast(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [3, 4]), 5], [(equal, [2, 2]), 6]], []])
-    # print(i.ast(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """)) # -> (_mif, [(equal, [2, 3]), 4, [[(equal, [3, 4]), 5], [(equal, [2, 2]), 6]], [7]])
-    # print(i.go(""" expand(mif 2 == 3 then 4 end) """)) # -> (if, (equal, [2, 3]), 4, None)
-    # print(i.go(""" expand(mif 2 == 3 then 4 else 5 end) """)) # -> (if, (equal, [2, 3]), 4, 5)
-    # print(i.go(""" expand(mif 2 == 3 then 4 elif 2 == 2 then 5 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [2, 2]), 5, None))
-    # print(i.go(""" expand(mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [2, 2]), 5, 6))
-    # print(i.go(""" expand(mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [3, 4]), 5, (if, (equal, [2, 2]), 6, None)))
-    # print(i.go(""" expand(mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end) """)) # -> (if, (equal, [2, 3]), 4, (if, (equal, [3, 4]), 5, (if, (equal, [2, 2]), 6, 7)))
-    # print(i.go(""" mif 2 == 3 then 4 end """)) # -> None
-    # print(i.go(""" mif 2 == 3 then 4 else 5 end """)) # -> 5
-    # print(i.go(""" mif 2 == 3 then 4 elif 2 == 2 then 5 end """)) # -> 5
-    # print(i.go(""" mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """)) # -> 5
-    # print(i.go(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """)) # -> 6
-    # print(i.go(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """)) # -> 6
-
-    # Error cases for mif
-    # print(i.ast(""" mif then 4 end """)) # -> Error (Unexpected token)
-    # print(i.ast(""" mif 2 == 3 4 end """)) # -> Error (Expected then)
-    # print(i.ast(""" mif 2 == 3 then 4 else end """)) # -> Error (Unexpected token)
-    # print(i.ast(""" mif 2 == 3 then 4 else 5 else 6 end """)) # -> Error (Extra token)

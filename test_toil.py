@@ -57,11 +57,11 @@ class TestParse(TestBase):
         assert self.i.ast(""" not not False """) == (Sym("not"), [(Sym("not"), [False])])
 
     def test_and_or(self):
-        assert self.i.ast(""" True and False """) == (Sym('if'), True, False, True)
-        assert self.i.ast(""" True or False """) == (Sym('if'), True, True, False)
-        assert self.i.ast(""" True or False and True """) == (Sym('if'), (Sym('if'), True, True, False), True, (Sym('if'), True, True, False))
-        assert self.i.ast(""" a := False and not False """) == (Sym('define'), [Sym('a'), (Sym('if'), False, (Sym('not'), [False]), False)])
-        assert self.i.ast(""" a := False or not False """) == (Sym('define'), [Sym('a'), (Sym('if'), False, False, (Sym('not'), [False]))])
+        assert self.i.ast(""" True and False """) == (Sym('and'), [True, False])
+        assert self.i.ast(""" True or False """) == (Sym('or'), [True, False])
+        assert self.i.ast(""" True or False and True """) == (Sym('and'), [(Sym('or'), [True,  False]), True])
+        assert self.i.ast(""" a := False and not False """) == (Sym('define'), [Sym('a'), (Sym('and'), [False, (Sym('not'), [False])]) ])
+        assert self.i.ast(""" a := False or not False """) == (Sym('define'), [Sym('a'), (Sym('or'), [False, (Sym('not'), [False])])])
 
     def test_neg(self):
         assert self.i.ast(""" -2 """) == (Sym("neg"), [2])
@@ -90,15 +90,15 @@ class TestParse(TestBase):
 
     def test_if(self):
         assert self.i.ast(""" if True then 2 else 3 end """) == (
-            Sym("if"), True, 2, 3)
+            Sym("__core_if_macro"), [True, 2, [], [3]])
         assert self.i.ast(""" if not True then 2 + 3 else 4; 5 end """) == (
-            Sym("if"), (Sym('not'), [True]), (Sym('add'), [2, 3]), (Sym("seq"), [4, 5]))
+            Sym("__core_if_macro"), [(Sym('not'), [True]), (Sym('add'), [2, 3]), [], [(Sym("seq"), [4, 5])]])
 
-        assert self.i.ast(""" if 1 then 10 end """) == (Sym('if'), 1, 10, None)
-        assert self.i.ast(""" if 1 then 10 else 20 end """) == (Sym('if'), 1, 10, 20)
-        assert self.i.ast(""" if 1 then 10 elif 2 then 20 end """) == (Sym('if'), 1, 10, (Sym('if'), 2, 20, None))
-        assert self.i.ast(""" if 1 then 10 elif 2 then 20 else 30 end """) == (Sym('if'), 1, 10, (Sym('if'), 2, 20, 30))
-        assert self.i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 else 40 end """) == (Sym('if'), 1, 10, (Sym('if'), 2, 20, (Sym('if'), 3, 30, 40)))
+        assert self.i.ast(""" if 1 then 10 end """) == (Sym('__core_if_macro'), [1, 10, [], []])
+        assert self.i.ast(""" if 1 then 10 else 20 end """) == (Sym("__core_if_macro"), [1, 10, [], [20]])
+        assert self.i.ast(""" if 1 then 10 elif 2 then 20 end """) == (Sym("__core_if_macro"), [1, 10, [[2, 20]], []])
+        assert self.i.ast(""" if 1 then 10 elif 2 then 20 else 30 end """) == (Sym("__core_if_macro"), [1, 10, [[2, 20]], [30]])
+        assert self.i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 else 40 end """) == (Sym("__core_if_macro"), [1, 10, [[2, 20], [3, 30]], [40]])
 
     def test_define(self):
         assert self.i.ast(""" a := not True """) == (Sym("define"), [Sym("a"), (Sym("not"), [True])])
@@ -181,15 +181,15 @@ class TestEvaluate(TestBase):
         assert capsys.readouterr().out == "2\n3\n"
 
     def test_evaluate_if(self):
-        assert self.i.evaluate((Sym("if"), True, 2, 3)) == 2
-        assert self.i.evaluate((Sym("if"), False, 2, 3)) == 3
-        assert self.i.evaluate((Sym("if"), (Sym("if"), True, True, False), 2, 3)) == 2
-        assert self.i.evaluate((Sym("if"), True, (Sym("if"), True, 2, 3), 4)) == 2
-        assert self.i.evaluate((Sym("if"), False, 2, (Sym("if"), False, 3, 4))) == 4
+        assert self.i.evaluate((Sym("__core_if"), [True, 2, 3])) == 2
+        assert self.i.evaluate((Sym("__core_if"), [False, 2, 3])) == 3
+        assert self.i.evaluate((Sym("__core_if"), [(Sym("__core_if"), [True, True, False]), 2, 3])) == 2
+        assert self.i.evaluate((Sym("__core_if"), [True, (Sym("__core_if"), [True, 2, 3]), 4])) == 2
+        assert self.i.evaluate((Sym("__core_if"), [False, 2, (Sym("__core_if"), [False, 3, 4])])) == 4
 
     def test_evaluate_if_scope(self):
         # Variable defined inside if should not leak
-        self.i.evaluate((Sym("if"), True, (Sym("define"), [Sym("inner_if"), 1]), 2))
+        self.i.evaluate((Sym("__core_if"), [True, (Sym("define"), [Sym("inner_if"), 1]), 2]))
         with pytest.raises(AssertionError):
             self.i.evaluate(Sym("inner_if"))
 
@@ -198,9 +198,9 @@ class TestEvaluate(TestBase):
         assert self.i.evaluate(Sym("a")) == 2
 
         assert self.i.evaluate((Sym("define"), [Sym("b"), True])) == True
-        assert self.i.evaluate((Sym("if"), Sym("b"), 2, 3)) == 2
+        assert self.i.evaluate((Sym("__core_if"), [Sym("b"), 2, 3])) == 2
 
-        assert self.i.evaluate((Sym("define"), [Sym("c"), (Sym("if"), False, 2, 3)])) == 3
+        assert self.i.evaluate((Sym("define"), [Sym("c"), (Sym("__core_if"), [False, 2, 3])])) == 3
         assert self.i.evaluate(Sym("c")) == 3
 
     def test_evaluate_undefined_variable(self):
@@ -264,10 +264,11 @@ class TestEvaluate(TestBase):
     def test_recursion(self):
         self.i.evaluate((Sym("define"), [Sym("fac"), (Sym("__core_func"), [
             [Sym("n")],
-            (Sym("if"), (Sym("equal"), [Sym("n"), 1]),
+            (Sym("__core_if"), [
+                (Sym("equal"), [Sym("n"), 1]),
                 1,
                 (Sym("mul"), [Sym("n"), (Sym("fac"), [(Sym("sub"), [Sym("n"), 1])])])
-            )
+        ])
         ])]))
         assert self.i.evaluate((Sym("fac"), [1])) == 1
         assert self.i.evaluate((Sym("fac"), [3])) == 6
@@ -1209,9 +1210,13 @@ text
         """) == 5
 
     def test_ast_primitives(self):
-        assert self.i.go(""" quote(if True then 2 else 3 end) """) == (Sym("if"), True, 2, 3)
-        assert self.i.go(""" expr(sym("if"), True, 2, 3) """) == (Sym("if"), True, 2, 3)
-        assert self.i.go(""" eval_expr(expr(sym("if"), True, 2, 3)) """) == 2
+        assert self.i.go(""" quote(if True then 2 else 3 end) """) == (Sym("__core_if_macro"), [True, 2, [], [3]])
+        assert self.i.go(""" expr(sym("__core_if"), [True, 2, 3]) """) == (Sym("__core_if"), [True, 2, 3])
+        assert self.i.go(""" eval_expr(expr(sym("__core_if"), [True, 2, 3])) """) == 2
+        assert self.i.go(""" eval_expr(expr(sym("__core_if_macro"), [True, 2, [], [3]])) """) == 2
+
+        with pytest.raises(AssertionError):
+            self.i.go(""" eval_expr(expr(sym("if"), [True, 2, 3] """)
 
         assert self.i.go(""" quote(add(2, 3)) """) == (Sym("add"), [2, 3])
         assert self.i.go(""" expr(sym("add"), [2, 3]) """) == (Sym("add"), [2, 3])
@@ -1221,37 +1226,45 @@ text
             a := 2;
             b := 3;
             if a == b then a + b else a * b end
-        ) """) == (Sym("seq"), [(Sym("define"), [Sym("a"), 2]), (Sym("define"), [Sym("b"), 3]), (Sym("if"), (Sym("equal"), [Sym("a"), Sym("b")]), (Sym("add"), [Sym("a"), Sym("b")]), (Sym("mul"), [Sym("a"), Sym("b")]))])
+        ) """) == (Sym("seq"), [(Sym("define"), [Sym("a"), 2]), (Sym("define"), [Sym("b"), 3]), (Sym("__core_if_macro"), [(Sym("equal"), [Sym("a"), Sym("b")]), (Sym("add"), [Sym("a"), Sym("b")]), [], [(Sym("mul"), [Sym("a"), Sym("b")])]])])
         assert self.i.go("""
             expr(sym("seq"), [
                 expr(sym("define"), [sym("a"), 2]),
                 expr(sym("define"), [sym("b"), 3]),
-                expr(sym("if"),
+                expr(sym("__core_if"), [
                     expr(sym("equal"), [sym("a"), sym("b")]),
                     expr(sym("add"), [sym("a"), sym("b")]),
                     expr(sym("mul"), [sym("a"), sym("b")])
-                )
+                ])
             ])
-        """) == (Sym("seq"), [(Sym("define"), [Sym("a"), 2]), (Sym("define"), [Sym("b"), 3]), (Sym("if"), (Sym("equal"), [Sym("a"), Sym("b")]), (Sym("add"), [Sym("a"), Sym("b")]), (Sym("mul"), [Sym("a"), Sym("b")]))])
+        """) == (Sym("seq"), [
+            (Sym("define"), [Sym("a"), 2]),
+            (Sym("define"), [Sym("b"), 3]),
+            (Sym("__core_if"), [
+                (Sym("equal"), [Sym("a"), Sym("b")]),
+                (Sym("add"), [Sym("a"), Sym("b")]),
+                (Sym("mul"), [Sym("a"), Sym("b")])
+            ])
+        ])
         assert self.i.go(""" eval_expr(
             expr(sym("seq"), [
                 expr(sym("define"), [sym("a"), 2]),
                 expr(sym("define"), [sym("b"), 3]),
-                expr(sym("if"),
+                expr(sym("__core_if"), [
                     expr(sym("equal"), [sym("a"), sym("b")]),
                     expr(sym("add"), [sym("a"), sym("b")]),
                     expr(sym("mul"), [sym("a"), sym("b")])
-                )
+                ])
             ])
         ) """) == 6
 
     def test_macro(self, capsys):
         # Basic macro (when) vs function (fwhen)
         self.i.go("""
-            defmacro when params cond, body do expr(sym("if"), cond, body, None) end;
+            defmacro when params cond, body do expr(sym("__core_if"), [cond, body, None]) end;
             deffunc fwhen params cond, body do if cond then body else None end end
         """)
-        assert self.i.go(""" expand(when(2 == 2, 3)) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
+        assert self.i.go(""" expand(when(2 == 2, 3)) """) == (Sym("__core_if"), [(Sym("equal"), [2, 2]), 3, None])
         assert self.i.go(""" when(2 == 2, 3) """) == 3
         assert self.i.go(""" when(2 == 3, 4 / 0) """) is None
 
@@ -1259,7 +1272,7 @@ text
         with pytest.raises(ZeroDivisionError):
             self.i.go(""" fwhen(2 == 3, 4 / 0) """)
 
-        self.i.go(""" defmacro mwhen params cond, body do expr(sym("if"), cond, body, None) end """)
+        self.i.go(""" defmacro mwhen params cond, body do expr(sym("__core_if"), [cond, body, None]) end """)
         assert self.i.go(""" mwhen(2 == 2, 3) """) == 3
         with pytest.raises(AssertionError, match="Argument mismatch"):
             self.i.go(""" mwhen(2 == 2) """)
@@ -1273,19 +1286,19 @@ text
 
         # Anaphoric if
         self.i.go("""
-            defmacro aif params cnd, thn, els do expr(sym("__core_scope"), [expr(sym("if"),
+            defmacro maif params cnd, thn, els do expr(sym("__core_scope"), [expr(sym("__core_if"), [
                 expr(sym("define"), [sym("it"), cnd]),
                 thn,
                 els
-            )]) end
+            ])]) end
         """)
-        assert self.i.go(""" aif(2, [True, it], [False, it]) """) == [True, 2]
-        assert self.i.go(""" aif(0, [True, it], [False, it]) """) == [False, 0]
+        assert self.i.go(""" maif(2, [True, it], [False, it]) """) == [True, 2]
+        assert self.i.go(""" maif(0, [True, it], [False, it]) """) == [False, 0]
 
         # and/or using aif
         self.i.go("""
-            defmacro mand params a, b do expr(sym("aif"), [a, b, sym("it")]) end;
-            defmacro mor params a, b do expr(sym("aif"), [a, sym("it"), b]) end
+            defmacro mand params a, b do expr(sym("maif"), [a, b, sym("it")]) end;
+            defmacro mor params a, b do expr(sym("maif"), [a, sym("it"), b]) end
         """)
         assert self.i.go(""" mand(2, 3) """) == 3
         assert self.i.go(""" mand(0, 3) """) == 0
@@ -1333,8 +1346,7 @@ class TestQuasiquote(TestBase):
 
     def test_nested(self):
         self.i.go(""" a := 2 """)
-        expected = (Sym("if"), (Sym("equal"), [2, 3]), 4, 5)
-        assert self.i.go(""" qq if !a == 3 then 4 else 5 end end """) == expected
+        assert self.i.go(""" qq if !a == 3 then 4 else 5 end end """) == (Sym("__core_if_macro"), [(Sym("equal"), [2, 3]), 4, [], [5]])
         assert self.i.go(""" eval_expr(qq if !a == 3 then 4 else 5 end end) """) == 5
 
     def test_splicing_call(self, capsys):
@@ -1360,7 +1372,7 @@ class TestMacroSamples(TestBase):
         self.i.go("""
             when := macro cond, body do qq if !cond then !body else None end end end
         """)
-        assert self.i.go(""" expand(when(2 == 2, 3)) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
+        assert self.i.go(""" expand(when(2 == 2, 3)) """) == (Sym("__core_if_macro"), [(Sym("equal"), [2, 2]), 3, [], [None]])
         assert self.i.go(""" when(2 == 2, 3) """) == 3
         assert self.i.go(""" when(2 == 3, 4 / 0) """) is None
 
@@ -1400,15 +1412,15 @@ class TestMacroSamples(TestBase):
 
     def test_anaphoric_if_and_or(self):
         self.i.go("""
-            aif := macro cnd, thn, els do
+            maif := macro cnd, thn, els do
                 qq if it := !cnd then !thn else !els end end
             end
         """)
-        assert self.i.go(""" aif(2, [True, it], [False, it]) """) == [True, 2]
-        assert self.i.go(""" aif(0, [True, it], [False, it]) """) == [False, 0]
+        assert self.i.go(""" maif(2, [True, it], [False, it]) """) == [True, 2]
+        assert self.i.go(""" maif(0, [True, it], [False, it]) """) == [False, 0]
 
-        self.i.go(""" mand := macro a, b do qq aif(!a, !b, it) end end """)
-        self.i.go(""" mor := macro a, b do qq aif(!a, it, !b) end end """)
+        self.i.go(""" mand := macro a, b do qq maif(!a, !b, it) end end """)
+        self.i.go(""" mor := macro a, b do qq maif(!a, it, !b) end end """)
 
         assert self.i.go(""" mand(2, 3) """) == 3
         assert self.i.go(""" mand(0, 3) """) == 0
@@ -1451,11 +1463,11 @@ class TestCustomSyntax(TestBase):
             _when := macro cond, body do qq if !cond then !body else None end end end
             #rule {when: [_when, EXPR, do, EXPR, end]}
         """)
-        assert self.i.go(""" expand(_when(2 == 2, 3)) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
+        assert self.i.go(""" expand(_when(2 == 2, 3)) """) == (Sym("__core_if_macro"), [(Sym("equal"), [2, 2]), 3, [], [None]])
         assert self.i.go(""" _when(2 == 2, 3) """) == 3
         assert self.i.go(""" _when(2 == 3, 4 / 0) """) is None
 
-        assert self.i.go(""" expand(when 2 == 2 do 3 end ) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
+        assert self.i.go(""" expand(when 2 == 2 do 3 end ) """) == (Sym("__core_if_macro"), [(Sym("equal"), [2, 2]), 3, [], [None]])
         assert self.i.go(""" when 2 == 2 do 3 end """) == 3
         assert self.i.go(""" when 2 == 3 do 4 / 0 end """) is None
 
@@ -1543,14 +1555,14 @@ class TestCustomSyntax(TestBase):
             #rule {defmacro: [_defmacro, EXPR, params, EXPRS, do, EXPR, end]}
         """)
         assert self.i.go(""" expand(
-            _defmacro(mwhen, [cond, body], expr(sym("if"), cond, body, None))
+            _defmacro(mwhen, [cond, body], expr(sym("__core_if"), [cond, body, None]))
         ) """) == (Sym("define"), [Sym("mwhen"), (Sym("__core_macro"), [
             [Sym("cond"), Sym("body")],
-            (Sym("expr"), [(Sym("sym"), ["if"]), Sym("cond"), Sym("body"), None])
+            (Sym("expr"), [(Sym("sym"), ["__core_if"]), [Sym("cond"), Sym("body"), None]])
         ])])
 
         self.i.go(""" _defmacro(mwhen, [cond, body], qq if !cond then !body else None end end) """)
-        assert self.i.go(""" expand(mwhen(2 == 2, 3)) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
+        assert self.i.go(""" expand(mwhen(2 == 2, 3)) """) == (Sym("__core_if_macro"), [(Sym("equal"), [2, 2]), 3, [], [None]])
         assert self.i.go(""" mwhen(2 == 2, 3) """) == 3
         assert self.i.go(""" mwhen(2 == 3, 4 / 0) """) is None
         with pytest.raises(AssertionError, match="Argument mismatch"):
@@ -1561,14 +1573,14 @@ class TestCustomSyntax(TestBase):
             defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
         ) """) == (Sym("define"), [Sym("mwhen2"), (Sym("__core_macro"), [
             [Sym("cond"), Sym("body")],
-            (Sym("__core_qq"), [(Sym("if"), (Sym("!"), [Sym("cond")]), (Sym("!"), [Sym("body")]), None)])
+            (Sym("__core_qq"), [(Sym("__core_if_macro"), [(Sym("!"), [Sym("cond")]), (Sym("!"), [Sym("body")]), [], [None]])])
         ])])
 
         self.i.go("""
             defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
         """)
 
-        assert self.i.go(""" expand(mwhen2(2 == 2, 3)) """) == (Sym("if"), (Sym("equal"), [2, 2]), 3, None)
+        assert self.i.go(""" expand(mwhen2(2 == 2, 3)) """) == (Sym("__core_if_macro"), [(Sym("equal"), [2, 2]), 3, [], [None]])
         assert self.i.go(""" mwhen2(2 == 2, 3) """) == 3
         assert self.i.go(""" mwhen2(2 == 3, 4 / 0) """) is None
         with pytest.raises(AssertionError, match="Argument mismatch"):
@@ -1647,59 +1659,48 @@ class TestCustomSyntax(TestBase):
             self.i.go(""" let_func var a = 1 do a end """)
 
     def test_optional_arguments(self):
-        # Setup for foo and mif
         self.i.go("""
             #rule {foo: [_foo, +[opt, EXPR], do, EXPR, end]}
-
-            _mif := macro cnd, thn, elifs, els do scope
-                e := if els == [] then None else qq !els[0] end end;
-                for [cnd, thn] in elifs.reverse() do
-                    e = qq if !cnd then !thn else !(e) end end
-                end;
-                qq if !cnd then !thn else !(e) end end
-            end end
-            #rule {mif: [_mif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], +[else, EXPR], end]}
+            None
         """)
 
-        # Test foo parsing
         assert self.i.ast(""" foo do 4 end """) == (Sym("_foo"), [[], 4])
         assert self.i.ast(""" foo opt 2 + 3 do 4 end """) == (Sym("_foo"), [[(Sym("add"), [2, 3])], 4])
         with pytest.raises(AssertionError, match="Expected do @ consume: opt"):
             self.i.ast(""" foo opt 2 + 3 opt 4 + 5 do 6 end """)
 
-        # Test mif parsing
-        assert self.i.ast(""" mif 2 == 3 then 4 end """) == (Sym("_mif"), [(Sym("equal"), [2, 3]), 4, [], []])
-        assert self.i.ast(""" mif 2 == 3 then 4 else 5 end """) == (Sym("_mif"), [(Sym("equal"), [2, 3]), 4, [], [5]])
-        assert self.i.ast(""" mif 2 == 3 then 4 elif 2 == 2 then 5 end """) == (Sym("_mif"), [(Sym("equal"), [2, 3]), 4, [[(Sym("equal"), [2, 2]), 5]], []])
-        assert self.i.ast(""" mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """) == (Sym("_mif"), [(Sym("equal"), [2, 3]), 4, [[(Sym("equal"), [2, 2]), 5]], [6]])
-        assert self.i.ast(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """) == (Sym("_mif"), [(Sym("equal"), [2, 3]), 4, [[(Sym("equal"), [3, 4]), 5], [(Sym("equal"), [2, 2]), 6]], []])
-        assert self.i.ast(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """) == (Sym("_mif"), [(Sym("equal"), [2, 3]), 4, [[(Sym("equal"), [3, 4]), 5], [(Sym("equal"), [2, 2]), 6]], [7]])
+    def test_elif(self):
+        assert self.i.ast(""" if 2 == 3 then 4 end """) == (Sym("__core_if_macro"), [(Sym("equal"), [2, 3]), 4, [], []])
+        assert self.i.ast(""" if 2 == 3 then 4 else 5 end """) == (Sym("__core_if_macro"), [(Sym("equal"), [2, 3]), 4, [], [5]])
+        assert self.i.ast(""" if 2 == 3 then 4 elif 2 == 2 then 5 end """) == (Sym("__core_if_macro"), [(Sym("equal"), [2, 3]), 4, [[(Sym("equal"), [2, 2]), 5]], []])
+        assert self.i.ast(""" if 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """) == (Sym("__core_if_macro"), [(Sym("equal"), [2, 3]), 4, [[(Sym("equal"), [2, 2]), 5]], [6]])
+        assert self.i.ast(""" if 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """) == (Sym("__core_if_macro"), [(Sym("equal"), [2, 3]), 4, [[(Sym("equal"), [3, 4]), 5], [(Sym("equal"), [2, 2]), 6]], []])
+        assert self.i.ast(""" if 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """) == (Sym("__core_if_macro"), [(Sym("equal"), [2, 3]), 4, [[(Sym("equal"), [3, 4]), 5], [(Sym("equal"), [2, 2]), 6]], [7]])
 
-        # Test mif expansion
-        assert self.i.go(""" expand(mif 2 == 3 then 4 end) """) == (Sym("if"), (Sym("equal"), [2, 3]), 4, None)
-        assert self.i.go(""" expand(mif 2 == 3 then 4 else 5 end) """) == (Sym("if"), (Sym("equal"), [2, 3]), 4, 5)
-        assert self.i.go(""" expand(mif 2 == 3 then 4 elif 2 == 2 then 5 end) """) == (Sym("if"), (Sym("equal"), [2, 3]), 4, (Sym("if"), (Sym("equal"), [2, 2]), 5, None))
-        assert self.i.go(""" expand(mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end) """) == (Sym("if"), (Sym("equal"), [2, 3]), 4, (Sym("if"), (Sym("equal"), [2, 2]), 5, 6))
-        assert self.i.go(""" expand(mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end) """) == (Sym("if"), (Sym("equal"), [2, 3]), 4, (Sym("if"), (Sym("equal"), [3, 4]), 5, (Sym("if"), (Sym("equal"), [2, 2]), 6, None)))
-        assert self.i.go(""" expand(mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end) """) == (Sym("if"), (Sym("equal"), [2, 3]), 4, (Sym("if"), (Sym("equal"), [3, 4]), 5, (Sym("if"), (Sym("equal"), [2, 2]), 6, 7)))
+        assert self.i.go(""" expand(if 2 == 3 then 4 end) """) == (Sym("__core_if"), [(Sym("equal"), [2, 3]), 4, None])
+        assert self.i.go(""" expand(if 2 == 3 then 4 else 5 end) """) == (Sym("__core_if"), [(Sym("equal"), [2, 3]), 4, 5])
+        assert self.i.go(""" expand(if 2 == 3 then 4 elif 2 == 2 then 5 end) """) == (Sym("__core_if"), [(Sym("equal"), [2, 3]), 4, (Sym("__core_if"), [(Sym("equal"), [2, 2]), 5, None])])
+        assert self.i.go(""" expand(if 2 == 3 then 4 elif 2 == 2 then 5 else 6 end) """) == (Sym("__core_if"), [(Sym("equal"), [2, 3]), 4, (Sym("__core_if"), [(Sym("equal"), [2, 2]), 5, 6])])
+        assert self.i.go(""" expand(if 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end) """) == (Sym("__core_if"), [(Sym("equal"), [2, 3]), 4, (Sym("__core_if"), [(Sym("equal"), [3, 4]), 5, (Sym("__core_if"), [(Sym("equal"), [2, 2]), 6, None])])])
+        assert self.i.go(""" expand(if 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end) """) == (Sym("__core_if"), [(Sym("equal"), [2, 3]), 4, (Sym("__core_if"), [(Sym("equal"), [3, 4]), 5, (Sym("__core_if"), [(Sym("equal"), [2, 2]), 6, 7])])])
 
         # Test mif evaluation
-        assert self.i.go(""" mif 2 == 3 then 4 end """) is None
-        assert self.i.go(""" mif 2 == 3 then 4 else 5 end """) == 5
-        assert self.i.go(""" mif 2 == 3 then 4 elif 2 == 2 then 5 end """) == 5
-        assert self.i.go(""" mif 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """) == 5
-        assert self.i.go(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """) == 6
-        assert self.i.go(""" mif 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """) == 6
+        assert self.i.go(""" if 2 == 3 then 4 end """) is None
+        assert self.i.go(""" if 2 == 3 then 4 else 5 end """) == 5
+        assert self.i.go(""" if 2 == 3 then 4 elif 2 == 2 then 5 end """) == 5
+        assert self.i.go(""" if 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """) == 5
+        assert self.i.go(""" if 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """) == 6
+        assert self.i.go(""" if 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """) == 6
 
         # Test mif error cases
         with pytest.raises(AssertionError, match="Expected then @ consume: 4"):
-            self.i.ast(""" mif then 4 end """)
+            self.i.ast(""" if then 4 end """)
         with pytest.raises(AssertionError, match="Expected then @ consume: 4"):
-            self.i.ast(""" mif 2 == 3 4 end """)
+            self.i.ast(""" if 2 == 3 4 end """)
         with pytest.raises(AssertionError, match="Expected end @ consume"):
-            self.i.ast(""" mif 2 == 3 then 4 else end """)
+            self.i.ast(""" if 2 == 3 then 4 else end """)
         with pytest.raises(AssertionError, match="Expected end @ consume: else"):
-            self.i.ast(""" mif 2 == 3 then 4 else 5 else 6 end """)
+            self.i.ast(""" if 2 == 3 then 4 else 5 else 6 end """)
 
 if __name__ == "__main__":
     pytest.main([__file__])
