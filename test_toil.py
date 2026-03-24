@@ -110,7 +110,7 @@ class TestParse(TestBase):
         assert self.i.ast(""" a := b = 2 """) == (Sym("define"), [Sym("a"), (Sym("assign"), [Sym("b"), 2])])
         assert self.i.ast(""" a := b = c := 3 """) == (Sym("define"), [Sym("a"), (Sym("assign"), [Sym("b"), (Sym("define"), [Sym("c"), 3])])])
 
-    def test_array_assign(self):
+    def test_list_assign(self):
         assert self.i.ast(""" a[0] = 1 """) == (Sym("assign"), [(Sym("index"), [Sym("a"), 0]), 1])
         assert self.i.ast(""" a[1][2] = 3 """) == (Sym("assign"), [(Sym("index"), [(Sym("index"), [Sym("a"), 1]), 2]), 3])
         assert self.i.ast(""" a[0] = b[1] = 2 """) == (Sym("assign"), [(Sym("index"), [Sym("a"), 0]), (Sym("assign"), [(Sym("index"), [Sym("b"), 1]), 2])])
@@ -315,7 +315,7 @@ class TestEvaluate(TestBase):
         self.i.evaluate((Sym("define"), [Sym("g"), (Sym("make_shadow"), [2])]))
         assert self.i.evaluate((Sym("g"), [])) == 3
 
-    def test_array(self):
+    def test_list(self):
         self.i.evaluate((Sym("define"), [Sym("a"), [1, 2, 3]]))
         assert self.i.evaluate(Sym("a")) == [1, 2, 3]
         assert self.i.evaluate((Sym("index"), [Sym("a"), 0])) == 1
@@ -324,7 +324,7 @@ class TestEvaluate(TestBase):
         self.i.evaluate((Sym("assign"), [(Sym("index"), [Sym("a"), 1]), 4]))
         assert self.i.evaluate(Sym("a")) == [1, 4, 3]
 
-    def test_array_nested(self):
+    def test_list_nested(self):
         self.i.evaluate((Sym("define"), [Sym("a"), [
             [1, 2],
             [3, 4]
@@ -335,14 +335,14 @@ class TestEvaluate(TestBase):
         self.i.evaluate((Sym("assign"), [(Sym("index"), [(Sym("index"), [Sym("a"), 1]), 0]), 5]))
         assert self.i.evaluate((Sym("index"), [(Sym("index"), [Sym("a"), 1]), 0])) == 5
 
-    def test_array_push_pop(self):
+    def test_list_push_pop(self):
         self.i.evaluate((Sym("define"), [Sym("a"), [1, 2]]))
         self.i.evaluate((Sym("push"), [Sym("a"), 3]))
         assert self.i.evaluate(Sym("a")) == [1, 2, 3]
         assert self.i.evaluate((Sym("pop"), [Sym("a")])) == 3
         assert self.i.evaluate(Sym("a")) == [1, 2]
 
-    def test_array_funcs(self):
+    def test_list_funcs(self):
         self.i.evaluate((Sym("define"), [Sym("a"), [1, 2, 3]]))
         assert self.i.evaluate((Sym("len"), [Sym("a")])) == 3
         assert self.i.evaluate((Sym("slice"), [Sym("a"), 1, None])) == [2, 3]
@@ -350,7 +350,7 @@ class TestEvaluate(TestBase):
         assert self.i.evaluate((Sym("slice"), [Sym("a"), None, 2])) == [1, 2]
         assert self.i.evaluate((Sym("slice"), [Sym("a"), None, None])) == [1, 2, 3]
 
-    def test_array_error(self):
+    def test_list_error(self):
         self.i.evaluate((Sym("define"), [Sym("a"), [1, 2]]))
 
         with pytest.raises(AssertionError, match="Invalid indexing"):
@@ -658,7 +658,7 @@ class TestGo(TestBase):
         with pytest.raises(AssertionError):
             self.i.walk(""" 7 8 """)
 
-    def test_array(self):
+    def test_list(self):
         assert self.i.walk(""" [] """) == []
         assert self.i.walk(""" [2 + 3] """) == [5]
         assert self.i.walk(""" [2][0] """) == 2
@@ -710,7 +710,7 @@ class TestGo(TestBase):
         assert self.i.walk(""" zip(a, [4, 5, 6]) """) == [[2, 4], [3, 5], [4, 6]]
         assert self.i.walk(""" enumerate(a) """) == [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
 
-    def test_array_sieve(self):
+    def test_list_sieve(self):
         assert self.i.walk("""
             sieve := [False, False] + [True] * 98;
             i := 2; while i * i < 100 do
@@ -1228,6 +1228,16 @@ text
             mydeffunc("myadd", "a, b", "a + b");
             myadd(2, 3)
         """) == 5
+
+    def test_type(self):
+        assert self.i.walk(""" type(None) """) == "NoneType"
+        assert self.i.walk(""" type(True) """) == "bool"
+        assert self.i.walk(""" type(2) """) == "int"
+        assert self.i.walk(""" type("abc") """) == "str"
+        assert self.i.walk(""" type([2, 3]) """) == "list"
+        assert self.i.walk(""" type({a: 2}) """) == "dict"
+        assert self.i.walk(""" type(quote(2 + 3)) """) == "expr"
+        assert self.i.walk(""" type(quote(a)) """) == "sym"
 
     def test_ast_primitives(self):
         assert self.i.walk(""" quote(if True then 2 else 3 end) """) == (Sym("__core_if_macro"), [True, 2, [], [3]])

@@ -213,8 +213,8 @@ class Parser:
     def _primary(self):
         match self._current_token():
             case Sym("("): return self._paren()
-            case Sym("["): return self._array()
-            case Sym("{"): return self._dic()
+            case Sym("["): return self._list()
+            case Sym("{"): return self._dict()
             case None | bool() | int(): return self._advance()
             case s if type(s) is str: return self._advance()
             case Sym(name) if name in self._custom_rules:
@@ -229,19 +229,19 @@ class Parser:
         self._consume(Sym(")"))
         return expr
 
-    def _array(self):
+    def _list(self):
         self._advance()
         array = self._comma_separated_exprs(Sym("]"))
         self._consume(Sym("]"))
         return array
 
-    def _dic(self):
+    def _dict(self):
         def _parse_key_value(dic):
             match self._current_token():
                 case Sym("*"):
                     self._advance()
                     rest_name = self._advance()
-                    assert is_name(rest_name), f"Expected rest pattern name @ _dic(): {rest_name}"
+                    assert is_name(rest_name), f"Expected rest pattern name @ _dict(): {rest_name}"
                     dic[Sym("*")] = rest_name
                 case Sym():
                     key = str(self._advance())
@@ -255,7 +255,7 @@ class Parser:
                     self._consume(Sym(":"))
                     dic[key] = self._expression()
                 case Invalid:
-                    assert False, f"Invalid key @ _dic(): {Invalid}"
+                    assert False, f"Invalid key @ _dict(): {Invalid}"
 
         self._advance()
         dic = {}
@@ -667,6 +667,11 @@ class Interpreter:
         ast = self.parse(self.scan(src))
         return Evaluator().evaluate(ast, module_env)
 
+    def type(self, expr):
+        return "expr" if type(expr) is tuple else \
+            "sym" if type(expr) is Sym else \
+            type(expr).__name__
+
     def init_env(self):
         self._env.define(Sym("__builtins"), None)
 
@@ -675,6 +680,8 @@ class Interpreter:
         self._env.define(Sym("eval"), lambda args: Evaluator().evaluate(self.ast(args[0]), self._env))
         self._env.define(Sym("eval_expr"), lambda args: Evaluator().evaluate(args[0], self._env))
         self._env.define(Sym("apply"), lambda args: Evaluator().apply(args[0], args[1]))
+
+        self._env.define(Sym("type"), lambda args: self.type(args[0]))
 
         self._env.define(Sym("add"), lambda args: args[0] + args[1])
         self._env.define(Sym("sub"), lambda args: args[0] - args[1])
@@ -917,34 +924,23 @@ if __name__ == "__main__":
 
     # Example
 
-    i.walk("""
-        f := func ast do
-            match ast
-                case expr(sym("add"), [left, right]) then left + right
-                case expr(sym("sub"), [left, right]) then left - right
-                case expr(op, args) then [op, args]
-                case _ then None
-            end
-        end
-    """)
+    print(i.walk(""" type(None) """))
+    # -> NoneType
 
-    print(i.walk(""" f(quote(2 + 3)) """))
-    # -> 5
+    print(i.walk(""" type(True) """))
+    # -> bool
 
-    print(i.walk(""" f(quote(5 - 2)) """))
-    # -> 3
+    print(i.walk(""" type(2) """))
+    # -> int
 
-    print(i.walk(""" f(quote(2 * 3)) """))
-    # -> [mul, [2, 3]]
+    print(i.walk(""" type([2, 3]) """))
+    # -> list
 
-    print(i.walk(""" f(2) """))
-    # -> None
+    print(i.walk(""" type({"a": 2}) """))
+    # -> dict
 
-    print(i.walk(""" f(expr(sym("add"), [2, 3])) """))
-    # -> 5
+    print(i.walk(""" type(quote(2 + 3)) """))
+    # -> expr
 
-    print(i.walk(""" f(expr("add", [2, 3])) """))
-    # -> ['add', [2, 3]]
-
-    print(i.walk(""" f([sym("add"), [2, 3]]) """))
-    # -> None
+    print(i.walk(""" type(quote(a)) """))
+    # -> sym
