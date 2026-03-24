@@ -673,6 +673,7 @@ class Interpreter:
             type(expr).__name__
 
     def init_env(self):
+        self._env = Environment()
         self._env.define(Sym("__builtins"), None)
 
         self._env.define(Sym("import"), lambda args: self._import(args[0]))
@@ -881,9 +882,9 @@ class Interpreter:
         self.collect_rules(src)
         return self.parse(self.scan(src))
 
-    def evaluate(self, expr):
+    def evaluate(self, ast):
         try:
-            return Evaluator().evaluate(expr, self._env)
+            return Evaluator().evaluate(ast, self._env)
         except ToilException as e: assert False, f"ToilException @ evaluate(): {e.e}"
         except ReturnException: assert False, "Return from top level @ evaluate()"
         except ContinueException: assert False, "Continue at top level @ evaluate()"

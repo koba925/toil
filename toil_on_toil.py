@@ -18,93 +18,67 @@ i.walk("""
     end
 """)
 
+i.walk("""
+    deffunc Scanner params src do
+        self := {};
+        self._src = src;
+        self._pos = 0;
+        self._tokens = [];
+
+        self.tokenize = func self do [int(src)] end;
+
+        self
+    end
+""")
+
+i.walk("""
+    deffunc Parser params tokens do
+        self := {};
+        self._tokens = tokens;
+        self._pos = 0;
+
+        self.parse = func self do tokens[0] end;
+
+        self
+    end
+""")
+
+i.walk("""
+    deffunc Evaluator params do
+        self := {};
+
+        self.eval = func self, expr do expr end;
+
+        self
+    end
+""")
+
+i.walk("""
+    deffunc Interpreter params do
+        self := {};
+
+        self.scan = func self, src do Scanner(src).tokenize() end;
+        self.parse = func self, tokens do Parser(tokens).parse() end;
+        self.ast = func self, src do Parser(self.scan(src)).parse() end;
+        self.eval = func self, ast do Evaluator().eval(ast) end;
+        self.walk = func self, src do self.eval(self.ast(src)) end;
+
+        self
+    end
+""")
+
 if __name__ == "__main__":
 
     # example
 
     i.walk("""
-        print("# isalpha");
+        i := Interpreter();
 
-        print(isalpha("a")); # -> True
-        print(isalpha("z")); # -> True
-        print(isalpha("A")); # -> True
-        print(isalpha("Z")); # -> True
-        print(isalpha("0")); # -> False
-        print(isalpha("9")); # -> False
-        print(isalpha("_")); # -> False
-        print(isalpha("$")); # -> False
-
-        None
-    """)
-
-    i.walk("""
-        print("# isdigit");
-
-        print(isdigit("a")); # -> False
-        print(isdigit("z")); # -> False
-        print(isdigit("A")); # -> False
-        print(isdigit("Z")); # -> False
-        print(isdigit("0")); # -> True
-        print(isdigit("9")); # -> True
-        print(isdigit("_")); # -> False
-        print(isdigit("$")); # -> False
-
-        None
-    """)
-
-    i.walk("""
-        print("# isalnum");
-
-        print(isalnum("a")); # -> True
-        print(isalnum("z")); # -> True
-        print(isalnum("A")); # -> True
-        print(isalnum("Z")); # -> True
-        print(isalnum("0")); # -> True
-        print(isalnum("9")); # -> True
-        print(isalnum("_")); # -> False
-        print(isalnum("$")); # -> False
-
-        None
-    """)
-
-    i.walk("""
-        print("# is_name_first");
-
-        print(is_name_first("a")); # -> True
-        print(is_name_first("z")); # -> True
-        print(is_name_first("A")); # -> True
-        print(is_name_first("Z")); # -> True
-        print(is_name_first("0")); # -> False
-        print(is_name_first("9")); # -> False
-        print(is_name_first("_")); # -> True
-        print(is_name_first("$")); # -> False
-
-        None
-    """)
-
-    i.walk("""
-        print("# is_name_rest");
-
-        print(is_name_rest("a")); # -> True
-        print(is_name_rest("z")); # -> True
-        print(is_name_rest("A")); # -> True
-        print(is_name_rest("Z")); # -> True
-        print(is_name_rest("0")); # -> True
-        print(is_name_rest("9")); # -> True
-        print(is_name_rest("_")); # -> True
-        print(is_name_rest("$")); # -> False
-
-        None
-    """)
-
-    i.walk("""
-        print("# is_name");
-
-        print(is_name(sym("a"))); # -> True
-        print(is_name(sym("_abc"))); # -> True
-        print(is_name(sym("0a"))); # -> False
-        print(is_name(sym("$a"))); # -> False
-        print(is_name("a")); # -> False
+        print(i.scan("2")); # -> [2]
+        print(i.parse([2])); # -> 2
+        print(i.ast("2")); # -> 2
+        print(i.eval(2)); # -> 2
+        print(i.walk("2")); # -> 2
 
         None
     """)
