@@ -90,8 +90,8 @@ i.walk("""
 
         self.parse = func self do
             expr := self._expression();
-            if self._current_token() != sym('$EOF') then
-                raise('Extra token @ parse: ' + str(self._current_token()))
+            if self._current() != sym('$EOF') then
+                raise('Extra token @ parse: ' + str(self._current()))
             end;
             expr
         end;
@@ -101,15 +101,46 @@ i.walk("""
         end;
 
         self._primary = func self do
-            match self._current_token().type()
+            match self._current().type()
                 case 'NoneType' then self._current_and_advance()
                 case 'bool' then self._current_and_advance()
                 case 'int' then self._current_and_advance()
-                case _ then raise('Unexpected token: ' + str(self._current_token()))
+                case 'sym' then
+                    match str(self._current())
+                        case 'if' then self._if()
+                    end
+                case _ then raise('Unexpected token: ' + str(self._current()))
             end
         end;
 
-        self._current_token = func self do self._tokens[self._pos] end;
+        self._if = func self do
+            self._current_and_advance();
+            cond_expr := self._expression();
+            self._consume(sym('then'));
+            then_expr := self._expression();
+            else_expr := None;
+            if self._current() == sym('elif') then
+                else_expr = self._if()
+            elif self._current() == sym('else') then
+                self._current_and_advance();
+                else_expr = self._expression();
+                self._consume(sym('end'))
+            else
+                else_expr = None;
+                self._consume(sym('end'))
+            end;
+            expr(sym('if'), [cond_expr, then_expr, else_expr])
+        end;
+
+        self._consume = func self, expected do
+            if self._current() == expected then
+                self._current_and_advance()
+            else
+                raise('Expected ' + expected + ' @ consume: ' + str(self._current()))
+            end
+        end;
+
+        self._current = func self do self._tokens[self._pos] end;
 
         self._current_and_advance = func self do
             self._pos = self._pos + 1;
@@ -125,10 +156,24 @@ i.walk("""
         self := {};
 
         self.eval = func self, expr do
+            # print(expr);
             match expr.type()
                 case 'NoneType' then expr
                 case 'bool' then expr
                 case 'int' then expr
+                case 'expr' then
+                    match expr
+                        case expr(sym('if'), [cond_expr, then_expr, else_expr]) then
+                            self._if(cond_expr, then_expr, else_expr)
+                    end
+            end
+        end;
+
+        self._if = func self, cond_expr, then_expr, else_expr do
+            if self.eval(cond_expr) then
+                self.eval(then_expr)
+            else
+                self.eval(else_expr)
             end
         end;
 
@@ -159,12 +204,25 @@ if __name__ == "__main__":
     """)
 
     i.walk(r"""
-        # None
-        print(tot.walk('None')); # -> None
+        # If
+        print(tot.walk('if True then 2 end')); # -> 2
+        print(tot.walk('if False then 2 end')); # -> None
+        print(tot.walk('if True then 2 else 3 end')); # -> 2
+        print(tot.walk('if False then 2 else 3 end')); # -> 3
+        print(tot.walk('if True then 2 elif True then 3 end')); # -> 2
+        print(tot.walk('if False then 2 elif True then 3 end')); # -> 3
+        print(tot.walk('if False then 2 elif False then 3 end')); # -> None
+        print(tot.walk('if False then 2 elif True then 3 else 4 end')); # -> 3
+        print(tot.walk('if True then 2 elif True then 3 else 4 end')); # -> 2
+        print(tot.walk('if False then 2 elif False then 3 else 4 end')); # -> 4
+        print(tot.walk('if False then 2 elif False then 3 elif True then 4 else 5 end')); # -> 4
 
-        # Bool
-        print(tot.walk('True')); # -> True
-        print(tot.walk('False')); # -> False
+        # tot.walk('if True 2 end'); # -> Error
+        # tot.walk('if True then 2'); # -> Error
+        # tot.walk('if True then 2 3 end'); # -> Error
+        # tot.walk('if True then 2 else 3'); # -> Error
+        # tot.walk('if False then 2 elif True 3 end'); # -> Error
+        # tot.walk('if False then 2 elif True then 3'); # -> Error
 
         None
     """)

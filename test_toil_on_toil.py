@@ -123,6 +123,32 @@ class TestToT:
         assert self.walk(r""" 2   """) == 2
         assert self.walk("""\n  2  \n""") == 2
 
+    def test_if(self):
+        assert self.walk(r""" if True then 2 end """) == 2
+        assert self.walk(r""" if False then 2 end """) is None
+        assert self.walk(r""" if True then 2 else 3 end """) == 2
+        assert self.walk(r""" if False then 2 else 3 end """) == 3
+        assert self.walk(r""" if True then 2 elif True then 3 end """) == 2
+        assert self.walk(r""" if False then 2 elif True then 3 end """) == 3
+        assert self.walk(r""" if False then 2 elif False then 3 end """) is None
+        assert self.walk(r""" if False then 2 elif True then 3 else 4 end """) == 3
+        assert self.walk(r""" if True then 2 elif True then 3 else 4 end """) == 2
+        assert self.walk(r""" if False then 2 elif False then 3 else 4 end """) == 4
+        assert self.walk(r""" if False then 2 elif False then 3 elif True then 4 else 5 end """) == 4
+
+        with pytest.raises(AssertionError, match="Expected then"):
+            self.walk(r""" if True 2 end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.walk(r""" if True then 2 """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.walk(r""" if True then 2 3 end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.walk(r""" if True then 2 else 3 """)
+        with pytest.raises(AssertionError, match="Expected then"):
+            self.walk(r""" if False then 2 elif True 3 end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.walk(r""" if False then 2 elif True then 3 """)
+
     def test_empty_source(self):
         with pytest.raises(AssertionError, match="Unexpected token"):
             self.walk(r"""  """)
