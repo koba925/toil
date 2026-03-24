@@ -53,7 +53,7 @@ class Scanner:
                     self._string()
                 case c if is_name_first(c):
                     self._name()
-                case "!" as ch:
+                case "!":
                     start = self._pos
                     self._advance()
                     if self._current_char() in ("=", "!"):
