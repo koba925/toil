@@ -35,6 +35,8 @@ i.walk("""
                     self._tokens.push(ch); break()
                 elif ch.isdigit() then
                     self._number()
+                elif ch.is_name_first() then
+                    self._name()
                 else
                     raise('Invalid character @ tokenize: ' + ch)
                 end
@@ -49,6 +51,21 @@ i.walk("""
                 self._advance()
             end;
             self._tokens.push(int(self._src.slice(start, self._pos)))
+        end;
+
+        self._name = func self do
+            start := self._pos;
+            self._advance();
+            while self._current_char().is_name_rest() do
+                self._advance()
+            end;
+            token := self._src.slice(start, self._pos);
+            match token
+                case 'None' then self._tokens.push(None)
+                case 'True' then self._tokens.push(True)
+                case 'False' then self._tokens.push(False)
+                case _ then self._tokens.push(sym(token))
+            end
         end;
 
         self._advance = func self do self._pos = self._pos + 1 end;
@@ -85,6 +102,8 @@ i.walk("""
 
         self._primary = func self do
             match self._current_token().type()
+                case 'NoneType' then self._current_and_advance()
+                case 'bool' then self._current_and_advance()
                 case 'int' then self._current_and_advance()
                 case _ then raise('Unexpected token: ' + str(self._current_token()))
             end
@@ -107,6 +126,8 @@ i.walk("""
 
         self.eval = func self, expr do
             match expr.type()
+                case 'NoneType' then expr
+                case 'bool' then expr
                 case 'int' then expr
             end
         end;
@@ -131,39 +152,19 @@ i.walk("""
 
 if __name__ == "__main__":
 
-    # example
+    # Example
 
     i.walk(r"""
         tot := Interpreter()
     """)
 
     i.walk(r"""
-        # Overall structure
-        print(tot.scan('2')); # -> [2, $EOF]
-        print(tot.parse([2, sym('$EOF')])); # -> 2
-        print(tot.ast('2')); # -> 2
-        print(tot.eval(2)); # -> 2
-        print(tot.walk('2')); # -> 2
+        # None
+        print(tot.walk('None')); # -> None
 
-        # Numbers
-        print(tot.walk('2')); # -> 2
-        print(tot.walk('23')); # -> 23
-        print(tot.walk('0')); # -> 0
-        print(tot.walk('023')); # -> 23
-
-        # Whitespace
-        print(tot.walk('  2')); # -> 2
-        print(tot.walk('2  ')); # -> 2
-        print(tot.walk("\n  2  \n")); # -> 2
-
-        # Empty source
-        tot.walk(''); # -> Error
-
-        # Invalid character
-        # tot.walk('~') # -> Error
-
-        # Extra token
-        # tot.walk('2 3'); # -> Error
+        # Bool
+        print(tot.walk('True')); # -> True
+        print(tot.walk('False')); # -> False
 
         None
     """)

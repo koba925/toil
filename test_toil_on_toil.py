@@ -113,6 +113,11 @@ class TestToT:
         assert self.walk(r"""0""") == 0
         assert self.walk(r"""023""") == 23
 
+    def test_bool_none(self):
+        assert self.walk(r""" None """) is None
+        assert self.walk(r""" True """) is True
+        assert self.walk(r""" False """) is False
+
     def test_whitespace(self):
         assert self.walk(r"""   2 """) == 2
         assert self.walk(r""" 2   """) == 2
