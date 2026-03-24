@@ -42,6 +42,19 @@ class TestFunctions:
         assert i.walk(""" isalnum("\n") """) is False
         assert i.walk(r""" isalnum("\n") """) is False
 
+    def test_isspace(self):
+        assert i.walk(""" isspace("a") """) is False
+        assert i.walk(""" isspace("z") """) is False
+        assert i.walk(""" isspace("A") """) is False
+        assert i.walk(""" isspace("Z") """) is False
+        assert i.walk(""" isspace("0") """) is False
+        assert i.walk(""" isspace("9") """) is False
+        assert i.walk(""" isspace("_") """) is False
+        assert i.walk(""" isspace("$") """) is False
+        assert i.walk(""" isspace(" ") """) is True
+        assert i.walk(""" isspace("\n") """) is True
+        assert i.walk(r""" isspace("\n") """) is True
+
     def test_is_name_first(self):
         assert i.walk(""" is_name_first("a") """) is True
         assert i.walk(""" is_name_first("z") """) is True
@@ -105,11 +118,15 @@ class TestToT:
         assert self.walk(r""" 2   """) == 2
         assert self.walk("""\n  2  \n""") == 2
 
-    def test_errors(self):
+    def test_empty_source(self):
         with pytest.raises(AssertionError, match="Unexpected token"):
             self.walk(r"""  """)
+
+    def test_invalid_character(self):
         with pytest.raises(AssertionError, match="Invalid character"):
             self.walk(r""" ~ """)
+
+    def test_extra_token(self):
         with pytest.raises(AssertionError, match="Extra token"):
             self.walk(r""" 2 3 """)
 
