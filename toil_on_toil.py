@@ -10,6 +10,7 @@ i.walk("""
     end;
     deffunc isdigit params c do '0' <= c and c <= '9' end;
     deffunc isalnum params c do isalpha(c) or isdigit(c) end;
+    deffunc isspace params c do c == ' ' or c == '\n' end;
 
     deffunc is_name_first params c do isalpha(c) or c == '_' end;
     deffunc is_name_rest params c do isalnum(c) or c == '_' end;
@@ -25,7 +26,40 @@ i.walk("""
         self._pos = 0;
         self._tokens = [];
 
-        self.tokenize = func self do [int(src)] end;
+        self.tokenize = func self do
+            while True do
+                while self._current_char().isspace() do self._advance() end;
+
+                ch := self._current_char();
+                if ch == sym('$EOF') then
+                    self._tokens.push(ch); break()
+                elif ch.isdigit() then
+                    self._number()
+                else
+                    raise('Invalid character @ tokenize: ' + ch)
+                end
+            end;
+
+            self._tokens
+        end;
+
+        self._number = func self do
+            start := self._pos;
+            while self._current_char().isdigit() do
+                self._advance()
+            end;
+            self._tokens.push(int(self._src.slice(start, self._pos)))
+        end;
+
+        self._advance = func self do self._pos = self._pos + 1 end;
+
+        self._current_char = func self do
+            if self._pos < self._src.len() then
+                self._src[self._pos]
+            else
+                sym('$EOF')
+            end
+        end;
 
         self
     end
@@ -37,7 +71,31 @@ i.walk("""
         self._tokens = tokens;
         self._pos = 0;
 
-        self.parse = func self do tokens[0] end;
+        self.parse = func self do
+            expr := self._expression();
+            if self._current_token() != sym('$EOF') then
+                raise('Extra token @ parse: ' + str(self._current_token()))
+            end;
+            expr
+        end;
+
+        self._expression = func self do
+            self._primary()
+        end;
+
+        self._primary = func self do
+            match self._current_token().type()
+                case 'int' then self._current_and_advance()
+                case _ then raise('Unexpected token: ' + str(self._current_token()))
+            end
+        end;
+
+        self._current_token = func self do self._tokens[self._pos] end;
+
+        self._current_and_advance = func self do
+            self._pos = self._pos + 1;
+            self._tokens[self._pos - 1]
+        end;
 
         self
     end
@@ -47,7 +105,11 @@ i.walk("""
     deffunc Evaluator params do
         self := {};
 
-        self.eval = func self, expr do expr end;
+        self.eval = func self, expr do
+            match expr.type()
+                case 'int' then expr
+            end
+        end;
 
         self
     end
@@ -71,14 +133,37 @@ if __name__ == "__main__":
 
     # example
 
-    i.walk("""
-        i := Interpreter();
+    i.walk(r"""
+        tot := Interpreter()
+    """)
 
-        print(i.scan("2")); # -> [2]
-        print(i.parse([2])); # -> 2
-        print(i.ast("2")); # -> 2
-        print(i.eval(2)); # -> 2
-        print(i.walk("2")); # -> 2
+    i.walk(r"""
+        # Overall structure
+        print(tot.scan('2')); # -> [2, $EOF]
+        print(tot.parse([2, sym('$EOF')])); # -> 2
+        print(tot.ast('2')); # -> 2
+        print(tot.eval(2)); # -> 2
+        print(tot.walk('2')); # -> 2
+
+        # Numbers
+        print(tot.walk('2')); # -> 2
+        print(tot.walk('23')); # -> 23
+        print(tot.walk('0')); # -> 0
+        print(tot.walk('023')); # -> 23
+
+        # Whitespace
+        print(tot.walk('  2')); # -> 2
+        print(tot.walk('2  ')); # -> 2
+        print(tot.walk("\n  2  \n")); # -> 2
+
+        # Empty source
+        tot.walk(''); # -> Error
+
+        # Invalid character
+        # tot.walk('~') # -> Error
+
+        # Extra token
+        # tot.walk('2 3'); # -> Error
 
         None
     """)
