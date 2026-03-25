@@ -6,7 +6,7 @@ class Sym(str):
 
 def is_name_first(c): return c.isalpha() or c == "_"
 def is_name_rest(c): return c.isalnum() or c == "_"
-def is_name(expr): return isinstance(expr, Sym) and is_name_first(expr[0])
+def is_sym(expr): return isinstance(expr, Sym) and is_name_first(expr[0])
 
 
 class RuleCollector:
@@ -219,7 +219,7 @@ class Parser:
             case s if type(s) is str: return self._advance()
             case Sym(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
-            case Sym(name) if is_name(name): return self._advance()
+            case Sym(name) if is_sym(name): return self._advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
 
@@ -241,7 +241,7 @@ class Parser:
                 case Sym("*"):
                     self._advance()
                     rest_name = self._advance()
-                    assert is_name(rest_name), f"Expected rest pattern name @ _dict(): {rest_name}"
+                    assert is_sym(rest_name), f"Expected rest pattern name @ _dict(): {rest_name}"
                     dic[Sym("*")] = rest_name
                 case Sym():
                     key = str(self._advance())
@@ -502,11 +502,10 @@ class Evaluator:
         return val
 
     def _evaluate_if(self, cond_expr, then_expr, else_expr, env):
-        new_env = Environment(env)
-        if self.evaluate(cond_expr, new_env):
-            return self.evaluate(then_expr, new_env)
+        if self.evaluate(cond_expr, env):
+            return self.evaluate(then_expr, env)
         else:
-            return self.evaluate(else_expr, new_env)
+            return self.evaluate(else_expr, env)
 
     def _evaluate_match(self, val_expr, cases_expr, env):
         val = self.evaluate(val_expr, env)
@@ -615,7 +614,7 @@ class Evaluator:
             remaining_values = value.copy()
 
             if rest_name is not None:
-                assert is_name(rest_name), f"Invalid dict rest pattern @ match_dict(): {rest_name}"
+                assert is_sym(rest_name), f"Invalid dict rest pattern @ match_dict(): {rest_name}"
                 del fixed_patterns[Sym("*")]
 
             for key, sub_pattern in fixed_patterns.items():
@@ -770,7 +769,7 @@ class Interpreter:
 
             #rule {match: [__core_match, EXPR, *[case, EXPR, then, EXPR], end]}
 
-            _aif := macro cnd, thn, els do qqs
+            _aif := macro cnd, thn, els do qq
                 pif it := !cnd then !thn else !els end
             end end;
             #rule {aif: [_aif, EXPR, then, EXPR, else, EXPR, end]}

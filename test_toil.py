@@ -187,12 +187,6 @@ class TestEvaluate(TestBase):
         assert self.i.evaluate((Sym("__core_if"), [True, (Sym("__core_if"), [True, 2, 3]), 4])) == 2
         assert self.i.evaluate((Sym("__core_if"), [False, 2, (Sym("__core_if"), [False, 3, 4])])) == 4
 
-    def test_evaluate_if_scope(self):
-        # Variable defined inside if should not leak
-        self.i.evaluate((Sym("__core_if"), [True, (Sym("define"), [Sym("inner_if"), 1]), 2]))
-        with pytest.raises(AssertionError):
-            self.i.evaluate(Sym("inner_if"))
-
     def test_evaluate_variable(self):
         assert self.i.evaluate((Sym("define"), [Sym("a"), 2])) == 2
         assert self.i.evaluate(Sym("a")) == 2
@@ -459,18 +453,6 @@ class TestGo(TestBase):
             self.i.walk(""" if True then 2 else 3 """)
         with pytest.raises(AssertionError):
             self.i.walk(""" if True else 2 end """)
-
-    def test_if_scope(self):
-        # Definition inside if should not leak
-        with pytest.raises(AssertionError, match="Undefined variable"):
-             self.i.walk(""" if True then a := 1 else a := 2 end; a """)
-
-        # Assignment to existing variable should work (via parent scope lookup)
-        assert self.i.walk(""" a := False; if True then a = True end; a """) == True
-
-        # Variable defined in condition should be visible in branches but not outside
-        assert self.i.walk(""" if (a := 2) == 2 then a + 1 else 0 end """) == 3
-        assert self.i.walk(""" a """) == True # 'a' is still True from previous test
 
     def test_var_define(self):
         assert self.i.walk(""" a := not True """) == False
