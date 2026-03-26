@@ -2,7 +2,7 @@
 
 from toil import Interpreter
 
-i = Interpreter().init_env().corelib().stdlib()
+i = Interpreter().init_env().stdlib()
 
 i.walk("""
     deffunc isalpha params c do

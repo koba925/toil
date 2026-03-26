@@ -689,12 +689,18 @@ class Interpreter:
 
     def init_env(self):
         self._env = Environment()
+        self._builtins()
+        self._corelib()
+
+        return self
+
+    def _builtins(self):
         self._env.define(Ident("__builtins"), None)
 
         self._env.define(Ident("import"), lambda args: self._import(args[0]))
 
-        self._env.define(Ident("eval"), lambda args: Evaluator().eval(self.ast(args[0]), self._env))
-        self._env.define(Ident("eval_expr"), lambda args: Evaluator().eval(args[0], self._env))
+        self._env.define(Ident("eval"), lambda args: Evaluator().eval(self.ast(args[0]), args[1] if len(args) > 1 else self._env))
+        self._env.define(Ident("eval_expr"), lambda args: Evaluator().eval(args[0], args[1] if len(args) > 1 else self._env))
         self._env.define(Ident("apply"), lambda args: Evaluator().apply(args[0], args[1]))
 
         self._env.define(Ident("type"), lambda args: self.type(args[0]))
@@ -737,9 +743,8 @@ class Interpreter:
         self._env.define(Ident("print"), lambda args: print(*args))
 
         self._env = Environment(self._env)
-        return self
 
-    def corelib(self):
+    def _corelib(self):
         self.walk("""
             __corelib := None;
 
@@ -812,7 +817,6 @@ class Interpreter:
         """)
 
         self._env = Environment(self._env)
-        return self
 
     def stdlib(self):
         self.walk("""
@@ -911,7 +915,7 @@ class Interpreter:
 if __name__ == "__main__":
     import sys
 
-    i = Interpreter().init_env().corelib().stdlib()
+    i = Interpreter().init_env().stdlib()
 
     def repl():
         while True:

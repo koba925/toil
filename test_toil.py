@@ -5,7 +5,7 @@ from toil import Interpreter, Ident
 class TestBase:
     @pytest.fixture(autouse=True)
     def set_interpreter(self):
-        self.i = Interpreter().init_env().corelib().stdlib()
+        self.i = Interpreter().init_env().stdlib()
 
 
 class TestScan(TestBase):
@@ -1190,6 +1190,8 @@ text
         self.i.walk(""" a := 2; b := 3 """)
         assert self.i.walk(""" eval("a + b") """) == 5
         assert self.i.walk(""" scope a := 4; b := 5; eval("a + b") end """) == 5
+        assert self.i.walk(""" scope a := 4; b := 5; eval("a + b", __env) end """) == 9
+        assert self.i.walk(""" scope a := 4; b := 5; eval_expr(quote a + b end, __env) end """) == 9
 
         # Poor man's serialization
         self.i.walk("""
