@@ -354,27 +354,31 @@ class Parser:
 Value = Any
 SymbolTable = dict[Ident, Value]
 
-class Environment:
+class Environment(dict):
     def __init__(self, parent=None):
-        self._parent = parent
-        self._vars: SymbolTable = {}
+        self["parent"] = parent
+        self["vars"] = {}
+        self["define"] = lambda args: self.define(args[0], args[1])
+        self["val"] = lambda args: self.val(args[0])
+        self["assign"] = lambda args: self.assign(args[0], args[1])
+        self["lookup"] = lambda args: self.lookup(args[0])
 
     def __repr__(self):
-        content = "__builtins" if Ident("__builtins") in self._vars else \
-                  "__corelib" if Ident("__corelib") in self._vars else \
-                  "__stdlib" if Ident("__stdlib") in self._vars else \
-                  ", ".join(self._vars)
-        return f"[{content}]" + (f" < {self._parent}" if self._parent else "")
+        content = "__builtins" if Ident("__builtins") in self["vars"] else \
+                  "__corelib" if Ident("__corelib") in self["vars"] else \
+                  "__stdlib" if Ident("__stdlib") in self["vars"] else \
+                  ", ".join(self["vars"])
+        return f"[{content}]" + (f" < {self['parent']}" if self["parent"] else "")
 
     def define(self, name: Ident, val):
-        self._vars[name] = val
+        self["vars"][name] = val
         return val
 
     def lookup(self, name: Ident):
-        if name in self._vars:
-            return self._vars
-        elif self._parent is not None:
-            return self._parent.lookup(name)
+        if name in self["vars"]:
+            return self["vars"]
+        elif self["parent"] is not None:
+            return self["parent"].lookup(name)
         else:
             return None
 
@@ -383,9 +387,9 @@ class Environment:
         assert vars is not None, f"Undefined variable @ val(): {name}"
         return vars[name]
 
-    def set_val(self, name: Ident, val):
+    def assign(self, name: Ident, val):
         vars = self.lookup(name)
-        assert vars is not None, f"Undefined variable @ set_val(): {name}"
+        assert vars is not None, f"Undefined variable @ assign(): {name}"
         vars[name] = val
         return val
 
@@ -413,6 +417,8 @@ class Evaluator:
                 return [self.eval(expr, env) for expr in exprs]
             case exprs if type(exprs) is dict:
                 return {key: self.eval(val, env) for key, val in exprs.items()}
+            case Ident("__env"):
+                return env
             case Ident(name):
                 return env.val(name)
             case (Ident("__core_quote"), [expr]):
@@ -489,7 +495,7 @@ class Evaluator:
         right_val = self.eval(right_expr, env)
         match left_expr:
             case Ident(name):
-                return env.set_val(name, right_val)
+                return env.assign(name, right_val)
             case (Ident("index"), [coll_expr, index_expr]) | (Ident("dot"), [coll_expr, index_expr]):
                 coll_val = self.eval(coll_expr, env)
                 index_val = self.eval(index_expr, env)
@@ -933,3 +939,17 @@ if __name__ == "__main__":
             run(sys.argv[1])
 
     # Example
+
+    print(i.walk(""" a := 2 """)) # -> 2
+    print(i.walk(""" __env """)) # -> [a] < [__stdlib] < [__corelib] < [__builtins]
+    print(i.walk(""" __env.parent """)) # -> [__stdlib] < [__corelib] < [__builtins]
+    print(i.walk(""" __env.vars.items() """)) # -> [[a, 2]]
+    print(i.walk(""" __env.vars.keys() """)) # -> [a]
+    print(i.walk(""" __env.val(ident("a")) """)) # -> 2
+    print(i.walk(""" __env.define(ident("b"), 3) """)) # -> 3
+    print(i.walk(""" __env.vars.items() """)) # -> [[a, 2], [b, 3]]
+    print(i.walk(""" b """)) # -> 3
+    print(i.walk(""" scope c := 4; __env end""")) # -> [c] < [a, b] < [__stdlib] < [__corelib] < [__builtins]
+    print(i.walk(""" scope a := 5; __env.parent.val(ident("a")) end""")) # -> 2
+    print(i.walk(""" scope __env.assign(ident("b"), 6) end; b""")) # -> 6
+    print(i.walk(""" __env.lookup(ident("add")).add """)) # -> <function ...>

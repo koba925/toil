@@ -59,8 +59,8 @@ class TestParse(TestBase):
     def test_and_or(self):
         assert self.i.ast(""" True and False """) == (Ident('and'), [True, False])
         assert self.i.ast(""" True or False """) == (Ident('or'), [True, False])
-        assert self.i.ast(""" True or False and True """) == (Ident('and'), [(Ident('or'), [True,  False]), True])
-        assert self.i.ast(""" a := False and not False """) == (Ident('define'), [Ident('a'), (Ident('and'), [False, (Ident('not'), [False])]) ])
+        assert self.i.ast(""" True or False and True """) == (Ident('and'), [(Ident('or'), [True, False]), True])
+        assert self.i.ast(""" a := False and not False """) == (Ident('define'), [Ident('a'), (Ident('and'), [False, (Ident('not'), [False])])])
         assert self.i.ast(""" a := False or not False """) == (Ident('define'), [Ident('a'), (Ident('or'), [False, (Ident('not'), [False])])])
 
     def test_neg(self):
@@ -1221,6 +1221,39 @@ text
         assert self.i.walk(""" type(quote 2 + 3 end) """) == "expr"
         assert self.i.walk(""" type(quote a end) """) == "ident"
 
+    def test_env_exposure(self):
+        self.i.walk(""" a := 2 """)
+        assert self.i.walk(""" __env.vars.keys() """) == ["a"]
+        assert self.i.walk(""" __env.vars.items() """) == [["a", 2]]
+        assert self.i.walk(""" __env.val(ident("a")) """) == 2
+
+        assert self.i.walk(""" __env.define(ident("b"), 3) """) == 3
+        assert self.i.walk(""" __env.vars.keys() """) == ["a", "b"]
+        assert self.i.walk(""" b """) == 3
+
+        assert self.i.walk(""" scope c := 4; __env.vars.keys() end """) == ["c"]
+        assert self.i.walk(""" scope c := 4; __env.parent.vars.keys() end """) == ["a", "b"]
+        assert self.i.walk(""" scope a := 5; __env.parent.val(ident("a")) end """) == 2
+
+        self.i.walk(""" scope __env.assign(ident("b"), 6) end """)
+        assert self.i.walk(""" b """) == 6
+
+        assert self.i.walk(""" __env.lookup(ident("add")) != None """) is True
+        assert self.i.walk(""" __env.lookup(ident("add")).add(2, 3) """) == 5
+
+        # Error cases
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            self.i.walk(""" __env.val(ident("not_found")) """)
+
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            self.i.walk(""" __env.assign(ident("not_found"), 100) """)
+
+        # lookup not found returns None
+        assert self.i.walk(""" __env.lookup(ident("not_found")) """) is None
+
+        # Trace parents to None
+        assert self.i.walk(""" __env.parent.parent.parent.parent """) is None
+
     def test_ast_primitives(self):
         assert self.i.walk(""" quote if True then 2 else 3 end end """) == (Ident("__core_if_macro"), [True, 2, [], [3]])
         assert self.i.walk(""" expr(ident("__core_if"), [True, 2, 3]) """) == (Ident("__core_if"), [True, 2, 3])
@@ -1377,7 +1410,7 @@ class TestQuasiquote(TestBase):
         with pytest.raises(AssertionError, match="Undefined variable"):
             self.i.walk(""" quote !c end """)
         with pytest.raises(AssertionError):
-             self.i.walk(""" quote if end """)
+            self.i.walk(""" quote if end """)
 
 class TestMacroSamples(TestBase):
     def test_when(self):

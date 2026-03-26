@@ -243,10 +243,10 @@ i.walk("""
             vars[name]
         end;
 
-        self.set_val = func self, name, val do
+        self.assign = func self, name, val do
             vars := self.lookup(name);
             if vars == None then
-                raise('Undefined variable @ set_val: ' + name)
+                raise('Undefined variable @ assign: ' + name)
             end;
             vars[name] = val
         end;
@@ -291,7 +291,7 @@ i.walk("""
 
         self._assign = func self, name, val_expr, env do
             val := self.eval(val_expr, env);
-            env.set_val(str(name), val)
+            env.assign(str(name), val)
         end;
 
         self._seq = func self, exprs, env do
