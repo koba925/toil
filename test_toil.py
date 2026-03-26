@@ -1000,9 +1000,9 @@ text
                 end
             end
         """)
-        assert self.i.walk(""" f(quote(2 + 3)) """) == 5
-        assert self.i.walk(""" f(quote(5 - 2)) """) == 3
-        assert self.i.walk(""" f(quote(2 * 3)) """) == [Ident("mul"), [2, 3]]
+        assert self.i.walk(""" f(quote 2 + 3 end) """) == 5
+        assert self.i.walk(""" f(quote 5 - 2 end) """) == 3
+        assert self.i.walk(""" f(quote 2 * 3 end) """) == [Ident("mul"), [2, 3]]
         assert self.i.walk(""" f(2) """) is None
 
         assert self.i.walk(""" f(expr(ident("add"), [2, 3])) """) == 5
@@ -1218,11 +1218,11 @@ text
         assert self.i.walk(""" type("abc") """) == "str"
         assert self.i.walk(""" type([2, 3]) """) == "list"
         assert self.i.walk(""" type({a: 2}) """) == "dict"
-        assert self.i.walk(""" type(quote(2 + 3)) """) == "expr"
-        assert self.i.walk(""" type(quote(a)) """) == "ident"
+        assert self.i.walk(""" type(quote 2 + 3 end) """) == "expr"
+        assert self.i.walk(""" type(quote a end) """) == "ident"
 
     def test_ast_primitives(self):
-        assert self.i.walk(""" quote(if True then 2 else 3 end) """) == (Ident("__core_if_macro"), [True, 2, [], [3]])
+        assert self.i.walk(""" quote if True then 2 else 3 end end """) == (Ident("__core_if_macro"), [True, 2, [], [3]])
         assert self.i.walk(""" expr(ident("__core_if"), [True, 2, 3]) """) == (Ident("__core_if"), [True, 2, 3])
         assert self.i.walk(""" eval_expr(expr(ident("__core_if"), [True, 2, 3])) """) == 2
         assert self.i.walk(""" eval_expr(expr(ident("__core_if_macro"), [True, 2, [], [3]])) """) == 2
@@ -1230,15 +1230,15 @@ text
         with pytest.raises(AssertionError):
             self.i.walk(""" eval_expr(expr(ident("if"), [True, 2, 3] """)
 
-        assert self.i.walk(""" quote(add(2, 3)) """) == (Ident("add"), [2, 3])
+        assert self.i.walk(""" quote add(2, 3) end """) == (Ident("add"), [2, 3])
         assert self.i.walk(""" expr(ident("add"), [2, 3]) """) == (Ident("add"), [2, 3])
         assert self.i.walk(""" eval_expr(expr(ident("add"), [2, 3])) """) == 5
 
-        assert self.i.walk(""" quote(
+        assert self.i.walk(""" quote
             a := 2;
             b := 3;
             if a == b then a + b else a * b end
-        ) """) == (Ident("seq"), [(Ident("define"), [Ident("a"), 2]), (Ident("define"), [Ident("b"), 3]), (Ident("__core_if_macro"), [(Ident("equal"), [Ident("a"), Ident("b")]), (Ident("add"), [Ident("a"), Ident("b")]), [], [(Ident("mul"), [Ident("a"), Ident("b")])]])])
+        end """) == (Ident("seq"), [(Ident("define"), [Ident("a"), 2]), (Ident("define"), [Ident("b"), 3]), (Ident("__core_if_macro"), [(Ident("equal"), [Ident("a"), Ident("b")]), (Ident("add"), [Ident("a"), Ident("b")]), [], [(Ident("mul"), [Ident("a"), Ident("b")])]])])
         assert self.i.walk("""
             expr(ident("seq"), [
                 expr(ident("define"), [ident("a"), 2]),
@@ -1339,50 +1339,50 @@ text
 class TestQuasiquote(TestBase):
     def test_basic(self):
         self.i.walk(""" a := 2; b := ["A", "B"] """)
-        assert self.i.walk(""" qq 3 end """) == 3
-        assert self.i.walk(""" qq "A" end """) == "A"
-        assert self.i.walk(""" qq a end """) == Ident("a")
-        assert self.i.walk(""" qq !a end """) == 2
-        assert self.i.walk(""" qq !a + 2 end """) == (Ident("add"), [2, 2])
-        assert self.i.walk(""" qq !(a + 2) end """) == 4
+        assert self.i.walk(""" quote 3 end """) == 3
+        assert self.i.walk(""" quote "A" end """) == "A"
+        assert self.i.walk(""" quote a end """) == Ident("a")
+        assert self.i.walk(""" quote !a end """) == 2
+        assert self.i.walk(""" quote !a + 2 end """) == (Ident("add"), [2, 2])
+        assert self.i.walk(""" quote !(a + 2) end """) == 4
 
     def test_list(self):
         self.i.walk(""" a := 2; b := ["A", "B"] """)
-        assert self.i.walk(""" qq [a, b] end """) == [Ident("a"), Ident("b")]
-        assert self.i.walk(""" qq [!a, !b] end """) == [2, ["A", "B"]]
+        assert self.i.walk(""" quote [a, b] end """) == [Ident("a"), Ident("b")]
+        assert self.i.walk(""" quote [!a, !b] end """) == [2, ["A", "B"]]
 
     def test_splicing(self):
         self.i.walk(""" a := 2; b := ["A", "B"] """)
-        assert self.i.walk(""" qq [!!b] end """) == ["A", "B"]
-        assert self.i.walk(""" qq [a, !!b, 2] end """) == [Ident("a"), "A", "B", 2]
+        assert self.i.walk(""" quote [!!b] end """) == ["A", "B"]
+        assert self.i.walk(""" quote [a, !!b, 2] end """) == [Ident("a"), "A", "B", 2]
 
     def test_nested(self):
         self.i.walk(""" a := 2 """)
-        assert self.i.walk(""" qq if !a == 3 then 4 else 5 end end """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 3]), 4, [], [5]])
-        assert self.i.walk(""" eval_expr(qq if !a == 3 then 4 else 5 end end) """) == 5
+        assert self.i.walk(""" quote if !a == 3 then 4 else 5 end end """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 3]), 4, [], [5]])
+        assert self.i.walk(""" eval_expr(quote if !a == 3 then 4 else 5 end end) """) == 5
 
     def test_splicing_call(self, capsys):
         self.i.walk(""" args := [2, 3] """)
-        assert self.i.walk(""" qq print(1, !!args, 4) end """) == (Ident("print"), [1, 2, 3, 4])
-        self.i.walk(""" eval_expr(qq print(1, !!args, 4) end) """)
+        assert self.i.walk(""" quote print(1, !!args, 4) end """) == (Ident("print"), [1, 2, 3, 4])
+        self.i.walk(""" eval_expr(quote print(1, !!args, 4) end) """)
         assert capsys.readouterr().out == "1 2 3 4\n"
 
     def test_splicing_seq(self, capsys):
-        self.i.walk(""" stmts := [quote(print(2)), quote(print(3))] """)
-        seq_ast = self.i.walk(""" qq print(1); !!stmts; print(4) end """)
-        self.i.walk(""" eval_expr(qq print(1); !!stmts; print(4) end) """)
+        self.i.walk(""" stmts := [quote print(2) end, quote print(3) end] """)
+        seq_ast = self.i.walk(""" quote print(1); !!stmts; print(4) end """)
+        self.i.walk(""" eval_expr(quote print(1); !!stmts; print(4) end) """)
         assert capsys.readouterr().out == "1\n2\n3\n4\n"
 
     def test_errors(self):
         with pytest.raises(AssertionError, match="Undefined variable"):
-            self.i.walk(""" qq !c end """)
+            self.i.walk(""" quote !c end """)
         with pytest.raises(AssertionError):
-             self.i.walk(""" qq if end """)
+             self.i.walk(""" quote if end """)
 
 class TestMacroSamples(TestBase):
     def test_when(self):
         self.i.walk("""
-            when := macro cond, body do qq if !cond then !body else None end end end
+            when := macro cond, body do quote if !cond then !body else None end end end
         """)
         assert self.i.walk(""" expand(when(2 == 2, 3)) """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 2]), 3, [], [None]])
         assert self.i.walk(""" when(2 == 2, 3) """) == 3
@@ -1399,7 +1399,7 @@ class TestMacroSamples(TestBase):
     def test_deffunc_macro(self):
         self.i.walk("""
             mdeffunc := macro name, params_, body do
-                qq !name := func !!params_ do !body end end
+                quote !name := func !!params_ do !body end end
             end
         """)
         self.i.walk(""" mdeffunc(myadd, [a, b], a + b) """)
@@ -1408,31 +1408,31 @@ class TestMacroSamples(TestBase):
     def test_defmacro_macro(self):
         self.i.walk("""
             mdefmacro := macro name, params_, body do
-                qq !name := macro !!params_ do !body end end
+                quote !name := macro !!params_ do !body end end
             end
         """)
-        self.i.walk(""" mdefmacro(when, [cond, body], qq if !cond then !body else None end end) """)
+        self.i.walk(""" mdefmacro(when, [cond, body], quote if !cond then !body else None end end) """)
         assert self.i.walk(""" when(2 == 2, 3) """) == 3
         assert self.i.walk(""" when(2 == 3, 4 / 0) """) is None
         with pytest.raises(AssertionError, match="Argument mismatch"):
             self.i.walk(""" when(2 == 2) """)
 
     def test_mscope(self, capsys):
-        self.i.walk(""" mscope := macro body do qq func do !body end () end end """)
+        self.i.walk(""" mscope := macro body do quote func do !body end () end end """)
         self.i.walk(""" a := 2; mscope(print(a); a := 3; print(a)); print(a) """)
         assert capsys.readouterr().out == "2\n3\n2\n"
 
     def test_anaphoric_if_and_or(self):
         self.i.walk("""
             maif := macro cnd, thn, els do
-                qq if it := !cnd then !thn else !els end end
+                quote if it := !cnd then !thn else !els end end
             end
         """)
         assert self.i.walk(""" maif(2, [True, it], [False, it]) """) == [True, 2]
         assert self.i.walk(""" maif(0, [True, it], [False, it]) """) == [False, 0]
 
-        self.i.walk(""" mand := macro a, b do qq maif(!a, !b, it) end end """)
-        self.i.walk(""" mor := macro a, b do qq maif(!a, it, !b) end end """)
+        self.i.walk(""" mand := macro a, b do quote maif(!a, !b, it) end end """)
+        self.i.walk(""" mor := macro a, b do quote maif(!a, it, !b) end end """)
 
         assert self.i.walk(""" mand(2, 3) """) == 3
         assert self.i.walk(""" mand(0, 3) """) == 0
@@ -1445,7 +1445,7 @@ class TestMacroSamples(TestBase):
     def test_side_effect_macro(self):
         self.i.walk("""
             deffunc ftwice params x do x + x end;
-            mtwice := macro x do qq add(!x, !x) end end
+            mtwice := macro x do quote add(!x, !x) end end
         """)
         self.i.walk(""" cnt := 0 """)
         assert self.i.walk(""" ftwice(cnt = cnt + 1) """) == 2
@@ -1455,7 +1455,7 @@ class TestMacroSamples(TestBase):
         assert self.i.walk(""" cnt """) == 2
 
     def test_capture(self):
-        self.i.walk(""" capture := macro val do qq x := !val end end """)
+        self.i.walk(""" capture := macro val do quote x := !val end end """)
         self.i.walk(""" x := 1 """)
         self.i.walk(""" capture(2) """)
         assert self.i.walk(""" x """) == 2
@@ -1463,7 +1463,7 @@ class TestMacroSamples(TestBase):
     def test_call_by_name(self):
         self.i.walk("""
             call_by_name := macro name_str, *args do
-                qq (!ident(qq !name_str end))(!!args) end
+                quote (!ident(quote !name_str end))(!!args) end
             end
         """)
         assert self.i.walk(""" call_by_name("add", 2, 3) """) == 5
@@ -1472,7 +1472,7 @@ class TestMacroSamples(TestBase):
 class TestCustomSyntax(TestBase):
     def test_when(self):
         self.i.walk("""
-            _when := macro cond, body do qq if !cond then !body else None end end end
+            _when := macro cond, body do quote if !cond then !body else None end end end
             #rule {when: [_when, EXPR, do, EXPR, end]}
         """)
         assert self.i.walk(""" expand(_when(2 == 2, 3)) """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 2]), 3, [], [None]])
@@ -1494,7 +1494,7 @@ class TestCustomSyntax(TestBase):
 
     def test_mfor(self):
         self.i.walk("""
-            _mfor := macro var, coll, body do qqs
+            _mfor := macro var, coll, body do quotes
                 __for_coll := !coll;
                 __for_index := -1;
                 while __for_index + 1 < len(__for_coll) do
@@ -1515,15 +1515,15 @@ class TestCustomSyntax(TestBase):
 
     def test_aif_and_or(self):
         self.i.walk("""
-            _aif := macro cnd, thn, els do qqs if it := !cnd then !thn else !els end end end
+            _aif := macro cnd, thn, els do quotes if it := !cnd then !thn else !els end end end
             #rule {aif: [_aif, EXPR, then, EXPR, else, EXPR, end]}
         """)
         assert self.i.walk(""" aif 2 then [True, it] else [False, it] end """) == [True, 2]
         assert self.i.walk(""" aif 0 then [True, it] else [False, it] end """) == [False, 0]
 
         self.i.walk("""
-            mand := macro a, b do qq aif !a then !b else it end end end;
-            mor := macro a, b do qq aif !a then it else !b end end end
+            mand := macro a, b do quote aif !a then !b else it end end end;
+            mor := macro a, b do quote aif !a then it else !b end end end
         """)
         assert self.i.walk(""" mand(2, 3) """) == 3
         assert self.i.walk(""" mand(0, 3) """) == 0
@@ -1540,7 +1540,7 @@ class TestCustomSyntax(TestBase):
         # _mdeffunc macro definition and rule
         self.i.walk("""
             _mdeffunc := macro name, params_, body do
-                qq !name := func !!params_ do !body end end
+                quote !name := func !!params_ do !body end end
             end
             #rule {mdeffunc: [_mdeffunc, EXPR, params, EXPRS, do, EXPR, end]}
         """)
@@ -1562,7 +1562,7 @@ class TestCustomSyntax(TestBase):
         # _defmacro macro definition and rule
         self.i.walk("""
             _defmacro := macro name, params_, body do
-                qq !name := macro !!params_ do !body end end
+                quote !name := macro !!params_ do !body end end
             end
             #rule {defmacro: [_defmacro, EXPR, params, EXPRS, do, EXPR, end]}
         """)
@@ -1573,7 +1573,7 @@ class TestCustomSyntax(TestBase):
             (Ident("expr"), [(Ident("ident"), ["__core_if"]), [Ident("cond"), Ident("body"), None]])
         ])])
 
-        self.i.walk(""" _defmacro(mwhen, [cond, body], qq if !cond then !body else None end end) """)
+        self.i.walk(""" _defmacro(mwhen, [cond, body], quote if !cond then !body else None end end) """)
         assert self.i.walk(""" expand(mwhen(2 == 2, 3)) """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 2]), 3, [], [None]])
         assert self.i.walk(""" mwhen(2 == 2, 3) """) == 3
         assert self.i.walk(""" mwhen(2 == 3, 4 / 0) """) is None
@@ -1582,14 +1582,14 @@ class TestCustomSyntax(TestBase):
 
         # defmacro custom syntax
         assert self.i.walk(""" expand(
-            defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
+            defmacro mwhen2 params cond, body do quote if !cond then !body else None end end end
         ) """) == (Ident("define"), [Ident("mwhen2"), (Ident("__core_macro"), [
             [Ident("cond"), Ident("body")],
-            (Ident("__core_qq"), [(Ident("__core_if_macro"), [(Ident("!"), [Ident("cond")]), (Ident("!"), [Ident("body")]), [], [None]])])
+            (Ident("__core_quote"), [(Ident("__core_if_macro"), [(Ident("!"), [Ident("cond")]), (Ident("!"), [Ident("body")]), [], [None]])])
         ])])
 
         self.i.walk("""
-            defmacro mwhen2 params cond, body do qq if !cond then !body else None end end end
+            defmacro mwhen2 params cond, body do quote if !cond then !body else None end end end
         """)
 
         assert self.i.walk(""" expand(mwhen2(2 == 2, 3)) """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 2]), 3, [], [None]])
@@ -1606,28 +1606,28 @@ class TestCustomSyntax(TestBase):
         assert self.i.walk(""" one_param(3) """) == 6
 
         # Test EXPRS with zero and one parameter for defmacro
-        self.i.walk(""" defmacro mzero_macro params do qq 2 end end """)
+        self.i.walk(""" defmacro mzero_macro params do quote 2 end end """)
         assert self.i.walk(""" expand(mzero_macro()) """) == 2
         assert self.i.walk(""" mzero_macro() """) == 2
 
-        self.i.walk(""" defmacro mone_macro params x do qq !x * 2 end end """)
+        self.i.walk(""" defmacro mone_macro params x do quote !x * 2 end end """)
         assert self.i.walk(""" expand(mone_macro(3)) """)
         assert self.i.walk(""" mone_macro(3) """) == 6
 
     def test_let_custom_rule(self):
         # Setup for let_func and let_scope
         self.i.walk("""
-            _let_func := macro bindings, body do qq
+            _let_func := macro bindings, body do quote
                 func !!map(bindings, func pair do pair[0] end) do
                     !body
                 end (!!map(bindings, func pair do pair[1] end))
             end end;
             #rule {let_func: [_let_func, *[var, EXPR, be, EXPR], do, EXPR, end]}
 
-            _let_scope := macro bindings, body do qq
+            _let_scope := macro bindings, body do quote
                 scope
                     !!map(bindings, func binding do
-                        qq !binding[0] := !binding[1] end
+                        quote !binding[0] := !binding[1] end
                     end);
                     !body
                 end

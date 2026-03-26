@@ -415,10 +415,8 @@ class Evaluator:
                 return {key: self.evaluate(val, env) for key, val in exprs.items()}
             case Ident(name):
                 return env.val(name)
-            case (Ident("quote"), [expr]):
-                return expr
-            case (Ident("__core_qq"), [expr]):
-                return self._evaluate_quasiquote(expr, env)
+            case (Ident("__core_quote"), [expr]):
+                return self._evaluate_quote(expr, env)
             case (Ident("define"), [left_expr, right_expr]):
                 return self._evaluate_define(left_expr, right_expr, env)
             case (Ident("assign"), [left_expr, right_expr]):
@@ -460,7 +458,7 @@ class Evaluator:
             case unexpected:
                 assert False, f"Unexpected expression @ evaluate(): {unexpected}"
 
-    def _evaluate_quasiquote(self, expr, env):
+    def _evaluate_quote(self, expr, env):
         def items(exprs):
             quoted = []
             for expr in exprs:
@@ -468,7 +466,7 @@ class Evaluator:
                     case (Ident("!!"), [elem]):
                         quoted += self.evaluate(elem, env)
                     case _:
-                        quoted.append(self._evaluate_quasiquote(expr, env))
+                        quoted.append(self._evaluate_quote(expr, env))
             return quoted
 
         match expr:
@@ -744,18 +742,18 @@ class Interpreter:
 
             #rule {scope: [__core_scope, EXPR, end]}
 
-            #rule {qq: [__core_qq, EXPR, end]}
+            #rule {quote: [__core_quote, EXPR, end]}
 
             __core_defmacro := macro name, params_, body do
-                qq !name := macro !!params_ do !body end end
+                quote !name := macro !!params_ do !body end end
             end;
             #rule {defmacro: [__core_defmacro, EXPR, params, EXPRS, do, EXPR, end]}
 
-            __core_qqs := macro expr do qq qq scope !expr end end end end;
-            #rule {qqs: [__core_qqs, EXPR, end]}
+            __core_quotes := macro expr do quote quote scope !expr end end end end;
+            #rule {quotes: [__core_quotes, EXPR, end]}
 
             __core_deffunc := macro name, params_, body do
-                qq !name := func !!params_ do !body end end
+                quote !name := func !!params_ do !body end end
             end;
             #rule {deffunc: [__core_deffunc, EXPR, params, EXPRS, do, EXPR, end]}
 
@@ -766,7 +764,7 @@ class Interpreter:
                 i := len(elifs) - 1;
                 while i >= 0 do
                     [__core_if_elif_cnd, __core_if_elif_thn] := elifs[i];
-                    __core_if_expr = qq
+                    __core_if_expr = quote
                         pif !__core_if_elif_cnd then
                             !__core_if_elif_thn
                         else
@@ -775,23 +773,23 @@ class Interpreter:
                     end;
                     i = i - 1
                 end;
-                qq pif !cnd then !thn else !__core_if_expr end end
+                quote pif !cnd then !thn else !__core_if_expr end end
             end end;
             #rule {if: [__core_if_macro, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], +[else, EXPR], end]}
 
             #rule {match: [__core_match, EXPR, *[case, EXPR, then, EXPR], end]}
 
-            _aif := macro cnd, thn, els do qq
+            _aif := macro cnd, thn, els do quote
                 pif it := !cnd then !thn else !els end
             end end;
             #rule {aif: [_aif, EXPR, then, EXPR, else, EXPR, end]}
 
-            and := macro a, b do qq aif !a then !b else it end end end;
-            or := macro a, b do qq aif !a then it else !b end end end;
+            and := macro a, b do quote aif !a then !b else it end end end;
+            or := macro a, b do quote aif !a then it else !b end end end;
 
             #rule {while: [__core_while, EXPR, do, EXPR, end]}
 
-            __core_for := macro var, coll, body do qqs
+            __core_for := macro var, coll, body do quotes
                 __core_for_coll := !coll;
                 __core_for_index := -1;
                 while __core_for_index + 1 < len(__core_for_coll) do
