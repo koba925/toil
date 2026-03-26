@@ -14,7 +14,7 @@ i.walk("""
 
     deffunc is_ident_first params c do isalpha(c) or c == '_' end;
     deffunc is_ident_rest params c do isalnum(c) or c == '_' end;
-    deffunc is_ident params s do is_ident_first(s[0]) end;
+    deffunc is_ident params s do is_ident_first(s[0]) end
 """)
 
 i.walk("""
@@ -47,15 +47,6 @@ i.walk("""
             self._tokens
         end;
 
-        self._two_char_operator = func self, successors do
-            start := self._pos;
-            self._advance();
-            if self._current_char().in(successors) then
-                self._advance()
-            end;
-            self._tokens.push(ident(self._src.slice(start, self._pos)))
-        end;
-
         self._number = func self do
             start := self._pos;
             while self._current_char().isdigit() do
@@ -77,6 +68,15 @@ i.walk("""
                 case 'False' then self._tokens.push(False)
                 case _ then self._tokens.push(ident(token))
             end
+        end;
+
+        self._two_char_operator = func self, successors do
+            start := self._pos;
+            self._advance();
+            if self._current_char().in(successors) then
+                self._advance()
+            end;
+            self._tokens.push(ident(self._src.slice(start, self._pos)))
         end;
 
         self._advance = func self do self._pos = self._pos + 1 end;

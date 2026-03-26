@@ -55,24 +55,23 @@ class Scanner:
                 case c if is_ident_first(c):
                     self._ident()
                 case "!":
-                    start = self._pos
-                    self._advance()
-                    if self._current_char() in ("=", "!"):
-                        self._advance()
-                    self._tokens.append(Ident(self._src[start:self._pos]))
-                case ("=" | "!" | "<" | ">" | ":") as ch:
-                    start = self._pos
-                    self._advance()
-                    if self._current_char() == "=":
-                        self._advance()
-                    self._tokens.append(Ident(self._src[start:self._pos]))
-                case ("+" | "-" | "*" | "/" | "%" | "(" | ")" | "[" | "]" | "{" | "}" | "." | ";" | ",") as ch:
+                    self._two_char_operator("=!")
+                case ch if ch in "=!<>:":
+                    self._two_char_operator("=")
+                case ch if ch in "+-*/%()[]{}.;,":
                     self._tokens.append(Ident(ch))
                     self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
 
         return self._tokens
+
+    def _two_char_operator(self, successors):
+        start = self._pos
+        self._advance()
+        if self._current_char() in successors:
+            self._advance()
+        self._tokens.append(Ident(self._src[start:self._pos]))
 
     def _number(self):
         start = self._pos
@@ -255,8 +254,8 @@ class Parser:
                     key = self._advance()
                     self._consume(Ident(":"))
                     dic[key] = self._expression()
-                case Invalid:
-                    assert False, f"Invalid key @ _dict(): {Invalid}"
+                case invalid:
+                    assert False, f"Invalid key @ _dict(): {invalid}"
 
         self._advance()
         dic = {}
@@ -710,7 +709,7 @@ class Interpreter:
         self._env.define(Ident("ord"), lambda args: ord(args[0]))
         self._env.define(Ident("join"), lambda args: str(args[1]).join(map(str, args[0])))
 
-        self._env.define(Ident("has"), lambda args: args[1] in args[0])
+        self._env.define(Ident("in"), lambda args: args[0] in args[1])
         self._env.define(Ident("keys"), lambda args: list(args[0].keys()))
         self._env.define(Ident("items"), lambda args: [list(e) for e in args[0].items()])
         self._env.define(Ident("copy"), lambda args: args[0].copy())

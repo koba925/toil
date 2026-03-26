@@ -943,9 +943,9 @@ text
         assert self.i.walk(""" a """) == {'aaa': 2, 'bbb': 4, 'ccc': 5}
 
         assert self.i.walk(""" len(a) """) == 3
-        assert self.i.walk(""" has(a, "aaa") """) is True
-        assert self.i.walk(""" has(a, "bbb") """) is True
-        assert self.i.walk(""" has(a, "ddd") """) is False
+        assert self.i.walk(""" in("aaa", a) """) is True
+        assert self.i.walk(""" in("bbb", a) """) is True
+        assert self.i.walk(""" in("ddd", a) """) is False
         assert self.i.walk(""" keys(a) """) == ['aaa', 'bbb', 'ccc']
         assert self.i.walk(""" items(a) """) == [['aaa', 2], ['bbb', 4], ['ccc', 5]]
 
