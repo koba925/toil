@@ -403,35 +403,35 @@ class BreakException(Exception):
 class ContinueException(Exception): pass
 
 class Evaluator:
-    def evaluate(self, expr: Expr, env: Environment) -> Value:
+    def eval(self, expr: Expr, env: Environment) -> Value:
         match expr:
             case None | bool() | int():
                 return expr
             case s if type(s) is str:
                 return s
             case exprs if type(exprs) is list:
-                return [self.evaluate(expr, env) for expr in exprs]
+                return [self.eval(expr, env) for expr in exprs]
             case exprs if type(exprs) is dict:
-                return {key: self.evaluate(val, env) for key, val in exprs.items()}
+                return {key: self.eval(val, env) for key, val in exprs.items()}
             case Ident(name):
                 return env.val(name)
             case (Ident("__core_quote"), [expr]):
-                return self._evaluate_quote(expr, env)
+                return self._quote(expr, env)
             case (Ident("define"), [left_expr, right_expr]):
-                return self._evaluate_define(left_expr, right_expr, env)
+                return self._define(left_expr, right_expr, env)
             case (Ident("assign"), [left_expr, right_expr]):
-                return self._evaluate_assign(left_expr, right_expr, env)
+                return self._assign(left_expr, right_expr, env)
             case (Ident("seq"), exprs):
-                return self._evaluate_seq(exprs, env)
+                return self._seq(exprs, env)
             case (Ident("__core_if"), [cond_expr, then_expr, else_expr]):
-                return self._evaluate_if(cond_expr, then_expr, else_expr, env)
+                return self._if(cond_expr, then_expr, else_expr, env)
             case (Ident("__core_match"), [val_expr, cases_expr]):
-                return self._evaluate_match(val_expr, cases_expr, env)
+                return self._match(val_expr, cases_expr, env)
             case (Ident("__core_while"), [cond_expr, body_expr]):
-                return self._evaluate_while(cond_expr, body_expr, env)
+                return self._while(cond_expr, body_expr, env)
             case (Ident("break"), args):
                 assert len(args) <= 1, f"Break takes zero or one argument @ evaluate(): {args}"
-                raise BreakException(self.evaluate(args[0], env) if args else None)
+                raise BreakException(self.eval(args[0], env) if args else None)
             case (Ident("continue"), args):
                 assert len(args) == 0, f"Continue takes no arguments @ evaluate(): {args}"
                 raise ContinueException()
@@ -439,60 +439,60 @@ class Evaluator:
                 return (Ident("closure"), params, body, env)
             case (Ident("return"), args):
                 assert len(args) <= 1, f"Return takes zero or one argument @ evaluate(): {args}"
-                raise ReturnException(self.evaluate(args[0], env) if args else None)
+                raise ReturnException(self.eval(args[0], env) if args else None)
             case (Ident("expand"), [(op_expr, args_expr)]):
-                return self._eval_expand(op_expr, args_expr, env)
+                return self._expand(op_expr, args_expr, env)
             case (Ident("__core_macro"), [params, body]):
                 return (Ident("mclosure"), params, body, env)
             case (Ident("__core_try"), [body_expr, clauses_expr]):
-                return self._evaluate_try(body_expr, clauses_expr, env)
+                return self._try(body_expr, clauses_expr, env)
             case (Ident("raise"), args):
                 assert len(args) <= 1, f"Raise takes zero or one argument @ evaluate(): {args}"
-                raise ToilException(self.evaluate(args[0], env) if args else None)
+                raise ToilException(self.eval(args[0], env) if args else None)
             case (Ident("__core_scope"), [expr]):
-                return self.evaluate(expr, Environment(env))
+                return self.eval(expr, Environment(env))
             case (Ident("dot"), [target_expr, attr_expr]):
-                return self._evaluate_dot(target_expr, attr_expr, env)
+                return self._dot(target_expr, attr_expr, env)
             case (op_expr, args_expr) if isinstance(expr, tuple):
-                return self._eval_op(op_expr, args_expr, env)
+                return self._op(op_expr, args_expr, env)
             case unexpected:
                 assert False, f"Unexpected expression @ evaluate(): {unexpected}"
 
-    def _evaluate_quote(self, expr, env):
+    def _quote(self, expr, env):
         def items(exprs):
             quoted = []
             for expr in exprs:
                 match expr:
                     case (Ident("!!"), [elem]):
-                        quoted += self.evaluate(elem, env)
+                        quoted += self.eval(elem, env)
                     case _:
-                        quoted.append(self._evaluate_quote(expr, env))
+                        quoted.append(self._quote(expr, env))
             return quoted
 
         match expr:
             case [*exprs] if isinstance(expr, list):
                 return items(exprs)
             case (Ident("!"), [elem]):
-                return self.evaluate(elem, env)
+                return self.eval(elem, env)
             case (*exprs,):
                 return tuple(items(exprs))
             case _:
                 return expr
 
-    def _evaluate_define(self, left_expr, right_expr, env):
-        right_val = self.evaluate(right_expr, env)
+    def _define(self, left_expr, right_expr, env):
+        right_val = self.eval(right_expr, env)
         if self._match_pattern(left_expr, right_val, env):
             return right_val
         assert False, f"Pattern mismatch @ _evaluate_define(): {left_expr}, {right_val}"
 
-    def _evaluate_assign(self, left_expr, right_expr, env):
-        right_val = self.evaluate(right_expr, env)
+    def _assign(self, left_expr, right_expr, env):
+        right_val = self.eval(right_expr, env)
         match left_expr:
             case Ident(name):
                 return env.set_val(name, right_val)
             case (Ident("index"), [coll_expr, index_expr]) | (Ident("dot"), [coll_expr, index_expr]):
-                coll_val = self.evaluate(coll_expr, env)
-                index_val = self.evaluate(index_expr, env)
+                coll_val = self.eval(coll_expr, env)
+                index_val = self.eval(index_expr, env)
                 match coll_val, index_val:
                     case list(), int():
                         coll_val[index_val] = right_val
@@ -504,46 +504,46 @@ class Evaluator:
             case unexpected:
                 assert False, f"Invalid assign target @ _evaluate_assign(): {unexpected}"
 
-    def _evaluate_seq(self, exprs, env):
+    def _seq(self, exprs, env):
         val = None
         for expr in exprs:
-            val = self.evaluate(expr, env)
+            val = self.eval(expr, env)
         return val
 
-    def _evaluate_if(self, cond_expr, then_expr, else_expr, env):
-        if self.evaluate(cond_expr, env):
-            return self.evaluate(then_expr, env)
+    def _if(self, cond_expr, then_expr, else_expr, env):
+        if self.eval(cond_expr, env):
+            return self.eval(then_expr, env)
         else:
-            return self.evaluate(else_expr, env)
+            return self.eval(else_expr, env)
 
-    def _evaluate_match(self, val_expr, cases_expr, env):
-        val = self.evaluate(val_expr, env)
+    def _match(self, val_expr, cases_expr, env):
+        val = self.eval(val_expr, env)
         for pattern, body_expr in cases_expr:
             new_env = Environment(env)
             if self._match_pattern(pattern, val, new_env):
-                return self.evaluate(body_expr, new_env)
+                return self.eval(body_expr, new_env)
         return None
 
-    def _evaluate_while(self, cond_expr, body_expr, env):
+    def _while(self, cond_expr, body_expr, env):
         val = None
-        while self.evaluate(cond_expr, env):
+        while self.eval(cond_expr, env):
             try:
-                val = self.evaluate(body_expr, env)
+                val = self.eval(body_expr, env)
             except ContinueException: continue
             except BreakException as e: return e.val
         return val
 
-    def _evaluate_try(self, body_expr, clauses_expr, env):
+    def _try(self, body_expr, clauses_expr, env):
         try:
-            return self.evaluate(body_expr, env)
+            return self.eval(body_expr, env)
         except ToilException as toil_exception:
             for cond_expr, except_expr in clauses_expr:
                 if self._match_pattern(cond_expr, toil_exception.e, env):
-                    return self.evaluate(except_expr, env)
+                    return self.eval(except_expr, env)
             raise toil_exception
 
-    def _evaluate_dot(self, target_expr, attr_expr, env):
-        target_val = self.evaluate(target_expr, env)
+    def _dot(self, target_expr, attr_expr, env):
+        target_val = self.eval(target_expr, env)
         match target_val:
             case dict() if attr_expr in target_val:
                 attr_val = target_val[attr_expr]
@@ -559,30 +559,30 @@ class Evaluator:
             case (Ident("closure"), _, _, _):
                 return lambda args: self.apply(attr_val, [target_val] + args)
 
-    def _eval_op(self, op_expr, args_expr, env):
-        op_val = self.evaluate(op_expr, env)
+    def _op(self, op_expr, args_expr, env):
+        op_val = self.eval(op_expr, env)
         match op_val:
             case (Ident("mclosure"), params, body_expr, mclosure_env):
                 new_env = Environment(mclosure_env)
-                expanded = self._expand(params, args_expr, body_expr, new_env)
+                expanded = self._expand_macro(params, args_expr, body_expr, new_env)
                 # print(expanded)
-                return self.evaluate(expanded, env)
+                return self.eval(expanded, env)
             case _:
-                args_val = [self.evaluate(arg, env) for arg in args_expr]
+                args_val = [self.eval(arg, env) for arg in args_expr]
                 return self.apply(op_val, args_val)
 
-    def _eval_expand(self, op_expr, args_expr, env):
-        match self.evaluate(op_expr, env):
+    def _expand(self, op_expr, args_expr, env):
+        match self.eval(op_expr, env):
             case (Ident("mclosure"), params, body_expr, mclosure_env):
                 new_env = Environment(mclosure_env)
-                return self._expand(params, args_expr, body_expr, new_env)
+                return self._expand_macro(params, args_expr, body_expr, new_env)
             case _:
                 assert False, f"Cannot expand non-macro @ expand(): {op_expr}"
 
-    def _expand(self, params, args_expr, body_expr, env):
+    def _expand_macro(self, params, args_expr, body_expr, env):
         if self._match_pattern(params, args_expr, env):
             try:
-                return self.evaluate(body_expr, env)
+                return self.eval(body_expr, env)
             except ReturnException as e: return e.val
         assert False, f"Argument mismatch @ expand(): {params}, {args_expr}"
 
@@ -594,7 +594,7 @@ class Evaluator:
                 new_env = Environment(closure_env)
                 if self._match_pattern(params, args_val, new_env):
                     try:
-                        return self.evaluate(body, new_env)
+                        return self.eval(body, new_env)
                     except ReturnException as e: return e.val
                 assert False, f"Argument mismatch @ apply(): {params}, {args_val}"
             case _:
@@ -674,7 +674,7 @@ class Interpreter:
         with open(path, "r") as f: src = f.read()
         module_env = Environment(self._env)
         ast = self.parse(self.scan(src))
-        return Evaluator().evaluate(ast, module_env)
+        return Evaluator().eval(ast, module_env)
 
     def type(self, expr):
         return "expr" if type(expr) is tuple else \
@@ -687,8 +687,8 @@ class Interpreter:
 
         self._env.define(Ident("import"), lambda args: self._import(args[0]))
 
-        self._env.define(Ident("eval"), lambda args: Evaluator().evaluate(self.ast(args[0]), self._env))
-        self._env.define(Ident("eval_expr"), lambda args: Evaluator().evaluate(args[0], self._env))
+        self._env.define(Ident("eval"), lambda args: Evaluator().eval(self.ast(args[0]), self._env))
+        self._env.define(Ident("eval_expr"), lambda args: Evaluator().eval(args[0], self._env))
         self._env.define(Ident("apply"), lambda args: Evaluator().apply(args[0], args[1]))
 
         self._env.define(Ident("type"), lambda args: self.type(args[0]))
@@ -893,7 +893,7 @@ class Interpreter:
 
     def evaluate(self, ast: Expr) -> Value:
         try:
-            return Evaluator().evaluate(ast, self._env)
+            return Evaluator().eval(ast, self._env)
         except ToilException as e: assert False, f"ToilException @ evaluate(): {e.e}"
         except ReturnException: assert False, "Return from top level @ evaluate()"
         except ContinueException: assert False, "Continue at top level @ evaluate()"
