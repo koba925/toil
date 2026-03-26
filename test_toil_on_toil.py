@@ -1,5 +1,5 @@
 import pytest
-from toil import Sym
+from toil import Ident
 from toil_on_toil import i
 
 class TestFunctions:
@@ -55,39 +55,38 @@ class TestFunctions:
         assert i.walk(""" isspace("\n") """) is True
         assert i.walk(r""" isspace("\n") """) is True
 
-    def test_is_name_first(self):
-        assert i.walk(""" is_name_first("a") """) is True
-        assert i.walk(""" is_name_first("z") """) is True
-        assert i.walk(""" is_name_first("A") """) is True
-        assert i.walk(""" is_name_first("Z") """) is True
-        assert i.walk(""" is_name_first("0") """) is False
-        assert i.walk(""" is_name_first("9") """) is False
-        assert i.walk(""" is_name_first("_") """) is True
-        assert i.walk(""" is_name_first("$") """) is False
-        assert i.walk(""" is_name_first(" ") """) is False
-        assert i.walk(""" is_name_first("\n") """) is False
-        assert i.walk(r""" is_name_first("\n") """) is False
+    def test_is_ident_first(self):
+        assert i.walk(""" is_ident_first("a") """) is True
+        assert i.walk(""" is_ident_first("z") """) is True
+        assert i.walk(""" is_ident_first("A") """) is True
+        assert i.walk(""" is_ident_first("Z") """) is True
+        assert i.walk(""" is_ident_first("0") """) is False
+        assert i.walk(""" is_ident_first("9") """) is False
+        assert i.walk(""" is_ident_first("_") """) is True
+        assert i.walk(""" is_ident_first("$") """) is False
+        assert i.walk(""" is_ident_first(" ") """) is False
+        assert i.walk(""" is_ident_first("\n") """) is False
+        assert i.walk(r""" is_ident_first("\n") """) is False
 
-    def test_is_name_rest(self):
-        assert i.walk(""" is_name_rest("a") """) is True
-        assert i.walk(""" is_name_rest("z") """) is True
-        assert i.walk(""" is_name_rest("A") """) is True
-        assert i.walk(""" is_name_rest("Z") """) is True
-        assert i.walk(""" is_name_rest("0") """) is True
-        assert i.walk(""" is_name_rest("9") """) is True
-        assert i.walk(""" is_name_rest("_") """) is True
-        assert i.walk(""" is_name_rest("$") """) is False
-        assert i.walk(""" is_name_rest(" ") """) is False
-        assert i.walk(""" is_name_rest("\n") """) is False
-        assert i.walk(r""" is_name_rest("\n") """) is False
+    def test_is_ident_rest(self):
+        assert i.walk(""" is_ident_rest("a") """) is True
+        assert i.walk(""" is_ident_rest("z") """) is True
+        assert i.walk(""" is_ident_rest("A") """) is True
+        assert i.walk(""" is_ident_rest("Z") """) is True
+        assert i.walk(""" is_ident_rest("0") """) is True
+        assert i.walk(""" is_ident_rest("9") """) is True
+        assert i.walk(""" is_ident_rest("_") """) is True
+        assert i.walk(""" is_ident_rest("$") """) is False
+        assert i.walk(""" is_ident_rest(" ") """) is False
+        assert i.walk(""" is_ident_rest("\n") """) is False
+        assert i.walk(r""" is_ident_rest("\n") """) is False
 
-    def test_is_sym(self):
-        assert i.walk(""" is_sym(sym("a")) """) is True
-        assert i.walk(""" is_sym(sym("_abc")) """) is True
-        assert i.walk(""" is_sym(sym("0a")) """) is False
-        assert i.walk(""" is_sym(sym("$a")) """) is False
-        assert i.walk(""" is_sym(sym(" a")) """) is False
-        assert i.walk(""" is_sym("a") """) is False
+    def test_is_ident(self):
+        assert i.walk(""" is_ident("a") """) is True
+        assert i.walk(""" is_ident("_abc") """) is True
+        assert i.walk(""" is_ident("0a") """) is False
+        assert i.walk(""" is_ident("$a") """) is False
+        assert i.walk(""" is_ident(" a") """) is False
 
     def test_in(self):
         assert i.walk(""" in(2, [1, 2, 3]) """) is True
@@ -109,8 +108,8 @@ class TestToT:
     def walk(self, src): return i.walk(f""" tot.walk('{src}') """)
 
     def test_overall_structure(self):
-        assert self.scan(r""" 2 """) == [2, Sym('$EOF')]
-        assert self.parse(r""" [2, sym('$EOF')] """) == 2
+        assert self.scan(r""" 2 """) == [2, Ident('$EOF')]
+        assert self.parse(r""" [2, ident('$EOF')] """) == 2
         assert self.ast(r""" 2 """) == 2
         assert self.eval(r""" 2 """) == 2
         assert self.walk(r""" 2 """) == 2

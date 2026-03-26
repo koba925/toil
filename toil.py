@@ -1,12 +1,13 @@
 #! /usr/bin/env python3
 
-class Sym(str):
+class Ident(str):
     def __repr__(self): return super().__repr__()[1:-1]
+    # def __repr__(self): return f'Ident("{super().__repr__()[1:-1]}")'
 
 
-def is_name_first(c): return c.isalpha() or c == "_"
-def is_name_rest(c): return c.isalnum() or c == "_"
-def is_sym(expr): return isinstance(expr, Sym) and is_name_first(expr[0])
+def is_ident_first(c): return c.isalpha() or c == "_"
+def is_ident_rest(c): return c.isalnum() or c == "_"
+def is_ident(s): return is_ident_first(s[0])
 
 
 class RuleCollector:
@@ -37,13 +38,13 @@ class Scanner:
                 self._advance()
 
             if self._current_char() == "#":
-                while self._current_char() not in ("\n", Sym("$EOF")):
+                while self._current_char() not in ("\n", Ident("$EOF")):
                     self._advance()
                 continue
 
             match self._current_char():
-                case Sym("$EOF"):
-                    self._tokens.append(Sym("$EOF"))
+                case Ident("$EOF"):
+                    self._tokens.append(Ident("$EOF"))
                     break
                 case ch if ch.isnumeric():
                     self._number()
@@ -51,22 +52,22 @@ class Scanner:
                     self._raw_string()
                 case "\"":
                     self._string()
-                case c if is_name_first(c):
-                    self._name()
+                case c if is_ident_first(c):
+                    self._ident()
                 case "!":
                     start = self._pos
                     self._advance()
                     if self._current_char() in ("=", "!"):
                         self._advance()
-                    self._tokens.append(Sym(self._src[start:self._pos]))
+                    self._tokens.append(Ident(self._src[start:self._pos]))
                 case ("=" | "!" | "<" | ">" | ":") as ch:
                     start = self._pos
                     self._advance()
                     if self._current_char() == "=":
                         self._advance()
-                    self._tokens.append(Sym(self._src[start:self._pos]))
+                    self._tokens.append(Ident(self._src[start:self._pos]))
                 case ("+" | "-" | "*" | "/" | "%" | "(" | ")" | "[" | "]" | "{" | "}" | "." | ";" | ",") as ch:
-                    self._tokens.append(Sym(ch))
+                    self._tokens.append(Ident(ch))
                     self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
@@ -106,17 +107,17 @@ class Scanner:
         self._advance()
         return self._tokens.append("".join(s))
 
-    def _name(self):
+    def _ident(self):
         start = self._pos
         self._advance()
-        while is_name_rest(self._current_char()):
+        while is_ident_rest(self._current_char()):
             self._advance()
         token = self._src[start:self._pos]
         match token:
             case "None": self._tokens.append(None)
             case "True": self._tokens.append(True)
             case "False": self._tokens.append(False)
-            case _: self._tokens.append(Sym(token))
+            case _: self._tokens.append(Ident(token))
 
     def _advance(self):
         self._pos += 1
@@ -125,7 +126,7 @@ class Scanner:
         if self._pos < len(self._src):
             return self._src[self._pos]
         else:
-            return Sym("$EOF")
+            return Ident("$EOF")
 
 
 class Parser:
@@ -136,7 +137,7 @@ class Parser:
 
     def parse(self):
         expr = self._expression()
-        assert self._current_token() == Sym("$EOF"), \
+        assert self._current_token() == Ident("$EOF"), \
             f"Extra token @ parse(): {self._current_token()}"
         return expr
 
@@ -145,124 +146,124 @@ class Parser:
 
     def _sequence(self):
         exprs = [self._define_assign()]
-        while self._current_token() == Sym(";"):
+        while self._current_token() == Ident(";"):
             self._advance()
             exprs.append(self._define_assign())
-        return exprs[0] if len(exprs) == 1 else (Sym("seq"), exprs)
+        return exprs[0] if len(exprs) == 1 else (Ident("seq"), exprs)
 
     def _define_assign(self):
         return self._binary_right({
-            Sym(":="): Sym("define"), Sym("="): Sym("assign")
+            Ident(":="): Ident("define"), Ident("="): Ident("assign")
         }, self._and_or)
 
     def _and_or(self):
         return self._binary_left({
-            Sym("and"): Sym("and"), Sym("or"): Sym("or"),
+            Ident("and"): Ident("and"), Ident("or"): Ident("or"),
         }, self._not)
 
     def _not(self):
         return self._unary({
-            Sym("not"): Sym("not")
+            Ident("not"): Ident("not")
         }, self._comparison)
 
     def _comparison(self):
         return self._binary_left({
-            Sym("=="): Sym("equal"), Sym("!="): Sym("not_equal"),
-            Sym("<"): Sym("less"), Sym(">"): Sym("greater"),
-            Sym("<="): Sym("less_equal"), Sym(">="): Sym("greater_equal")
+            Ident("=="): Ident("equal"), Ident("!="): Ident("not_equal"),
+            Ident("<"): Ident("less"), Ident(">"): Ident("greater"),
+            Ident("<="): Ident("less_equal"), Ident(">="): Ident("greater_equal")
         }, self._add_sub)
 
     def _add_sub(self):
         return self._binary_left({
-            Sym("+"): Sym("add"), Sym("-"): Sym("sub")
+            Ident("+"): Ident("add"), Ident("-"): Ident("sub")
         }, self._mul_div_mod)
 
     def _mul_div_mod(self):
         return self._binary_left({
-            Sym("*"): Sym("mul"), Sym("/"): Sym("div"), Sym("%"): Sym("mod")
+            Ident("*"): Ident("mul"), Ident("/"): Ident("div"), Ident("%"): Ident("mod")
         }, self._unaries)
 
     def _unaries(self):
         return self._unary({
-            Sym("-"): Sym("neg"), Sym("+"): Sym("+"), Sym("*"): Sym("*"),
-            Sym("!"): Sym("!"), Sym("!!"): Sym("!!")
+            Ident("-"): Ident("neg"), Ident("+"): Ident("+"), Ident("*"): Ident("*"),
+            Ident("!"): Ident("!"), Ident("!!"): Ident("!!")
         }, self._call_index_dot)
 
     def _call_index_dot(self):
         target = self._primary()
-        while type(self._current_token()) is Sym and \
-                self._current_token() in (Sym("("), Sym("["), Sym(".")):
+        while type(self._current_token()) is Ident and \
+                self._current_token() in (Ident("("), Ident("["), Ident(".")):
             match self._current_token():
-                case Sym("("):
+                case Ident("("):
                     self._advance()
-                    target = (target, self._comma_separated_exprs(Sym(")")))
-                    self._consume(Sym(")"))
-                case Sym("["):
+                    target = (target, self._comma_separated_exprs(Ident(")")))
+                    self._consume(Ident(")"))
+                case Ident("["):
                     self._advance()
                     index = self._expression()
-                    self._consume(Sym("]"))
-                    target = (Sym("index"), [target, index])
-                case Sym("."):
+                    self._consume(Ident("]"))
+                    target = (Ident("index"), [target, index])
+                case Ident("."):
                     self._advance()
-                    assert type(self._current_token()) is Sym, \
+                    assert type(self._current_token()) is Ident, \
                         f"Invalid property @ _call_index_dot(): {self._current_token()}"
                     attr = self._advance()
-                    target = (Sym("dot"), [target, str(attr)])
+                    target = (Ident("dot"), [target, str(attr)])
         return target
 
     def _primary(self):
         match self._current_token():
-            case Sym("("): return self._paren()
-            case Sym("["): return self._list()
-            case Sym("{"): return self._dict()
+            case Ident("("): return self._paren()
+            case Ident("["): return self._list()
+            case Ident("{"): return self._dict()
             case None | bool() | int(): return self._advance()
             case s if type(s) is str: return self._advance()
-            case Sym(name) if name in self._custom_rules:
+            case Ident(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
-            case Sym(name) if is_sym(name): return self._advance()
+            case Ident(name) if is_ident(name): return self._advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
 
     def _paren(self):
         self._advance()
         expr = self._expression()
-        self._consume(Sym(")"))
+        self._consume(Ident(")"))
         return expr
 
     def _list(self):
         self._advance()
-        array = self._comma_separated_exprs(Sym("]"))
-        self._consume(Sym("]"))
+        array = self._comma_separated_exprs(Ident("]"))
+        self._consume(Ident("]"))
         return array
 
     def _dict(self):
         def _parse_key_value(dic):
             match self._current_token():
-                case Sym("*"):
+                case Ident("*"):
                     self._advance()
                     rest_name = self._advance()
-                    assert is_sym(rest_name), f"Expected rest pattern name @ _dict(): {rest_name}"
-                    dic[Sym("*")] = rest_name
-                case Sym():
+                    assert isinstance(rest_name, Ident), f"Expected rest pattern name @ _dict(): {rest_name}"
+                    dic[Ident("*")] = rest_name
+                case Ident():
                     key = str(self._advance())
-                    if self._current_token() == Sym(":"):
+                    if self._current_token() == Ident(":"):
                         self._advance()
                         dic[key] = self._expression()
                     else:
-                        dic[key] = Sym(key)
+                        dic[key] = Ident(key)
                 case str():
                     key = self._advance()
-                    self._consume(Sym(":"))
+                    self._consume(Ident(":"))
                     dic[key] = self._expression()
                 case Invalid:
                     assert False, f"Invalid key @ _dict(): {Invalid}"
 
         self._advance()
         dic = {}
-        if self._current_token() != Sym("}"):
+        if self._current_token() != Ident("}"):
             _parse_key_value(dic)
-            while self._current_token() != Sym("}"):
-                self._consume(Sym(","))
+            while self._current_token() != Ident("}"):
+                self._consume(Ident(","))
                 _parse_key_value(dic)
         self._advance()
         return dic
@@ -275,7 +276,7 @@ class Parser:
                     case "EXPR":
                         args.append(self._expression())
                     case "EXPRS":
-                        args.append(self._comma_separated_exprs(Sym(next)))
+                        args.append(self._comma_separated_exprs(Ident(next)))
                     case ("*", [subrule]):
                         subargs = []
                         while self._current_token() == subrule[0]:
@@ -287,17 +288,17 @@ class Parser:
                         else:
                             args.append([])
                     case delimiter:
-                        self._consume(Sym(delimiter))
+                        self._consume(Ident(delimiter))
             return args
 
         self._advance()
-        op = Sym(rule[0])
+        op = Ident(rule[0])
         args = match_args(rule[1:])
         return (op, args)
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
-        while type(self._current_token()) is Sym and \
+        while type(self._current_token()) is Ident and \
                 (op := self._current_token()) in ops:
             self._advance()
             right = sub_elem()
@@ -306,7 +307,7 @@ class Parser:
 
     def _binary_right(self, ops, sub_elem):
         left = sub_elem()
-        if type(self._current_token()) is Sym and \
+        if type(self._current_token()) is Ident and \
                 (op := self._current_token()) in ops:
             self._advance()
             right = self._binary_right(ops, sub_elem)
@@ -314,7 +315,7 @@ class Parser:
         return left
 
     def _unary(self, ops, sub_elem):
-        if type(self._current_token()) is Sym and \
+        if type(self._current_token()) is Ident and \
                 (op := self._current_token()) in ops:
             self._advance()
             return (ops[op], [self._unary(ops, sub_elem)])
@@ -325,7 +326,7 @@ class Parser:
         cse = []
         if self._current_token() != terminator:
             cse.append(self._expression())
-            while self._current_token() == Sym(","):
+            while self._current_token() == Ident(","):
                 self._advance()
                 cse.append(self._expression())
         return cse
@@ -349,17 +350,17 @@ class Environment:
         self._vars = {}
 
     def __repr__(self):
-        content = "__builtins" if Sym("__builtins") in self._vars else \
-                  "__corelib" if Sym("__corelib") in self._vars else \
-                  "__stdlib" if Sym("__stdlib") in self._vars else \
+        content = "__builtins" if Ident("__builtins") in self._vars else \
+                  "__corelib" if Ident("__corelib") in self._vars else \
+                  "__stdlib" if Ident("__stdlib") in self._vars else \
                   ", ".join(self._vars)
         return f"[{content}]" + (f" < {self._parent}" if self._parent else "")
 
-    def define(self, name: Sym, val):
+    def define(self, name: Ident, val):
         self._vars[name] = val
         return val
 
-    def lookup(self, name: Sym):
+    def lookup(self, name: Ident):
         if name in self._vars:
             return self._vars
         elif self._parent is not None:
@@ -367,12 +368,12 @@ class Environment:
         else:
             return None
 
-    def val(self, name: Sym):
+    def val(self, name: Ident):
         vars = self.lookup(name)
         assert vars is not None, f"Undefined variable @ val(): {name}"
         return vars[name]
 
-    def set_val(self, name: Sym, val):
+    def set_val(self, name: Ident, val):
         vars = self.lookup(name)
         assert vars is not None, f"Undefined variable @ set_val(): {name}"
         vars[name] = val
@@ -402,47 +403,47 @@ class Evaluator:
                 return [self.evaluate(expr, env) for expr in exprs]
             case exprs if type(exprs) is dict:
                 return {key: self.evaluate(val, env) for key, val in exprs.items()}
-            case Sym(name):
+            case Ident(name):
                 return env.val(name)
-            case (Sym("quote"), [expr]):
+            case (Ident("quote"), [expr]):
                 return expr
-            case (Sym("__core_qq"), [expr]):
+            case (Ident("__core_qq"), [expr]):
                 return self._evaluate_quasiquote(expr, env)
-            case (Sym("define"), [left_expr, right_expr]):
+            case (Ident("define"), [left_expr, right_expr]):
                 return self._evaluate_define(left_expr, right_expr, env)
-            case (Sym("assign"), [left_expr, right_expr]):
+            case (Ident("assign"), [left_expr, right_expr]):
                 return self._evaluate_assign(left_expr, right_expr, env)
-            case (Sym("seq"), exprs):
+            case (Ident("seq"), exprs):
                 return self._evaluate_seq(exprs, env)
-            case (Sym("__core_if"), [cond_expr, then_expr, else_expr]):
+            case (Ident("__core_if"), [cond_expr, then_expr, else_expr]):
                 return self._evaluate_if(cond_expr, then_expr, else_expr, env)
-            case (Sym("__core_match"), [val_expr, cases_expr]):
+            case (Ident("__core_match"), [val_expr, cases_expr]):
                 return self._evaluate_match(val_expr, cases_expr, env)
-            case (Sym("__core_while"), [cond_expr, body_expr]):
+            case (Ident("__core_while"), [cond_expr, body_expr]):
                 return self._evaluate_while(cond_expr, body_expr, env)
-            case (Sym("break"), args):
+            case (Ident("break"), args):
                 assert len(args) <= 1, f"Break takes zero or one argument @ evaluate(): {args}"
                 raise BreakException(self.evaluate(args[0], env) if args else None)
-            case (Sym("continue"), args):
+            case (Ident("continue"), args):
                 assert len(args) == 0, f"Continue takes no arguments @ evaluate(): {args}"
                 raise ContinueException()
-            case (Sym("__core_func"), [params, body]):
-                return (Sym("closure"), params, body, env)
-            case (Sym("return"), args):
+            case (Ident("__core_func"), [params, body]):
+                return (Ident("closure"), params, body, env)
+            case (Ident("return"), args):
                 assert len(args) <= 1, f"Return takes zero or one argument @ evaluate(): {args}"
                 raise ReturnException(self.evaluate(args[0], env) if args else None)
-            case (Sym("expand"), [(op_expr, args_expr)]):
+            case (Ident("expand"), [(op_expr, args_expr)]):
                 return self._eval_expand(op_expr, args_expr, env)
-            case (Sym("__core_macro"), [params, body]):
-                return (Sym("mclosure"), params, body, env)
-            case (Sym("__core_try"), [body_expr, clauses_expr]):
+            case (Ident("__core_macro"), [params, body]):
+                return (Ident("mclosure"), params, body, env)
+            case (Ident("__core_try"), [body_expr, clauses_expr]):
                 return self._evaluate_try(body_expr, clauses_expr, env)
-            case (Sym("raise"), args):
+            case (Ident("raise"), args):
                 assert len(args) <= 1, f"Raise takes zero or one argument @ evaluate(): {args}"
                 raise ToilException(self.evaluate(args[0], env) if args else None)
-            case (Sym("__core_scope"), [expr]):
+            case (Ident("__core_scope"), [expr]):
                 return self.evaluate(expr, Environment(env))
-            case (Sym("dot"), [target_expr, attr_expr]):
+            case (Ident("dot"), [target_expr, attr_expr]):
                 return self._evaluate_dot(target_expr, attr_expr, env)
             case (op_expr, args_expr) if isinstance(expr, tuple):
                 return self._eval_op(op_expr, args_expr, env)
@@ -454,7 +455,7 @@ class Evaluator:
             quoted = []
             for expr in exprs:
                 match expr:
-                    case (Sym("!!"), [elem]):
+                    case (Ident("!!"), [elem]):
                         quoted += self.evaluate(elem, env)
                     case _:
                         quoted.append(self._evaluate_quasiquote(expr, env))
@@ -463,7 +464,7 @@ class Evaluator:
         match expr:
             case [*exprs] if isinstance(expr, list):
                 return items(exprs)
-            case (Sym("!"), [elem]):
+            case (Ident("!"), [elem]):
                 return self.evaluate(elem, env)
             case (*exprs,):
                 return tuple(items(exprs))
@@ -479,9 +480,9 @@ class Evaluator:
     def _evaluate_assign(self, left_expr, right_expr, env):
         right_val = self.evaluate(right_expr, env)
         match left_expr:
-            case Sym(name):
+            case Ident(name):
                 return env.set_val(name, right_val)
-            case (Sym("index"), [coll_expr, index_expr]) | (Sym("dot"), [coll_expr, index_expr]):
+            case (Ident("index"), [coll_expr, index_expr]) | (Ident("dot"), [coll_expr, index_expr]):
                 coll_val = self.evaluate(coll_expr, env)
                 index_val = self.evaluate(index_expr, env)
                 match coll_val, index_val:
@@ -516,12 +517,13 @@ class Evaluator:
         return None
 
     def _evaluate_while(self, cond_expr, body_expr, env):
+        val = None
         while self.evaluate(cond_expr, env):
             try:
-                self.evaluate(body_expr, env)
+                val = self.evaluate(body_expr, env)
             except ContinueException: continue
             except BreakException as e: return e.val
-        return None
+        return val
 
     def _evaluate_try(self, body_expr, clauses_expr, env):
         try:
@@ -538,7 +540,7 @@ class Evaluator:
             case dict() if attr_expr in target_val:
                 attr_val = target_val[attr_expr]
                 match attr_val:
-                    case (Sym("closure"), [Sym("self"), *_], _, _):
+                    case (Ident("closure"), [Ident("self"), *_], _, _):
                         return lambda args: self.apply(attr_val, [target_val] + args)
                 return attr_val
 
@@ -546,13 +548,13 @@ class Evaluator:
         match attr_val:
             case c if callable(c):
                 return lambda args: c([target_val] + args)
-            case (Sym("closure"), _, _, _):
+            case (Ident("closure"), _, _, _):
                 return lambda args: self.apply(attr_val, [target_val] + args)
 
     def _eval_op(self, op_expr, args_expr, env):
         op_val = self.evaluate(op_expr, env)
         match op_val:
-            case (Sym("mclosure"), params, body_expr, mclosure_env):
+            case (Ident("mclosure"), params, body_expr, mclosure_env):
                 new_env = Environment(mclosure_env)
                 expanded = self._expand(params, args_expr, body_expr, new_env)
                 # print(expanded)
@@ -563,7 +565,7 @@ class Evaluator:
 
     def _eval_expand(self, op_expr, args_expr, env):
         match self.evaluate(op_expr, env):
-            case (Sym("mclosure"), params, body_expr, mclosure_env):
+            case (Ident("mclosure"), params, body_expr, mclosure_env):
                 new_env = Environment(mclosure_env)
                 return self._expand(params, args_expr, body_expr, new_env)
             case _:
@@ -580,7 +582,7 @@ class Evaluator:
         match op_val:
             case c if callable(c):
                 return c(args_val)
-            case (Sym("closure"), params, body, closure_env):
+            case (Ident("closure"), params, body, closure_env):
                 new_env = Environment(closure_env)
                 if self._match_pattern(params, args_val, new_env):
                     try:
@@ -593,7 +595,7 @@ class Evaluator:
     def _match_pattern(self, pattern, value, env):
         def match_list():
             match pattern:
-                case [*prefix, (Sym("*"), [Sym(rest_name)])]:
+                case [*prefix, (Ident("*"), [Ident(rest_name)])]:
                     if len(value) < len(prefix): return False
                     for sub_pattern, sub_value in zip(prefix, value):
                         if not self._match_pattern(sub_pattern, sub_value, env):
@@ -608,14 +610,14 @@ class Evaluator:
                     return True
 
         def match_dict():
-            rest_name = pattern.get(Sym("*"))
+            rest_name = pattern.get(Ident("*"))
 
             fixed_patterns = pattern.copy()
             remaining_values = value.copy()
 
             if rest_name is not None:
-                assert is_sym(rest_name), f"Invalid dict rest pattern @ match_dict(): {rest_name}"
-                del fixed_patterns[Sym("*")]
+                assert isinstance(rest_name, Ident), f"Invalid dict rest pattern @ match_dict(): {rest_name}"
+                del fixed_patterns[Ident("*")]
 
             for key, sub_pattern in fixed_patterns.items():
                 if key not in remaining_values:
@@ -629,9 +631,9 @@ class Evaluator:
             return True
 
         match pattern:
-            case Sym("_"):
+            case Ident("_"):
                 return True
-            case Sym(name):
+            case Ident(name):
                 env.define(name, value)
                 return True
             case list():
@@ -640,11 +642,11 @@ class Evaluator:
             case dict():
                 if not isinstance(value, dict): return False
                 return match_dict()
-            case (Sym("sym"), [name_expr]):
+            case (Ident("ident"), [name_expr]):
                 if not isinstance(name_expr, str): return False
-                if not isinstance(value, Sym): return False
+                if not isinstance(value, Ident): return False
                 return name_expr == value
-            case (Sym("expr"), args):
+            case (Ident("expr"), args):
                 if not isinstance(value, tuple): return False
                 if len(args) != len(value): return False
                 for sub_pattern, sub_value in zip(args, value):
@@ -668,57 +670,57 @@ class Interpreter:
 
     def type(self, expr):
         return "expr" if type(expr) is tuple else \
-            "sym" if type(expr) is Sym else \
+            "ident" if type(expr) is Ident else \
             type(expr).__name__
 
     def init_env(self):
         self._env = Environment()
-        self._env.define(Sym("__builtins"), None)
+        self._env.define(Ident("__builtins"), None)
 
-        self._env.define(Sym("import"), lambda args: self._import(args[0]))
+        self._env.define(Ident("import"), lambda args: self._import(args[0]))
 
-        self._env.define(Sym("eval"), lambda args: Evaluator().evaluate(self.ast(args[0]), self._env))
-        self._env.define(Sym("eval_expr"), lambda args: Evaluator().evaluate(args[0], self._env))
-        self._env.define(Sym("apply"), lambda args: Evaluator().apply(args[0], args[1]))
+        self._env.define(Ident("eval"), lambda args: Evaluator().evaluate(self.ast(args[0]), self._env))
+        self._env.define(Ident("eval_expr"), lambda args: Evaluator().evaluate(args[0], self._env))
+        self._env.define(Ident("apply"), lambda args: Evaluator().apply(args[0], args[1]))
 
-        self._env.define(Sym("type"), lambda args: self.type(args[0]))
+        self._env.define(Ident("type"), lambda args: self.type(args[0]))
 
-        self._env.define(Sym("add"), lambda args: args[0] + args[1])
-        self._env.define(Sym("sub"), lambda args: args[0] - args[1])
-        self._env.define(Sym("mul"), lambda args: args[0] * args[1])
-        self._env.define(Sym("div"), lambda args: args[0] // args[1])
-        self._env.define(Sym("mod"), lambda args: args[0] % args[1])
-        self._env.define(Sym("neg"), lambda args: -args[0])
+        self._env.define(Ident("add"), lambda args: args[0] + args[1])
+        self._env.define(Ident("sub"), lambda args: args[0] - args[1])
+        self._env.define(Ident("mul"), lambda args: args[0] * args[1])
+        self._env.define(Ident("div"), lambda args: args[0] // args[1])
+        self._env.define(Ident("mod"), lambda args: args[0] % args[1])
+        self._env.define(Ident("neg"), lambda args: -args[0])
 
-        self._env.define(Sym("equal"), lambda args: args[0] == args[1])
-        self._env.define(Sym("not_equal"), lambda args: args[0] != args[1])
-        self._env.define(Sym("less"), lambda args: args[0] < args[1])
-        self._env.define(Sym("greater"), lambda args: args[0] > args[1])
-        self._env.define(Sym("less_equal"), lambda args: args[0] <= args[1])
-        self._env.define(Sym("greater_equal"), lambda args: args[0] >= args[1])
-        self._env.define(Sym("not"), lambda args: not args[0])
+        self._env.define(Ident("equal"), lambda args: args[0] == args[1])
+        self._env.define(Ident("not_equal"), lambda args: args[0] != args[1])
+        self._env.define(Ident("less"), lambda args: args[0] < args[1])
+        self._env.define(Ident("greater"), lambda args: args[0] > args[1])
+        self._env.define(Ident("less_equal"), lambda args: args[0] <= args[1])
+        self._env.define(Ident("greater_equal"), lambda args: args[0] >= args[1])
+        self._env.define(Ident("not"), lambda args: not args[0])
 
-        self._env.define(Sym("len"), lambda args: len(args[0]))
-        self._env.define(Sym("index"), lambda args: args[0][args[1]])
-        self._env.define(Sym("slice"), lambda args: args[0][args[1]:args[2]])
-        self._env.define(Sym("push"), lambda args: args[0].append(args[1]))
-        self._env.define(Sym("pop"), lambda args: args[0].pop())
+        self._env.define(Ident("len"), lambda args: len(args[0]))
+        self._env.define(Ident("index"), lambda args: args[0][args[1]])
+        self._env.define(Ident("slice"), lambda args: args[0][args[1]:args[2]])
+        self._env.define(Ident("push"), lambda args: args[0].append(args[1]))
+        self._env.define(Ident("pop"), lambda args: args[0].pop())
 
-        self._env.define(Sym("chr"), lambda args: chr(args[0]))
-        self._env.define(Sym("ord"), lambda args: ord(args[0]))
-        self._env.define(Sym("join"), lambda args: str(args[1]).join(map(str, args[0])))
+        self._env.define(Ident("chr"), lambda args: chr(args[0]))
+        self._env.define(Ident("ord"), lambda args: ord(args[0]))
+        self._env.define(Ident("join"), lambda args: str(args[1]).join(map(str, args[0])))
 
-        self._env.define(Sym("has"), lambda args: args[1] in args[0])
-        self._env.define(Sym("keys"), lambda args: list(args[0].keys()))
-        self._env.define(Sym("items"), lambda args: [list(e) for e in args[0].items()])
-        self._env.define(Sym("copy"), lambda args: args[0].copy())
+        self._env.define(Ident("has"), lambda args: args[1] in args[0])
+        self._env.define(Ident("keys"), lambda args: list(args[0].keys()))
+        self._env.define(Ident("items"), lambda args: [list(e) for e in args[0].items()])
+        self._env.define(Ident("copy"), lambda args: args[0].copy())
 
-        self._env.define(Sym("str"), lambda args: str(args[0]))
-        self._env.define(Sym("int"), lambda args: int(args[0]))
-        self._env.define(Sym("sym"), lambda args: Sym(args[0]))
-        self._env.define(Sym("expr"), lambda args: tuple(args))
+        self._env.define(Ident("str"), lambda args: str(args[0]))
+        self._env.define(Ident("int"), lambda args: int(args[0]))
+        self._env.define(Ident("ident"), lambda args: Ident(args[0]))
+        self._env.define(Ident("expr"), lambda args: tuple(args))
 
-        self._env.define(Sym("print"), lambda args: print(*args))
+        self._env.define(Ident("print"), lambda args: print(*args))
 
         self._env = Environment(self._env)
         return self
@@ -943,4 +945,4 @@ if __name__ == "__main__":
     # -> expr
 
     print(i.walk(""" type(quote(a)) """))
-    # -> sym
+    # -> ident

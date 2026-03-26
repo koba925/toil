@@ -12,13 +12,9 @@ i.walk("""
     deffunc isalnum params c do isalpha(c) or isdigit(c) end;
     deffunc isspace params c do c == ' ' or c == '\n' end;
 
-    deffunc is_name_first params c do isalpha(c) or c == '_' end;
-    deffunc is_name_rest params c do isalnum(c) or c == '_' end;
-    deffunc is_sym params expr do
-       expr.type() == 'sym' and is_name_first(str(expr)[0])
-    end;
-
-    deffunc in params elem, coll do coll.has(elem) end
+    deffunc is_ident_first params c do isalpha(c) or c == '_' end;
+    deffunc is_ident_rest params c do isalnum(c) or c == '_' end;
+    deffunc is_ident params s do is_ident_first(s[0]) end;
 """)
 
 i.walk("""
@@ -33,16 +29,16 @@ i.walk("""
                 while self._current_char().isspace() do self._advance() end;
 
                 ch := self._current_char();
-                if ch == sym('$EOF') then
+                if ch == ident('$EOF') then
                     self._tokens.push(ch); break()
                 elif ch.isdigit() then
                     self._number()
-                elif ch.is_name_first() then
-                    self._name()
+                elif ch.is_ident_first() then
+                    self._ident()
                 elif ch.in(':') then
                     self._two_char_operator('=')
-                elif ch.in('=;') then
-                    self._tokens.push(sym(ch)); self._advance()
+                elif ch.in('=,;') then
+                    self._tokens.push(ident(ch)); self._advance()
                 else
                     raise('Invalid character @ tokenize: ' + ch)
                 end
@@ -57,7 +53,7 @@ i.walk("""
             if self._current_char().in(successors) then
                 self._advance()
             end;
-            self._tokens.push(sym(self._src.slice(start, self._pos)))
+            self._tokens.push(ident(self._src.slice(start, self._pos)))
         end;
 
         self._number = func self do
@@ -68,10 +64,10 @@ i.walk("""
             self._tokens.push(int(self._src.slice(start, self._pos)))
         end;
 
-        self._name = func self do
+        self._ident = func self do
             start := self._pos;
             self._advance();
-            while self._current_char().is_name_rest() do
+            while self._current_char().is_ident_rest() do
                 self._advance()
             end;
             token := self._src.slice(start, self._pos);
@@ -79,7 +75,7 @@ i.walk("""
                 case 'None' then self._tokens.push(None)
                 case 'True' then self._tokens.push(True)
                 case 'False' then self._tokens.push(False)
-                case _ then self._tokens.push(sym(token))
+                case _ then self._tokens.push(ident(token))
             end
         end;
 
@@ -89,7 +85,7 @@ i.walk("""
             if self._pos < self._src.len() then
                 self._src[self._pos]
             else
-                sym('$EOF')
+                ident('$EOF')
             end
         end;
 
@@ -105,7 +101,7 @@ i.walk("""
 
         self.parse = func self do
             expr := self._expression();
-            if self._current() != sym('$EOF') then
+            if self._current() != ident('$EOF') then
                 raise('Extra token @ parse: ' + str(self._current()))
             end;
             expr
@@ -117,23 +113,23 @@ i.walk("""
 
         self._sequence = func self do
             exprs := [self._define_assign()];
-            while self._current() == sym(';') do
+            while self._current() == ident(';') do
                 self._current_and_advance();
                 exprs.push(self._define_assign())
             end;
-            if exprs.len() == 1 then exprs[0] else expr(sym('seq'), exprs) end
+            if exprs.len() == 1 then exprs[0] else expr(ident('seq'), exprs) end
         end;
 
         self._define_assign = func self do
             self._binary_right({
-                ':=': sym('define'),
-                '=': sym('assign')
+                ':=': ident('define'),
+                '=': ident('assign')
             }, self._primary)
         end;
 
         self._binary_right = func self, ops, sub_elem do
             left := sub_elem();
-            if self._current().type() == 'sym' and
+            if self._current().type() == 'ident' and
                (op := str(self._current())).in(ops) then
                 self._current_and_advance();
                 right := self._binary_right(ops, sub_elem);
@@ -148,12 +144,13 @@ i.walk("""
                 case 'NoneType' then self._current_and_advance()
                 case 'bool' then self._current_and_advance()
                 case 'int' then self._current_and_advance()
-                case 'sym' then
-                    match self._current()
-                        case sym('scope') then self._scope()
-                        case sym('if') then self._if()
+                case 'ident' then
+                    match str(self._current())
+                        case 'scope' then self._scope()
+                        case 'if' then self._if()
+                        case 'while' then self._while()
                         case name then
-                            if name.is_sym() then
+                            if name.is_ident() then
                                 self._current_and_advance()
                             else
                                 raise('Unexpected token: ' + str(self._current()))
@@ -166,28 +163,38 @@ i.walk("""
         self._scope = func self do
             self._current_and_advance();
             body_expr := self._expression();
-            self._consume(sym('end'));
-            expr(sym('scope'), [body_expr])
+            self._consume(ident('end'));
+            expr(ident('scope'), [body_expr])
         end;
 
         self._if = func self do
             self._current_and_advance();
             cond_expr := self._expression();
-            self._consume(sym('then'));
+            self._consume(ident('then'));
             then_expr := self._expression();
             else_expr := None;
-            if self._current() == sym('elif') then
+            if self._current() == ident('elif') then
                 else_expr = self._if()
-            elif self._current() == sym('else') then
+            elif self._current() == ident('else') then
                 self._current_and_advance();
                 else_expr = self._expression();
-                self._consume(sym('end'))
+                self._consume(ident('end'))
             else
                 else_expr = None;
-                self._consume(sym('end'))
+                self._consume(ident('end'))
             end;
-            expr(sym('if'), [cond_expr, then_expr, else_expr])
+            expr(ident('if'), [cond_expr, then_expr, else_expr])
         end;
+
+        self._while = func self do
+            self._current_and_advance();
+            cond_expr := self._expression();
+            self._consume(ident('do'));
+            body_expr := self._expression();
+            self._consume(ident('end'));
+            expr(ident('while'), [cond_expr, body_expr])
+        end;
+
 
         self._consume = func self, expected do
             if self._current() == expected then
@@ -258,19 +265,21 @@ i.walk("""
                 case 'NoneType' then expr
                 case 'bool' then expr
                 case 'int' then expr
-                case 'sym' then env.val(str(expr))
+                case 'ident' then env.val(str(expr))
                 case 'expr' then
                     match expr
-                        case expr(sym('scope'), [body_expr]) then
+                        case expr(ident('scope'), [body_expr]) then
                             self.eval(body_expr, Environment(env))
-                        case expr(sym('define'), [name, val_expr]) then
+                        case expr(ident('define'), [name, val_expr]) then
                             self._define(name, val_expr, env)
-                        case expr(sym('assign'), [name, val_expr]) then
+                        case expr(ident('assign'), [name, val_expr]) then
                             self._assign(name, val_expr, env)
-                        case expr(sym('seq'), exprs) then
+                        case expr(ident('seq'), exprs) then
                             self._seq(exprs, env)
-                        case expr(sym('if'), [cond_expr, then_expr, else_expr]) then
+                        case expr(ident('if'), [cond_expr, then_expr, else_expr]) then
                             self._if(cond_expr, then_expr, else_expr, env)
+                        case expr(ident('while'), [cond_expr, body_expr]) then
+                            self._while(cond_expr, body_expr, env)
                     end
             end
         end;
@@ -286,11 +295,9 @@ i.walk("""
         end;
 
         self._seq = func self, exprs, env do
-            val := None;
             for expr in exprs do
-                val = self.eval(expr, env)
-            end;
-            val
+                self.eval(expr, env)
+            end
         end;
 
         self._if = func self, cond_expr, then_expr, else_expr, env do
@@ -298,6 +305,12 @@ i.walk("""
                 self.eval(then_expr, env)
             else
                 self.eval(else_expr, env)
+            end
+        end;
+
+        self._while = func self, cond_expr, body_expr, env do
+            while self.eval(cond_expr, env) do
+                self.eval(body_expr, env)
             end
         end;
 
@@ -334,41 +347,9 @@ if __name__ == "__main__":
     """)
 
     i.walk(r"""
-        # Variable
-        print(tot.walk('a := 2')); # -> 2
-        print(tot.walk('a')); # -> 2
-
-        print(tot.walk('a = 3')); # -> 3
-        print(tot.walk('a')); # -> 3
-
-        print(tot.walk('a := b := 4')); # -> 4
-        print(tot.walk('a')); # -> 4
-        print(tot.walk('b')); # -> 4
-
-        print(tot.walk('a = b = 5')); # -> 5
-        print(tot.walk('a')); # -> 5
-        print(tot.walk('b')); # -> 5
-
-        print(tot.walk('a = c := 6')); # -> 6
-        print(tot.walk('a')); # -> 6
-        print(tot.walk('c')); # -> 6
-
-        # tot.walk('undefined_variable'); # -> Error
-        # tot.walk('undefined_variable = 2'); # -> Error
-        # tot.walk('a :='); # -> Error
-
-        # Scope
-        print(tot.walk('a := 2; scope a end')); # -> 2
-        print(tot.walk('a := 2; scope scope a end end')); # -> 2
-
-        print(tot.walk('a := 2; scope a := 3 end')); # -> 3
-        print(tot.walk('a')); # -> 2
-
-        print(tot.walk('a := 2; scope a = 3 end')); # -> 3
-        print(tot.walk('a')); # -> 3
-
-        # print(tot.walk('a := 2; scope d := 3 end')); # -> 3
-        # print(tot.walk('d')); # -> Error
+        # While
+        print(tot.walk('a := True; while a do a = False end')); # -> False
+        print(tot.walk('a := False; while a do a = False end')); # -> None
 
         None
     """)
