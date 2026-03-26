@@ -1,21 +1,25 @@
 #! /usr/bin/env python3
 
+from typing import Any
+
 class Ident(str):
     def __repr__(self): return super().__repr__()[1:-1]
     # def __repr__(self): return f'Ident("{super().__repr__()[1:-1]}")'
+
+RuleElement = Ident | tuple[Ident, list[Any]]
+CustomRules = dict[str, list[RuleElement]]
 
 
 def is_ident_first(c): return c.isalpha() or c == "_"
 def is_ident_rest(c): return c.isalnum() or c == "_"
 def is_ident(s): return is_ident_first(s[0])
 
-
 class RuleCollector:
     def __init__(self, src):
         self._src = src
 
-    def collect(self):
-        custom_rules = {}
+    def collect(self) -> CustomRules:
+        custom_rules: CustomRules = {}
         for line in self._src.splitlines():
             line = line.strip()
             if line.startswith("#rule "):
@@ -26,13 +30,15 @@ class RuleCollector:
         return custom_rules
 
 
+Token = Ident | int | str | bool | None
+
 class Scanner:
     def __init__(self, src):
         self._src = src
         self._pos = 0
-        self._tokens = []
+        self._tokens: list[Token] = []
 
-    def tokenize(self):
+    def tokenize(self) -> list[Token]:
         while True:
             while self._current_char().isspace():
                 self._advance()
@@ -128,13 +134,15 @@ class Scanner:
             return Ident("$EOF")
 
 
+Expr = Any
+
 class Parser:
-    def __init__(self, tokens, custom_rules):
+    def __init__(self, tokens: list[Token], custom_rules: CustomRules):
         self._tokens = tokens
         self._pos = 0
         self._custom_rules = custom_rules
 
-    def parse(self):
+    def parse(self) -> Expr:
         expr = self._expression()
         assert self._current_token() == Ident("$EOF"), \
             f"Extra token @ parse(): {self._current_token()}"
@@ -272,22 +280,22 @@ class Parser:
             args = []
             for current, next in zip(rule, rule[1:] + [None]):
                 match current:
-                    case "EXPR":
+                    case Ident("EXPR"):
                         args.append(self._expression())
-                    case "EXPRS":
-                        args.append(self._comma_separated_exprs(Ident(next)))
-                    case ("*", [subrule]):
+                    case Ident("EXPRS"):
+                        args.append(self._comma_separated_exprs(next))
+                    case (Ident("*"), [subrule]):
                         subargs = []
                         while self._current_token() == subrule[0]:
                             subargs.append(match_args(subrule))
                         args.append(subargs)
-                    case ("+", [subrule]):
+                    case (Ident("+"), [subrule]):
                         if self._current_token() == subrule[0]:
                             args.append(match_args(subrule))
                         else:
                             args.append([])
                     case delimiter:
-                        self._consume(Ident(delimiter))
+                        self._consume(delimiter)
             return args
 
         self._advance()
@@ -343,10 +351,13 @@ class Parser:
         return self._tokens[self._pos - 1]
 
 
+Value = Any
+SymbolTable = dict[Ident, Value]
+
 class Environment:
     def __init__(self, parent=None):
         self._parent = parent
-        self._vars = {}
+        self._vars: SymbolTable = {}
 
     def __repr__(self):
         content = "__builtins" if Ident("__builtins") in self._vars else \
@@ -392,7 +403,7 @@ class BreakException(Exception):
 class ContinueException(Exception): pass
 
 class Evaluator:
-    def evaluate(self, expr, env):
+    def evaluate(self, expr: Expr, env: Environment) -> Value:
         match expr:
             case None | bool() | int():
                 return expr
@@ -869,20 +880,20 @@ class Interpreter:
         self._env = Environment(self._env)
         return self
 
-    def collect_rules(self, src):
+    def collect_rules(self, src: str):
         self._custom_rules = {**self._custom_rules, **RuleCollector(src).collect()}
 
-    def scan(self, src):
+    def scan(self, src: str) -> list[Token]:
         return Scanner(src).tokenize()
 
-    def parse(self, tokens):
+    def parse(self, tokens: list[Token]) -> Expr:
         return Parser(tokens, self._custom_rules).parse()
 
-    def ast(self, src):
+    def ast(self, src: str) -> Expr:
         self.collect_rules(src)
         return self.parse(self.scan(src))
 
-    def evaluate(self, ast):
+    def evaluate(self, ast: Expr) -> Value:
         try:
             return Evaluator().evaluate(ast, self._env)
         except ToilException as e: assert False, f"ToilException @ evaluate(): {e.e}"
@@ -890,7 +901,7 @@ class Interpreter:
         except ContinueException: assert False, "Continue at top level @ evaluate()"
         except BreakException: assert False, "Break at top level @ evaluate()"
 
-    def walk(self, src):
+    def walk(self, src: str) -> Value:
         return self.evaluate(self.ast(src))
 
 if __name__ == "__main__":
@@ -924,24 +935,3 @@ if __name__ == "__main__":
             run(sys.argv[1])
 
     # Example
-
-    print(i.walk(""" type(None) """))
-    # -> NoneType
-
-    print(i.walk(""" type(True) """))
-    # -> bool
-
-    print(i.walk(""" type(2) """))
-    # -> int
-
-    print(i.walk(""" type([2, 3]) """))
-    # -> list
-
-    print(i.walk(""" type({"a": 2}) """))
-    # -> dict
-
-    print(i.walk(""" type(quote(2 + 3)) """))
-    # -> expr
-
-    print(i.walk(""" type(quote(a)) """))
-    # -> ident
