@@ -14,21 +14,34 @@ i.walk("""
 
     deffunc is_ident_first params c do isalpha(c) or c == '_' end;
     deffunc is_ident_rest params c do isalnum(c) or c == '_' end;
-    deffunc is_ident params s do is_ident_first(s[0]) end;
+    deffunc is_ident params s do is_ident_first(s[0]) end
+""")
+
+i.walk("""
+    defmacro _defclass params name, params_, body do
+        quote
+            deffunc !name params !!params_ do
+                self := {};
+                !body;
+                self
+            end
+        end
+    end;
+    #rule {defclass: [_defclass, EXPR, params, EXPRS, do, EXPR, end]}
 
     defmacro _defmethod params name, params_, body do
         expr(ident("assign"), [
-            expr(ident("dot"), [ident("self"), str(name)]),
+                expr(ident("dot"),
+                [ident("self"), str(name)
+            ]),
             quote func self, !!params_ do !body end end
         ])
     end
     #rule {defmethod: [_defmethod, EXPR, params, EXPRS, do, EXPR, end]}
 """)
 
-
 i.walk("""
-    deffunc Scanner params src do
-        self := {};
+    defclass Scanner params src do
         self._src = src;
         self._pos = 0;
         self._tokens = [];
@@ -96,15 +109,12 @@ i.walk("""
             else
                 ident('$EOF')
             end
-        end;
-
-        self
+        end
     end
 """)
 
 i.walk("""
-    deffunc Parser params tokens do
-        self := {};
+    defclass Parser params tokens do
         self._tokens = tokens;
         self._pos = 0;
 
@@ -218,15 +228,12 @@ i.walk("""
         defmethod _current_and_advance params do
             self._pos = self._pos + 1;
             self._tokens[self._pos - 1]
-        end;
-
-        self
+        end
     end
 """)
 
 i.walk("""
-    deffunc Environment params parent do
-        self := {};
+    defclass Environment params parent do
         self._parent = parent;
         self._vars = {};
 
@@ -258,16 +265,12 @@ i.walk("""
                 raise('Undefined variable @ assign: ' + name)
             end;
             vars[name] = val
-        end;
-
-        self
+        end
     end
 """)
 
 i.walk("""
-    deffunc Evaluator params do
-        self := {};
-
+    defclass Evaluator params do
         defmethod eval params expr, env do
             # print(expr);
             match expr.type()
@@ -321,15 +324,12 @@ i.walk("""
             while self.eval(cond_expr, env) do
                 self.eval(body_expr, env)
             end
-        end;
-
-        self
+        end
     end
 """)
 
 i.walk("""
-    deffunc Interpreter params do
-        self := {};
+    defclass Interpreter params do
         self._env = Environment(None);
 
         defmethod init_env params do
@@ -341,9 +341,7 @@ i.walk("""
         defmethod parse params tokens do Parser(tokens).parse() end;
         defmethod ast params src do Parser(self.scan(src)).parse() end;
         defmethod eval params ast do Evaluator().eval(ast, self._env) end;
-        defmethod walk params src do self.eval(self.ast(src)) end;
-
-        self
+        defmethod walk params src do self.eval(self.ast(src)) end
     end
 """)
 

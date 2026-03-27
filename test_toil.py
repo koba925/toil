@@ -1083,6 +1083,66 @@ text
         """)
         assert capsys.readouterr().out == "I'm Leo\nwoof\n"
 
+    def test_oo_style_with_macro(self, capsys):
+        self.i.walk(r"""
+            defmacro _defclass params name, params_, body do
+                quote
+                    deffunc !name params !!params_ do
+                        self := {};
+                        !body;
+                        self
+                    end
+                end
+            end;
+            #rule {defclass: [_defclass, EXPR, params, EXPRS, do, EXPR, end]}
+
+            defmacro inherits params super do
+                quote self = !super end
+            end;
+
+            defmacro _defmethod params name, params_, body do
+                expr(ident("assign"), [
+                        expr(ident("dot"),
+                        [ident("self"), str(name)
+                    ]),
+                    quote func self, !!params_ do !body end end
+                ])
+            end
+            #rule {defmethod: [_defmethod, EXPR, params, EXPRS, do, EXPR, end]}
+        """)
+        self.i.walk("""
+            defclass Animal params name do
+                self._name = name;
+                defmethod introduce params do print("I'm", self._name) end;
+                defmethod new_name params name do self._name = name end;
+                defmethod make_sound params do print("crying") end
+            end
+        """)
+        self.i.walk("""
+            animal1 := Animal("Rocky");
+            animal2 := Animal("Lucy");
+            animal1.introduce();
+            animal1.make_sound();
+            animal2.introduce();
+            animal2.new_name("Bella");
+            animal2.introduce();
+            animal2.make_sound()
+        """)
+        assert capsys.readouterr().out == "I'm Rocky\ncrying\nI'm Lucy\nI'm Bella\ncrying\n"
+
+        self.i.walk("""
+            defclass Dog params name do
+                inherits(Animal(name));
+                defmethod make_sound params do print("woof") end
+            end
+        """)
+        self.i.walk("""
+            dog1 := Dog("Leo");
+            dog1.introduce();
+            dog1.make_sound()
+        """)
+        assert capsys.readouterr().out == "I'm Leo\nwoof\n"
+
     def test_sieve_ufcs(self):
         result = self.i.walk("""
             sieve := [False, False] + [True] * 98;

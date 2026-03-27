@@ -249,7 +249,8 @@ class Parser:
                 case Ident("*"):
                     self._advance()
                     rest_name = self._advance()
-                    assert isinstance(rest_name, Ident), f"Expected rest pattern name @ _dict(): {rest_name}"
+                    assert isinstance(rest_name, Ident), \
+                        f"Expected rest pattern name @ _dict(): {rest_name}"
                     dic[Ident("*")] = rest_name
                 case Ident():
                     key = str(self._advance())
@@ -436,7 +437,8 @@ class Evaluator:
             case (Ident("__core_while"), [cond_expr, body_expr]):
                 return self._while(cond_expr, body_expr, env)
             case (Ident("break"), args):
-                assert len(args) <= 1, f"Break takes zero or one argument @ evaluate(): {args}"
+                assert len(args) <= 1, \
+                    f"Break takes zero or one argument @ evaluate(): {args}"
                 raise BreakException(self.eval(args[0], env) if args else None)
             case (Ident("continue"), args):
                 assert len(args) == 0, f"Continue takes no arguments @ evaluate(): {args}"
@@ -444,7 +446,8 @@ class Evaluator:
             case (Ident("__core_func"), [params, body]):
                 return (Ident("closure"), params, body, env)
             case (Ident("return"), args):
-                assert len(args) <= 1, f"Return takes zero or one argument @ evaluate(): {args}"
+                assert len(args) <= 1, \
+                    f"Return takes zero or one argument @ evaluate(): {args}"
                 raise ReturnException(self.eval(args[0], env) if args else None)
             case (Ident("expand"), [(op_expr, args_expr)]):
                 return self._expand(op_expr, args_expr, env)
@@ -453,7 +456,8 @@ class Evaluator:
             case (Ident("__core_try"), [body_expr, clauses_expr]):
                 return self._try(body_expr, clauses_expr, env)
             case (Ident("raise"), args):
-                assert len(args) <= 1, f"Raise takes zero or one argument @ evaluate(): {args}"
+                assert len(args) <= 1, \
+                    f"Raise takes zero or one argument @ evaluate(): {args}"
                 raise ToilException(self.eval(args[0], env) if args else None)
             case (Ident("__core_scope"), [expr]):
                 return self.eval(expr, Environment(env))
@@ -496,7 +500,8 @@ class Evaluator:
         match left_expr:
             case Ident(name):
                 return env.assign(name, right_val)
-            case (Ident("index"), [coll_expr, index_expr]) | (Ident("dot"), [coll_expr, index_expr]):
+            case (Ident("index"), [coll_expr, index_expr]) | \
+                 (Ident("dot"), [coll_expr, index_expr]):
                 coll_val = self.eval(coll_expr, env)
                 index_val = self.eval(index_expr, env)
                 match coll_val, index_val:
@@ -699,9 +704,17 @@ class Interpreter:
 
         self._env.define(Ident("import"), lambda args: self._import(args[0]))
 
-        self._env.define(Ident("eval"), lambda args: Evaluator().eval(self.ast(args[0]), args[1] if len(args) > 1 else self._env))
-        self._env.define(Ident("eval_expr"), lambda args: Evaluator().eval(args[0], args[1] if len(args) > 1 else self._env))
-        self._env.define(Ident("apply"), lambda args: Evaluator().apply(args[0], args[1]))
+        self._env.define(Ident("eval"), lambda args: Evaluator().eval(
+            self.ast(args[0]),
+            args[1] if len(args) > 1 else self._env
+        ))
+        self._env.define(Ident("eval_expr"), lambda args: Evaluator().eval(
+            args[0],
+            args[1] if len(args) > 1 else self._env
+        ))
+        self._env.define(Ident("apply"),
+            lambda args: Evaluator().apply(args[0], args[1])
+        )
 
         self._env.define(Ident("type"), lambda args: self.type(args[0]))
 
@@ -945,32 +958,58 @@ if __name__ == "__main__":
     # Example
 
     i.walk(r"""
+        defmacro _defclass params name, params_, body do
+            quote
+                deffunc !name params !!params_ do
+                    self := {};
+                    !body;
+                    self
+                end
+            end
+        end;
+        #rule {defclass: [_defclass, EXPR, params, EXPRS, do, EXPR, end]}
+
+        defmacro inherits params super do
+            quote self = !super end
+        end;
+
         defmacro _defmethod params name, params_, body do
             expr(ident("assign"), [
-                expr(ident("dot"), [ident("self"), str(name)]),
+                    expr(ident("dot"),
+                    [ident("self"), str(name)
+                ]),
                 quote func self, !!params_ do !body end end
             ])
         end
         #rule {defmethod: [_defmethod, EXPR, params, EXPRS, do, EXPR, end]}
-    """) # This macro is for demonstration purposes in the main section.
+    """)
 
-    print(i.walk("""
-        deffunc Environment params parent do
-            self := {};
-            self._vars = {};
-
-            defmethod define params name, val do
-                self._vars[name] = val
-            end;
-
-            defmethod val params name do
-                self._vars[name]
-            end;
-
-            self
-        end;
-
-        e := Environment(None);
-        e.define("a", 2);
-        e.val("a")
-    """)) # -> 2
+    i.walk("""
+        defclass Animal params name do
+            self._name = name;
+            defmethod introduce params do print("I'm", self._name) end;
+            defmethod new_name params name do self._name = name end;
+            defmethod make_sound params do print("crying") end
+        end
+    """)
+    i.walk("""
+        animal1 := Animal("Rocky");
+        animal2 := Animal("Lucy");
+        animal1.introduce();       # -> I'm Rocky
+        animal1.make_sound();      # -> crying
+        animal2.introduce();       # -> I'm Lucy
+        animal2.new_name("Bella");
+        animal2.introduce();       # -> I'm Bella
+        animal2.make_sound()       # -> crying
+    """)
+    i.walk("""
+        defclass Dog params name do
+            inherits(Animal(name));
+            defmethod make_sound params do print("woof") end
+        end
+    """)
+    i.walk("""
+        dog1 := Dog("Leo");
+        dog1.introduce(); # -> I'm Leo
+        dog1.make_sound() # -> woof
+    """)
