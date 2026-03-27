@@ -944,16 +944,33 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.walk(""" a := 2 """)) # -> 2
-    print(i.walk(""" __env """)) # -> [a] < [__stdlib] < [__corelib] < [__builtins]
-    print(i.walk(""" __env.parent """)) # -> [__stdlib] < [__corelib] < [__builtins]
-    print(i.walk(""" __env.vars.items() """)) # -> [[a, 2]]
-    print(i.walk(""" __env.vars.keys() """)) # -> [a]
-    print(i.walk(""" __env.val(ident("a")) """)) # -> 2
-    print(i.walk(""" __env.define(ident("b"), 3) """)) # -> 3
-    print(i.walk(""" __env.vars.items() """)) # -> [[a, 2], [b, 3]]
-    print(i.walk(""" b """)) # -> 3
-    print(i.walk(""" scope c := 4; __env end""")) # -> [c] < [a, b] < [__stdlib] < [__corelib] < [__builtins]
-    print(i.walk(""" scope a := 5; __env.parent.val(ident("a")) end""")) # -> 2
-    print(i.walk(""" scope __env.assign(ident("b"), 6) end; b""")) # -> 6
-    print(i.walk(""" __env.lookup(ident("add")).add """)) # -> <function ...>
+    i.walk(r"""
+        defmacro _defmethod params name, params_, body do
+            expr(ident("assign"), [
+                expr(ident("dot"), [ident("self"), str(name)]),
+                quote func self, !!params_ do !body end end
+            ])
+        end
+        #rule {defmethod: [_defmethod, EXPR, params, EXPRS, do, EXPR, end]}
+    """) # This macro is for demonstration purposes in the main section.
+
+    print(i.walk("""
+        deffunc Environment params parent do
+            self := {};
+            self._vars = {};
+
+            defmethod define params name, val do
+                self._vars[name] = val
+            end;
+
+            defmethod val params name do
+                self._vars[name]
+            end;
+
+            self
+        end;
+
+        e := Environment(None);
+        e.define("a", 2);
+        e.val("a")
+    """)) # -> 2

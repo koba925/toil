@@ -14,8 +14,17 @@ i.walk("""
 
     deffunc is_ident_first params c do isalpha(c) or c == '_' end;
     deffunc is_ident_rest params c do isalnum(c) or c == '_' end;
-    deffunc is_ident params s do is_ident_first(s[0]) end
+    deffunc is_ident params s do is_ident_first(s[0]) end;
+
+    defmacro _defmethod params name, params_, body do
+        expr(ident("assign"), [
+            expr(ident("dot"), [ident("self"), str(name)]),
+            quote func self, !!params_ do !body end end
+        ])
+    end
+    #rule {defmethod: [_defmethod, EXPR, params, EXPRS, do, EXPR, end]}
 """)
+
 
 i.walk("""
     deffunc Scanner params src do
@@ -24,7 +33,7 @@ i.walk("""
         self._pos = 0;
         self._tokens = [];
 
-        self.tokenize = func self do
+        defmethod tokenize params do
             while True do
                 while self._current_char().isspace() do self._advance() end;
 
@@ -47,7 +56,7 @@ i.walk("""
             self._tokens
         end;
 
-        self._number = func self do
+        defmethod _number params do
             start := self._pos;
             while self._current_char().isdigit() do
                 self._advance()
@@ -55,7 +64,7 @@ i.walk("""
             self._tokens.push(int(self._src.slice(start, self._pos)))
         end;
 
-        self._ident = func self do
+        defmethod _ident params do
             start := self._pos;
             self._advance();
             while self._current_char().is_ident_rest() do
@@ -70,7 +79,7 @@ i.walk("""
             end
         end;
 
-        self._two_char_operator = func self, successors do
+        defmethod _two_char_operator params successors do
             start := self._pos;
             self._advance();
             if self._current_char().in(successors) then
@@ -79,9 +88,9 @@ i.walk("""
             self._tokens.push(ident(self._src.slice(start, self._pos)))
         end;
 
-        self._advance = func self do self._pos = self._pos + 1 end;
+        defmethod _advance params do self._pos = self._pos + 1 end;
 
-        self._current_char = func self do
+        defmethod _current_char params do
             if self._pos < self._src.len() then
                 self._src[self._pos]
             else
@@ -99,7 +108,7 @@ i.walk("""
         self._tokens = tokens;
         self._pos = 0;
 
-        self.parse = func self do
+        defmethod parse params do
             expr := self._expression();
             if self._current() != ident('$EOF') then
                 raise('Extra token @ parse: ' + str(self._current()))
@@ -107,11 +116,11 @@ i.walk("""
             expr
         end;
 
-        self._expression = func self do
+        defmethod _expression params do
             self._sequence()
         end;
 
-        self._sequence = func self do
+        defmethod _sequence params do
             exprs := [self._define_assign()];
             while self._current() == ident(';') do
                 self._current_and_advance();
@@ -120,14 +129,14 @@ i.walk("""
             if exprs.len() == 1 then exprs[0] else expr(ident('seq'), exprs) end
         end;
 
-        self._define_assign = func self do
+        defmethod _define_assign params do
             self._binary_right({
                 ':=': ident('define'),
                 '=': ident('assign')
             }, self._primary)
         end;
 
-        self._binary_right = func self, ops, sub_elem do
+        defmethod _binary_right params ops, sub_elem do
             left := sub_elem();
             if self._current().type() == 'ident' and
                (op := str(self._current())).in(ops) then
@@ -139,7 +148,7 @@ i.walk("""
             end
         end;
 
-        self._primary = func self do
+        defmethod _primary params do
             match self._current().type()
                 case 'NoneType' then self._current_and_advance()
                 case 'bool' then self._current_and_advance()
@@ -160,14 +169,14 @@ i.walk("""
             end
         end;
 
-        self._scope = func self do
+        defmethod _scope params do
             self._current_and_advance();
             body_expr := self._expression();
             self._consume(ident('end'));
             expr(ident('scope'), [body_expr])
         end;
 
-        self._if = func self do
+        defmethod _if params do
             self._current_and_advance();
             cond_expr := self._expression();
             self._consume(ident('then'));
@@ -186,7 +195,7 @@ i.walk("""
             expr(ident('if'), [cond_expr, then_expr, else_expr])
         end;
 
-        self._while = func self do
+        defmethod _while params do
             self._current_and_advance();
             cond_expr := self._expression();
             self._consume(ident('do'));
@@ -196,7 +205,7 @@ i.walk("""
         end;
 
 
-        self._consume = func self, expected do
+        defmethod _consume params expected do
             if self._current() == expected then
                 self._current_and_advance()
             else
@@ -204,9 +213,9 @@ i.walk("""
             end
         end;
 
-        self._current = func self do self._tokens[self._pos] end;
+        defmethod _current params do self._tokens[self._pos] end;
 
-        self._current_and_advance = func self do
+        defmethod _current_and_advance params do
             self._pos = self._pos + 1;
             self._tokens[self._pos - 1]
         end;
@@ -221,11 +230,11 @@ i.walk("""
         self._parent = parent;
         self._vars = {};
 
-        self.define = func self, name, val do
+        defmethod define params name, val do
             self._vars[name] = val
         end;
 
-        self.lookup = func self, name do
+        defmethod lookup params name do
             if name.in(self._vars) then
                 self._vars
             elif self._parent != None then
@@ -235,7 +244,7 @@ i.walk("""
             end
         end;
 
-        self.val = func self, name do
+        defmethod val params name do
             vars := self.lookup(name);
             if vars == None then
                 raise('Undefined variable @ val: ' + name)
@@ -243,7 +252,7 @@ i.walk("""
             vars[name]
         end;
 
-        self.assign = func self, name, val do
+        defmethod assign params name, val do
             vars := self.lookup(name);
             if vars == None then
                 raise('Undefined variable @ assign: ' + name)
@@ -259,7 +268,7 @@ i.walk("""
     deffunc Evaluator params do
         self := {};
 
-        self.eval = func self, expr, env do
+        defmethod eval params expr, env do
             # print(expr);
             match expr.type()
                 case 'NoneType' then expr
@@ -284,23 +293,23 @@ i.walk("""
             end
         end;
 
-        self._define = func self, name, val_expr, env do
+        defmethod _define params name, val_expr, env do
             val := self.eval(val_expr, env);
             env.define(str(name), val)
         end;
 
-        self._assign = func self, name, val_expr, env do
+        defmethod _assign params name, val_expr, env do
             val := self.eval(val_expr, env);
             env.assign(str(name), val)
         end;
 
-        self._seq = func self, exprs, env do
+        defmethod _seq params exprs, env do
             for expr in exprs do
                 self.eval(expr, env)
             end
         end;
 
-        self._if = func self, cond_expr, then_expr, else_expr, env do
+        defmethod _if params cond_expr, then_expr, else_expr, env do
             if self.eval(cond_expr, env) then
                 self.eval(then_expr, env)
             else
@@ -308,7 +317,7 @@ i.walk("""
             end
         end;
 
-        self._while = func self, cond_expr, body_expr, env do
+        defmethod _while params cond_expr, body_expr, env do
             while self.eval(cond_expr, env) do
                 self.eval(body_expr, env)
             end
@@ -323,16 +332,16 @@ i.walk("""
         self := {};
         self._env = Environment(None);
 
-        self.init_env = func self do
+        defmethod init_env params do
             self._env = Environment(None);
             self
         end;
 
-        self.scan = func self, src do Scanner(src).tokenize() end;
-        self.parse = func self, tokens do Parser(tokens).parse() end;
-        self.ast = func self, src do Parser(self.scan(src)).parse() end;
-        self.eval = func self, ast do Evaluator().eval(ast, self._env) end;
-        self.walk = func self, src do self.eval(self.ast(src)) end;
+        defmethod scan params src do Scanner(src).tokenize() end;
+        defmethod parse params tokens do Parser(tokens).parse() end;
+        defmethod ast params src do Parser(self.scan(src)).parse() end;
+        defmethod eval params ast do Evaluator().eval(ast, self._env) end;
+        defmethod walk params src do self.eval(self.ast(src)) end;
 
         self
     end
@@ -352,4 +361,5 @@ if __name__ == "__main__":
         print(tot.walk('a := False; while a do a = False end')); # -> None
 
         None
-    """)
+    """) # -> False\nNone
+
