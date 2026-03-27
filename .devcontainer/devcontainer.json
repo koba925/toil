@@ -10,8 +10,6 @@
 				"ms-python.vscode-pylance",
 				"ms-python.black-formatter",
 				"ms-python.debugpy",
-				"donjayamanne.githistory",
-				"google.geminicodeassist"
 			]
 		}
 	},
