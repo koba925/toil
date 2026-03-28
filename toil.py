@@ -82,13 +82,6 @@ class Scanner:
 
         return self._tokens
 
-    def _two_char_operator(self, successors):
-        start = self._pos
-        self._advance()
-        if self._current_char() in successors:
-            self._advance()
-        self._tokens.append(Ident(self._src[start:self._pos]))
-
     def _number(self):
         start = self._pos
         while self._current_char().isnumeric():
@@ -133,6 +126,13 @@ class Scanner:
             case "True": self._tokens.append(True)
             case "False": self._tokens.append(False)
             case _: self._tokens.append(Ident(token))
+
+    def _two_char_operator(self, successors):
+        start = self._pos
+        self._advance()
+        if self._current_char() in successors:
+            self._advance()
+        self._tokens.append(Ident(self._src[start:self._pos]))
 
     def _advance(self):
         self._pos += 1
@@ -206,8 +206,7 @@ class Parser:
 
     def _call_index_dot(self):
         target = self._primary()
-        while type(self._current_token()) is Ident and \
-                self._current_token() in (Ident("("), Ident("["), Ident(".")):
+        while self._current_token() in (Ident("("), Ident("["), Ident(".")):
             match self._current_token():
                 case Ident("("):
                     self._advance()
@@ -231,8 +230,7 @@ class Parser:
             case Ident("("): return self._paren()
             case Ident("["): return self._list()
             case Ident("{"): return self._dict()
-            case None | bool() | int(): return self._advance()
-            case s if type(s) is str: return self._advance()
+            case None | bool() | int() | str(): return self._advance()
             case Ident(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
             case Ident(name) if is_ident(name): return self._advance()
@@ -375,7 +373,6 @@ class Environment(dict):
         return f"[{content}]" + (f" < {self['parent']}" if self["parent"] else "")
 
     def define(self, name: str, val):
-        assert type(name) is str, f"Name must be str @ Environment.define(): {name}"
         self["vars"][name] = val
         return val
 
@@ -414,10 +411,8 @@ class ContinueException(Exception): pass
 class Evaluator:
     def eval(self, expr: Expr, env: Environment) -> Value:
         match expr:
-            case None | bool() | int():
+            case None | bool() | int() | str():
                 return expr
-            case s if type(s) is str:
-                return s
             case exprs if type(exprs) is list:
                 return [self.eval(expr, env) for expr in exprs]
             case exprs if type(exprs) is dict:
@@ -676,8 +671,7 @@ class Evaluator:
                         return False
                 return True
             case _:
-                if type(pattern) is not type(value): return False
-                return pattern == value
+                return type(pattern) is type(value) and pattern == value
 
 class Interpreter:
     def __init__(self):
