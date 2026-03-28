@@ -18,29 +18,6 @@ i.walk("""
 """)
 
 i.walk("""
-    defmacro _defclass params name, params_, body do
-        quote
-            deffunc !name params !!params_ do
-                self := {};
-                !body;
-                self
-            end
-        end
-    end;
-    #rule {defclass: [_defclass, EXPR, params, EXPRS, do, EXPR, end]}
-
-    defmacro _defmethod params name, params_, body do
-        expr(ident("assign"), [
-                expr(ident("dot"),
-                [ident("self"), str(name)
-            ]),
-            quote func self, !!params_ do !body end end
-        ])
-    end
-    #rule {defmethod: [_defmethod, EXPR, params, EXPRS, do, EXPR, end]}
-""")
-
-i.walk("""
     defclass Scanner params src do
         self._src = src;
         self._pos = 0;
@@ -346,16 +323,15 @@ i.walk("""
 """)
 
 if __name__ == "__main__":
-
-    # Example
-
     i.walk(r"""
         tot := Interpreter().init_env()
     """)
 
+    # Example
     i.walk(r"""
-        print(tot.walk('if True 2 end')); # ->
+        # While
+        print(tot.walk('a := True; while a do a = False end')); # -> False
+        print(tot.walk('a := False; while a do a = False end')); # -> None
 
         None
-    """) # -> False\nNone
-
+    """)

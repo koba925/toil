@@ -826,10 +826,37 @@ class Interpreter:
                         !body
                     end
                 end
-            end end
+            end end;
             #rule {for: [__core_for, EXPR, in, EXPR, do, EXPR, end]}
 
             #rule {try: [__core_try, EXPR, *[except, EXPR, then, EXPR], end]}
+
+            # Object oriented notations
+
+            defmacro __core_defclass params name, params_, body do
+                quote
+                    deffunc !name params !!params_ do
+                        self := {};
+                        !body;
+                        self
+                    end
+                end
+            end;
+            #rule {defclass: [__core_defclass, EXPR, params, EXPRS, do, EXPR, end]}
+
+            defmacro inherits params super do
+                quote self = !super end
+            end;
+
+            defmacro __core_defmethod params name, params_, body do
+                expr(ident("assign"), [
+                        expr(ident("dot"),
+                        [ident("self"), str(name)
+                    ]),
+                    quote func self, !!params_ do !body end end
+                ])
+            end
+            #rule {defmethod: [__core_defmethod, EXPR, params, EXPRS, do, EXPR, end]}
         """)
 
         self._env = Environment(self._env)
@@ -959,4 +986,32 @@ if __name__ == "__main__":
             run(sys.argv[1])
 
     # Example
-    i.walk(r""" print(ident('a')) """)
+    i.walk("""
+        defclass Animal params name do
+            self._name = name;
+            defmethod introduce params do print("I'm", self._name) end;
+            defmethod new_name params name do self._name = name end;
+            defmethod make_sound params do print("crying") end
+        end
+    """)
+    i.walk("""
+        animal1 := Animal("Rocky");
+        animal2 := Animal("Lucy");
+        animal1.introduce();       # -> I'm Rocky
+        animal1.make_sound();      # -> crying
+        animal2.introduce();       # -> I'm Lucy
+        animal2.new_name("Bella");
+        animal2.introduce();       # -> I'm Bella
+        animal2.make_sound()       # -> crying
+    """)
+    i.walk("""
+        defclass Dog params name do
+            inherits(Animal(name));
+            defmethod make_sound params do print("woof") end
+        end
+    """)
+    i.walk("""
+        dog1 := Dog("Leo");
+        dog1.introduce(); # -> I'm Leo
+        dog1.make_sound() # -> woof
+    """)
