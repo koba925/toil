@@ -2,17 +2,29 @@
 
 from typing import Any
 
-class Ident(str):
-    def __repr__(self): return super().__repr__()[1:-1]
-    # def __repr__(self): return f'Ident("{super().__repr__()[1:-1]}")'
+
+class Ident:
+    __match_args__ = ("name",)
+
+    def __init__(self, name: str): self.name = name
+    def __hash__(self): return hash(self.name)
+    def __repr__(self): return self.name
+    def __str__(self): return self.name
+    def __eq__(self, other):
+        return isinstance(other, Ident) and self.name == other.name
 
 RuleElement = Ident | tuple[Ident, list[Any]]
 CustomRules = dict[str, list[RuleElement]]
+Token = Ident | int | str | bool | None
+Expr = Any
+Value = Any
+SymbolTable = dict[str, Value]
 
 
 def is_ident_first(c): return c.isalpha() or c == "_"
 def is_ident_rest(c): return c.isalnum() or c == "_"
 def is_ident(s): return is_ident_first(s[0])
+
 
 class RuleCollector:
     def __init__(self, src):
@@ -30,8 +42,6 @@ class RuleCollector:
         return custom_rules
 
 
-Token = Ident | int | str | bool | None
-
 class Scanner:
     def __init__(self, src):
         self._src = src
@@ -44,12 +54,12 @@ class Scanner:
                 self._advance()
 
             if self._current_char() == "#":
-                while self._current_char() not in ("\n", Ident("$EOF")):
+                while self._current_char() not in ("\n", "$EOF"):
                     self._advance()
                 continue
 
             match self._current_char():
-                case Ident("$EOF"):
+                case "$EOF":
                     self._tokens.append(Ident("$EOF"))
                     break
                 case ch if ch.isnumeric():
@@ -131,10 +141,8 @@ class Scanner:
         if self._pos < len(self._src):
             return self._src[self._pos]
         else:
-            return Ident("$EOF")
+            return "$EOF"
 
-
-Expr = Any
 
 class Parser:
     def __init__(self, tokens: list[Token], custom_rules: CustomRules):
@@ -251,9 +259,9 @@ class Parser:
                     rest_name = self._advance()
                     assert isinstance(rest_name, Ident), \
                         f"Expected rest pattern name @ _dict(): {rest_name}"
-                    dic[Ident("*")] = rest_name
-                case Ident():
-                    key = str(self._advance())
+                    dic["*"] = rest_name
+                case Ident(key):
+                    self._advance()
                     if self._current_token() == Ident(":"):
                         self._advance()
                         dic[key] = self._expression()
@@ -300,9 +308,7 @@ class Parser:
             return args
 
         self._advance()
-        op = Ident(rule[0])
-        args = match_args(rule[1:])
-        return (op, args)
+        return (rule[0], match_args(rule[1:]))
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
@@ -352,9 +358,6 @@ class Parser:
         return self._tokens[self._pos - 1]
 
 
-Value = Any
-SymbolTable = dict[Ident, Value]
-
 class Environment(dict):
     def __init__(self, parent=None):
         self["parent"] = parent
@@ -365,17 +368,18 @@ class Environment(dict):
         self["lookup"] = lambda args: self.lookup(args[0])
 
     def __repr__(self):
-        content = "__builtins" if Ident("__builtins") in self["vars"] else \
-                  "__corelib" if Ident("__corelib") in self["vars"] else \
-                  "__stdlib" if Ident("__stdlib") in self["vars"] else \
+        content = "__builtins" if "__builtins" in self["vars"] else \
+                  "__corelib" if "__corelib" in self["vars"] else \
+                  "__stdlib" if "__stdlib" in self["vars"] else \
                   ", ".join(self["vars"])
         return f"[{content}]" + (f" < {self['parent']}" if self["parent"] else "")
 
-    def define(self, name: Ident, val):
+    def define(self, name: str, val):
+        assert type(name) is str, f"Name must be str @ Environment.define(): {name}"
         self["vars"][name] = val
         return val
 
-    def lookup(self, name: Ident):
+    def lookup(self, name: str):
         if name in self["vars"]:
             return self["vars"]
         elif self["parent"] is not None:
@@ -383,12 +387,12 @@ class Environment(dict):
         else:
             return None
 
-    def val(self, name: Ident):
+    def val(self, name: str):
         vars = self.lookup(name)
         assert vars is not None, f"Undefined variable @ val(): {name}"
         return vars[name]
 
-    def assign(self, name: Ident, val):
+    def assign(self, name: str, val):
         vars = self.lookup(name)
         assert vars is not None, f"Undefined variable @ assign(): {name}"
         vars[name] = val
@@ -629,14 +633,13 @@ class Evaluator:
                     return True
 
         def match_dict():
-            rest_name = pattern.get(Ident("*"))
+            rest_name = pattern.get("*")
 
             fixed_patterns = pattern.copy()
             remaining_values = value.copy()
 
             if rest_name is not None:
-                assert isinstance(rest_name, Ident), f"Invalid dict rest pattern @ match_dict(): {rest_name}"
-                del fixed_patterns[Ident("*")]
+                del fixed_patterns["*"]
 
             for key, sub_pattern in fixed_patterns.items():
                 if key not in remaining_values:
@@ -646,7 +649,7 @@ class Evaluator:
                 del remaining_values[key]
 
             if rest_name is not None:
-                env.define(rest_name, remaining_values)
+                env.define(rest_name.name, remaining_values)
             return True
 
         match pattern:
@@ -664,7 +667,7 @@ class Evaluator:
             case (Ident("ident"), [name_expr]):
                 if not isinstance(name_expr, str): return False
                 if not isinstance(value, Ident): return False
-                return name_expr == value
+                return name_expr == value.name
             case (Ident("expr"), args):
                 if not isinstance(value, tuple): return False
                 if len(args) != len(value): return False
@@ -700,60 +703,60 @@ class Interpreter:
         return self
 
     def _builtins(self):
-        self._env.define(Ident("__builtins"), None)
+        self._env.define("__builtins", None)
 
-        self._env.define(Ident("import"), lambda args: self._import(args[0]))
+        self._env.define("import", lambda args: self._import(args[0]))
 
-        self._env.define(Ident("eval"), lambda args: Evaluator().eval(
+        self._env.define("eval", lambda args: Evaluator().eval(
             self.ast(args[0]),
             args[1] if len(args) > 1 else self._env
         ))
-        self._env.define(Ident("eval_expr"), lambda args: Evaluator().eval(
+        self._env.define("eval_expr", lambda args: Evaluator().eval(
             args[0],
             args[1] if len(args) > 1 else self._env
         ))
-        self._env.define(Ident("apply"),
+        self._env.define("apply",
             lambda args: Evaluator().apply(args[0], args[1])
         )
 
-        self._env.define(Ident("type"), lambda args: self.type(args[0]))
+        self._env.define("type", lambda args: self.type(args[0]))
 
-        self._env.define(Ident("add"), lambda args: args[0] + args[1])
-        self._env.define(Ident("sub"), lambda args: args[0] - args[1])
-        self._env.define(Ident("mul"), lambda args: args[0] * args[1])
-        self._env.define(Ident("div"), lambda args: args[0] // args[1])
-        self._env.define(Ident("mod"), lambda args: args[0] % args[1])
-        self._env.define(Ident("neg"), lambda args: -args[0])
+        self._env.define("add", lambda args: args[0] + args[1])
+        self._env.define("sub", lambda args: args[0] - args[1])
+        self._env.define("mul", lambda args: args[0] * args[1])
+        self._env.define("div", lambda args: args[0] // args[1])
+        self._env.define("mod", lambda args: args[0] % args[1])
+        self._env.define("neg", lambda args: -args[0])
 
-        self._env.define(Ident("equal"), lambda args: args[0] == args[1])
-        self._env.define(Ident("not_equal"), lambda args: args[0] != args[1])
-        self._env.define(Ident("less"), lambda args: args[0] < args[1])
-        self._env.define(Ident("greater"), lambda args: args[0] > args[1])
-        self._env.define(Ident("less_equal"), lambda args: args[0] <= args[1])
-        self._env.define(Ident("greater_equal"), lambda args: args[0] >= args[1])
-        self._env.define(Ident("not"), lambda args: not args[0])
+        self._env.define("equal", lambda args: args[0] == args[1])
+        self._env.define("not_equal", lambda args: args[0] != args[1])
+        self._env.define("less", lambda args: args[0] < args[1])
+        self._env.define("greater", lambda args: args[0] > args[1])
+        self._env.define("less_equal", lambda args: args[0] <= args[1])
+        self._env.define("greater_equal", lambda args: args[0] >= args[1])
+        self._env.define("not", lambda args: not args[0])
 
-        self._env.define(Ident("len"), lambda args: len(args[0]))
-        self._env.define(Ident("index"), lambda args: args[0][args[1]])
-        self._env.define(Ident("slice"), lambda args: args[0][args[1]:args[2]])
-        self._env.define(Ident("push"), lambda args: args[0].append(args[1]))
-        self._env.define(Ident("pop"), lambda args: args[0].pop())
+        self._env.define("len", lambda args: len(args[0]))
+        self._env.define("index", lambda args: args[0][args[1]])
+        self._env.define("slice", lambda args: args[0][args[1]:args[2]])
+        self._env.define("push", lambda args: args[0].append(args[1]))
+        self._env.define("pop", lambda args: args[0].pop())
 
-        self._env.define(Ident("chr"), lambda args: chr(args[0]))
-        self._env.define(Ident("ord"), lambda args: ord(args[0]))
-        self._env.define(Ident("join"), lambda args: str(args[1]).join(map(str, args[0])))
+        self._env.define("chr", lambda args: chr(args[0]))
+        self._env.define("ord", lambda args: ord(args[0]))
+        self._env.define("join", lambda args: str(args[1]).join(map(str, args[0])))
 
-        self._env.define(Ident("in"), lambda args: args[0] in args[1])
-        self._env.define(Ident("keys"), lambda args: list(args[0].keys()))
-        self._env.define(Ident("items"), lambda args: [list(e) for e in args[0].items()])
-        self._env.define(Ident("copy"), lambda args: args[0].copy())
+        self._env.define("in", lambda args: args[0] in args[1])
+        self._env.define("keys", lambda args: list(args[0].keys()))
+        self._env.define("items", lambda args: [list(e) for e in args[0].items()])
+        self._env.define("copy", lambda args: args[0].copy())
 
-        self._env.define(Ident("str"), lambda args: str(args[0]))
-        self._env.define(Ident("int"), lambda args: int(args[0]))
-        self._env.define(Ident("ident"), lambda args: Ident(args[0]))
-        self._env.define(Ident("expr"), lambda args: tuple(args))
+        self._env.define("str", lambda args: str(args[0]))
+        self._env.define("int", lambda args: int(args[0]))
+        self._env.define("ident", lambda args: Ident(args[0]))
+        self._env.define("expr", lambda args: tuple(args))
 
-        self._env.define(Ident("print"), lambda args: print(*args))
+        self._env.define("print", lambda args: print(*args))
 
         self._env = Environment(self._env)
 
@@ -956,60 +959,4 @@ if __name__ == "__main__":
             run(sys.argv[1])
 
     # Example
-
-    i.walk(r"""
-        defmacro _defclass params name, params_, body do
-            quote
-                deffunc !name params !!params_ do
-                    self := {};
-                    !body;
-                    self
-                end
-            end
-        end;
-        #rule {defclass: [_defclass, EXPR, params, EXPRS, do, EXPR, end]}
-
-        defmacro inherits params super do
-            quote self = !super end
-        end;
-
-        defmacro _defmethod params name, params_, body do
-            expr(ident("assign"), [
-                    expr(ident("dot"),
-                    [ident("self"), str(name)
-                ]),
-                quote func self, !!params_ do !body end end
-            ])
-        end
-        #rule {defmethod: [_defmethod, EXPR, params, EXPRS, do, EXPR, end]}
-    """)
-
-    i.walk("""
-        defclass Animal params name do
-            self._name = name;
-            defmethod introduce params do print("I'm", self._name) end;
-            defmethod new_name params name do self._name = name end;
-            defmethod make_sound params do print("crying") end
-        end
-    """)
-    i.walk("""
-        animal1 := Animal("Rocky");
-        animal2 := Animal("Lucy");
-        animal1.introduce();       # -> I'm Rocky
-        animal1.make_sound();      # -> crying
-        animal2.introduce();       # -> I'm Lucy
-        animal2.new_name("Bella");
-        animal2.introduce();       # -> I'm Bella
-        animal2.make_sound()       # -> crying
-    """)
-    i.walk("""
-        defclass Dog params name do
-            inherits(Animal(name));
-            defmethod make_sound params do print("woof") end
-        end
-    """)
-    i.walk("""
-        dog1 := Dog("Leo");
-        dog1.introduce(); # -> I'm Leo
-        dog1.make_sound() # -> woof
-    """)
+    i.walk(r""" print(ident('a')) """)

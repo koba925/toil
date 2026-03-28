@@ -6,9 +6,9 @@ i = Interpreter().init_env().stdlib()
 
 i.walk("""
     deffunc isalpha params c do
-       ('a' <= c and c <= 'z') or ('A' <= c and c <= 'Z')
+       type(c) == 'str' and ('a' <= c and c <= 'z') or ('A' <= c and c <= 'Z')
     end;
-    deffunc isdigit params c do '0' <= c and c <= '9' end;
+    deffunc isdigit params c do type(c) == 'str' and '0' <= c and c <= '9' end;
     deffunc isalnum params c do isalpha(c) or isdigit(c) end;
     deffunc isspace params c do c == ' ' or c == '\n' end;
 
@@ -51,8 +51,8 @@ i.walk("""
                 while self._current_char().isspace() do self._advance() end;
 
                 ch := self._current_char();
-                if ch == ident('$EOF') then
-                    self._tokens.push(ch); break()
+                if ch == '$EOF' then
+                    self._tokens.push(ident('$EOF')); break()
                 elif ch.isdigit() then
                     self._number()
                 elif ch.is_ident_first() then
@@ -107,7 +107,7 @@ i.walk("""
             if self._pos < self._src.len() then
                 self._src[self._pos]
             else
-                ident('$EOF')
+                '$EOF'
             end
         end
     end
@@ -219,7 +219,7 @@ i.walk("""
             if self._current() == expected then
                 self._current_and_advance()
             else
-                raise('Expected ' + expected + ' @ consume: ' + str(self._current()))
+                raise('Expected ' + str(expected) + ' @ consume: ' + str(self._current()))
             end
         end;
 
@@ -354,9 +354,7 @@ if __name__ == "__main__":
     """)
 
     i.walk(r"""
-        # While
-        print(tot.walk('a := True; while a do a = False end')); # -> False
-        print(tot.walk('a := False; while a do a = False end')); # -> None
+        print(tot.walk('if True 2 end')); # ->
 
         None
     """) # -> False\nNone

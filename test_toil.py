@@ -1287,31 +1287,31 @@ text
         self.i.walk(""" a := 2 """)
         assert self.i.walk(""" __env.vars.keys() """) == ["a"]
         assert self.i.walk(""" __env.vars.items() """) == [["a", 2]]
-        assert self.i.walk(""" __env.val(ident("a")) """) == 2
+        assert self.i.walk(""" __env.val("a") """) == 2
 
-        assert self.i.walk(""" __env.define(ident("b"), 3) """) == 3
+        assert self.i.walk(""" __env.define("b", 3) """) == 3
         assert self.i.walk(""" __env.vars.keys() """) == ["a", "b"]
         assert self.i.walk(""" b """) == 3
 
         assert self.i.walk(""" scope c := 4; __env.vars.keys() end """) == ["c"]
         assert self.i.walk(""" scope c := 4; __env.parent.vars.keys() end """) == ["a", "b"]
-        assert self.i.walk(""" scope a := 5; __env.parent.val(ident("a")) end """) == 2
+        assert self.i.walk(""" scope a := 5; __env.parent.val("a") end """) == 2
 
-        self.i.walk(""" scope __env.assign(ident("b"), 6) end """)
+        self.i.walk(""" scope __env.assign("b", 6) end """)
         assert self.i.walk(""" b """) == 6
 
-        assert self.i.walk(""" __env.lookup(ident("add")) != None """) is True
-        assert self.i.walk(""" __env.lookup(ident("add")).add(2, 3) """) == 5
+        assert self.i.walk(""" __env.lookup("add") != None """) is True
+        assert self.i.walk(""" __env.lookup("add").add(2, 3) """) == 5
 
         # Error cases
         with pytest.raises(AssertionError, match="Undefined variable"):
-            self.i.walk(""" __env.val(ident("not_found")) """)
+            self.i.walk(""" __env.val("not_found") """)
 
         with pytest.raises(AssertionError, match="Undefined variable"):
-            self.i.walk(""" __env.assign(ident("not_found"), 100) """)
+            self.i.walk(""" __env.assign("not_found", 100) """)
 
         # lookup not found returns None
-        assert self.i.walk(""" __env.lookup(ident("not_found")) """) is None
+        assert self.i.walk(""" __env.lookup("not_found") """) is None
 
         # Trace parents to None
         assert self.i.walk(""" __env.parent.parent.parent.parent """) is None
