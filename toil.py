@@ -713,8 +713,6 @@ class Interpreter:
             lambda args: Evaluator().apply(args[0], args[1])
         )
 
-        self._env.define("type", lambda args: self.type(args[0]))
-
         self._env.define("add", lambda args: args[0] + args[1])
         self._env.define("sub", lambda args: args[0] - args[1])
         self._env.define("mul", lambda args: args[0] * args[1])
@@ -735,16 +733,17 @@ class Interpreter:
         self._env.define("slice", lambda args: args[0][args[1]:args[2]])
         self._env.define("push", lambda args: args[0].append(args[1]))
         self._env.define("pop", lambda args: args[0].pop())
+        self._env.define("in", lambda args: args[0] in args[1])
+        self._env.define("copy", lambda args: args[0].copy())
 
         self._env.define("chr", lambda args: chr(args[0]))
         self._env.define("ord", lambda args: ord(args[0]))
         self._env.define("join", lambda args: str(args[1]).join(map(str, args[0])))
 
-        self._env.define("in", lambda args: args[0] in args[1])
         self._env.define("keys", lambda args: list(args[0].keys()))
         self._env.define("items", lambda args: [list(e) for e in args[0].items()])
-        self._env.define("copy", lambda args: args[0].copy())
 
+        self._env.define("type", lambda args: self.type(args[0]))
         self._env.define("str", lambda args: str(args[0]))
         self._env.define("int", lambda args: int(args[0]))
         self._env.define("ident", lambda args: Ident(args[0]))
