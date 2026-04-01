@@ -993,9 +993,9 @@ text
         self.i.walk("""
             f := func ast do
                 match ast
-                    case expr(ident("add"), [left, right]) then left + right
-                    case expr(ident("sub"), [left, right]) then left - right
-                    case expr(op, args) then [op, args]
+                    case Expr(Ident("add"), [left, right]) then left + right
+                    case Expr(Ident("sub"), [left, right]) then left - right
+                    case Expr(op, args) then [op, args]
                     case _ then None
                 end
             end
@@ -1005,9 +1005,9 @@ text
         assert self.i.walk(""" f(quote 2 * 3 end) """) == [Ident("mul"), [2, 3]]
         assert self.i.walk(""" f(2) """) is None
 
-        assert self.i.walk(""" f(expr(ident("add"), [2, 3])) """) == 5
-        assert self.i.walk(""" f(expr("add", [2, 3])) """) == ["add", [2, 3]]
-        assert self.i.walk(""" f([ident("add"), [2, 3]]) """) == None
+        assert self.i.walk(""" f(Expr(Ident("add"), [2, 3])) """) == 5
+        assert self.i.walk(""" f(Expr("add", [2, 3])) """) == ["add", [2, 3]]
+        assert self.i.walk(""" f([Ident("add"), [2, 3]]) """) == None
 
     def test_dict_module(self):
         self.i.walk(""" gcd := import("lib/gcd_dict.toil") """)
@@ -1101,9 +1101,9 @@ text
             end;
 
             defmacro _defmethod params name, params_, body do
-                expr(ident("assign"), [
-                        expr(ident("dot"),
-                        [ident("self"), str(name)
+                Expr(Ident("assign"), [
+                        Expr(Ident("dot"),
+                        [Ident("self"), str(name)
                     ]),
                     quote func self, !!params_ do !body end end
                 ])
@@ -1280,8 +1280,8 @@ text
         assert self.i.walk(""" type("abc") """) == "str"
         assert self.i.walk(""" type([2, 3]) """) == "list"
         assert self.i.walk(""" type({a: 2}) """) == "dict"
-        assert self.i.walk(""" type(quote 2 + 3 end) """) == "expr"
-        assert self.i.walk(""" type(quote a end) """) == "ident"
+        assert self.i.walk(""" type(quote 2 + 3 end) """) == "Expr"
+        assert self.i.walk(""" type(quote a end) """) == "Ident"
 
     def test_env_exposure(self):
         self.i.walk(""" a := 2 """)
@@ -1318,16 +1318,16 @@ text
 
     def test_ast_primitives(self):
         assert self.i.walk(""" quote if True then 2 else 3 end end """) == (Ident("__core_if_macro"), [True, 2, [], [3]])
-        assert self.i.walk(""" expr(ident("__core_if"), [True, 2, 3]) """) == (Ident("__core_if"), [True, 2, 3])
-        assert self.i.walk(""" eval_expr(expr(ident("__core_if"), [True, 2, 3])) """) == 2
-        assert self.i.walk(""" eval_expr(expr(ident("__core_if_macro"), [True, 2, [], [3]])) """) == 2
+        assert self.i.walk(""" Expr(Ident("__core_if"), [True, 2, 3]) """) == (Ident("__core_if"), [True, 2, 3])
+        assert self.i.walk(""" eval_expr(Expr(Ident("__core_if"), [True, 2, 3])) """) == 2
+        assert self.i.walk(""" eval_expr(Expr(Ident("__core_if_macro"), [True, 2, [], [3]])) """) == 2
 
         with pytest.raises(AssertionError):
-            self.i.walk(""" eval_expr(expr(ident("if"), [True, 2, 3] """)
+            self.i.walk(""" eval_expr(Expr(Ident("if"), [True, 2, 3] """)
 
         assert self.i.walk(""" quote add(2, 3) end """) == (Ident("add"), [2, 3])
-        assert self.i.walk(""" expr(ident("add"), [2, 3]) """) == (Ident("add"), [2, 3])
-        assert self.i.walk(""" eval_expr(expr(ident("add"), [2, 3])) """) == 5
+        assert self.i.walk(""" Expr(Ident("add"), [2, 3]) """) == (Ident("add"), [2, 3])
+        assert self.i.walk(""" eval_expr(Expr(Ident("add"), [2, 3])) """) == 5
 
         assert self.i.walk(""" quote
             a := 2;
@@ -1335,13 +1335,13 @@ text
             if a == b then a + b else a * b end
         end """) == (Ident("seq"), [(Ident("define"), [Ident("a"), 2]), (Ident("define"), [Ident("b"), 3]), (Ident("__core_if_macro"), [(Ident("equal"), [Ident("a"), Ident("b")]), (Ident("add"), [Ident("a"), Ident("b")]), [], [(Ident("mul"), [Ident("a"), Ident("b")])]])])
         assert self.i.walk("""
-            expr(ident("seq"), [
-                expr(ident("define"), [ident("a"), 2]),
-                expr(ident("define"), [ident("b"), 3]),
-                expr(ident("__core_if"), [
-                    expr(ident("equal"), [ident("a"), ident("b")]),
-                    expr(ident("add"), [ident("a"), ident("b")]),
-                    expr(ident("mul"), [ident("a"), ident("b")])
+            Expr(Ident("seq"), [
+                Expr(Ident("define"), [Ident("a"), 2]),
+                Expr(Ident("define"), [Ident("b"), 3]),
+                Expr(Ident("__core_if"), [
+                    Expr(Ident("equal"), [Ident("a"), Ident("b")]),
+                    Expr(Ident("add"), [Ident("a"), Ident("b")]),
+                    Expr(Ident("mul"), [Ident("a"), Ident("b")])
                 ])
             ])
         """) == (Ident("seq"), [
@@ -1354,13 +1354,13 @@ text
             ])
         ])
         assert self.i.walk(""" eval_expr(
-            expr(ident("seq"), [
-                expr(ident("define"), [ident("a"), 2]),
-                expr(ident("define"), [ident("b"), 3]),
-                expr(ident("__core_if"), [
-                    expr(ident("equal"), [ident("a"), ident("b")]),
-                    expr(ident("add"), [ident("a"), ident("b")]),
-                    expr(ident("mul"), [ident("a"), ident("b")])
+            Expr(Ident("seq"), [
+                Expr(Ident("define"), [Ident("a"), 2]),
+                Expr(Ident("define"), [Ident("b"), 3]),
+                Expr(Ident("__core_if"), [
+                    Expr(Ident("equal"), [Ident("a"), Ident("b")]),
+                    Expr(Ident("add"), [Ident("a"), Ident("b")]),
+                    Expr(Ident("mul"), [Ident("a"), Ident("b")])
                 ])
             ])
         ) """) == 6
@@ -1368,7 +1368,7 @@ text
     def test_macro(self, capsys):
         # Basic macro (when) vs function (fwhen)
         self.i.walk("""
-            defmacro when params cond, body do expr(ident("__core_if"), [cond, body, None]) end;
+            defmacro when params cond, body do Expr(Ident("__core_if"), [cond, body, None]) end;
             deffunc fwhen params cond, body do if cond then body else None end end
         """)
         assert self.i.walk(""" expand(when(2 == 2, 3)) """) == (Ident("__core_if"), [(Ident("equal"), [2, 2]), 3, None])
@@ -1379,22 +1379,22 @@ text
         with pytest.raises(ZeroDivisionError):
             self.i.walk(""" fwhen(2 == 3, 4 / 0) """)
 
-        self.i.walk(""" defmacro mwhen params cond, body do expr(ident("__core_if"), [cond, body, None]) end """)
+        self.i.walk(""" defmacro mwhen params cond, body do Expr(Ident("__core_if"), [cond, body, None]) end """)
         assert self.i.walk(""" mwhen(2 == 2, 3) """) == 3
         with pytest.raises(AssertionError, match="Argument mismatch"):
             self.i.walk(""" mwhen(2 == 2) """)
 
         # Macro for scope
         self.i.walk("""
-            defmacro mscope params body do expr(expr(ident("__core_func"), [[], body]), []) end
+            defmacro mscope params body do Expr(Expr(Ident("__core_func"), [[], body]), []) end
         """)
         self.i.walk(""" a := 2; mscope(print(a); a := 3; print(a)); print(a) """)
         assert capsys.readouterr().out == "2\n3\n2\n"
 
         # Anaphoric if
         self.i.walk("""
-            defmacro maif params cnd, thn, els do expr(ident("__core_scope"), [expr(ident("__core_if"), [
-                expr(ident("define"), [ident("it"), cnd]),
+            defmacro maif params cnd, thn, els do Expr(Ident("__core_scope"), [Expr(Ident("__core_if"), [
+                Expr(Ident("define"), [Ident("it"), cnd]),
                 thn,
                 els
             ])]) end
@@ -1404,8 +1404,8 @@ text
 
         # and/or using aif
         self.i.walk("""
-            defmacro mand params a, b do expr(ident("maif"), [a, b, ident("it")]) end;
-            defmacro mor params a, b do expr(ident("maif"), [a, ident("it"), b]) end
+            defmacro mand params a, b do Expr(Ident("maif"), [a, b, Ident("it")]) end;
+            defmacro mor params a, b do Expr(Ident("maif"), [a, Ident("it"), b]) end
         """)
         assert self.i.walk(""" mand(2, 3) """) == 3
         assert self.i.walk(""" mand(0, 3) """) == 0
@@ -1415,7 +1415,7 @@ text
         # Side effect in macro argument
         self.i.walk("""
             deffunc ftwice params x do x + x end;
-            defmacro mtwice params x do expr(ident("add"), [x, x]) end
+            defmacro mtwice params x do Expr(Ident("add"), [x, x]) end
         """)
         self.i.walk(""" cnt := 0 """)
         assert self.i.walk(""" ftwice(cnt = cnt + 1) """) == 2
@@ -1426,7 +1426,7 @@ text
         assert self.i.walk(""" cnt """) == 2
 
         # Variable capture (Non-hygienic)
-        self.i.walk(""" defmacro capture params val do expr(ident("define"), [ident("x"), val]) end """)
+        self.i.walk(""" defmacro capture params val do Expr(Ident("define"), [Ident("x"), val]) end """)
         self.i.walk(""" x := 1 """)
         self.i.walk(""" capture(2) """)
         assert self.i.walk(""" x """) == 2
@@ -1558,7 +1558,7 @@ class TestMacroSamples(TestBase):
     def test_call_by_name(self):
         self.i.walk("""
             call_by_name := macro name_str, *args do
-                quote (!ident(quote !name_str end))(!!args) end
+                quote (!Ident(quote !name_str end))(!!args) end
             end
         """)
         assert self.i.walk(""" call_by_name("add", 2, 3) """) == 5
@@ -1662,10 +1662,10 @@ class TestCustomSyntax(TestBase):
             #rule {defmacro: [_defmacro, EXPR, params, EXPRS, do, EXPR, end]}
         """)
         assert self.i.walk(""" expand(
-            _defmacro(mwhen, [cond, body], expr(ident("__core_if"), [cond, body, None]))
+            _defmacro(mwhen, [cond, body], Expr(Ident("__core_if"), [cond, body, None]))
         ) """) == (Ident("define"), [Ident("mwhen"), (Ident("__core_macro"), [
             [Ident("cond"), Ident("body")],
-            (Ident("expr"), [(Ident("ident"), ["__core_if"]), [Ident("cond"), Ident("body"), None]])
+            (Ident("Expr"), [(Ident("Ident"), ["__core_if"]), [Ident("cond"), Ident("body"), None]])
         ])])
 
         self.i.walk(""" _defmacro(mwhen, [cond, body], quote if !cond then !body else None end end) """)

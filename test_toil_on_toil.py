@@ -101,6 +101,10 @@ class TestToT:
     def setup_tot(self):
         i.walk(""" tot := Interpreter() """)
 
+    @pytest.fixture(autouse=True)
+    def setup_env(self):
+        i.walk(""" tot.init_env() """)
+
     def scan(self, src): return i.walk(f""" tot.scan('{src}') """)
     def parse(self, tokens): return i.walk(f""" tot.parse({tokens}) """)
     def ast(self, src): return i.walk(f""" tot.ast('{src}') """)
@@ -109,7 +113,7 @@ class TestToT:
 
     def test_overall_structure(self):
         assert self.scan(r""" 2 """) == [2, Ident('$EOF')]
-        assert self.parse(r""" [2, ident('$EOF')] """) == 2
+        assert self.parse(r""" [2, Ident('$EOF')] """) == 2
         assert self.ast(r""" 2 """) == 2
         assert self.eval(r""" 2 """) == 2
         assert self.walk(r""" 2 """) == 2
@@ -202,6 +206,98 @@ class TestToT:
             self.walk(r""" if False then 2 elif True 3 end """)
         with pytest.raises(AssertionError, match="Expected end"):
             self.walk(r""" if False then 2 elif True then 3 """)
+
+    def test_func(self):
+        assert self.walk("func do 2 end ()") == 2
+        assert self.walk("func a do add(a, 2) end (3)") == 5
+        assert self.walk("func a, b do add(a, b) end (2, 3)") == 5
+
+        assert self.walk("func a, b do add(a, b) end (add(2, 3), 4; 5)") == 10
+        assert self.walk("""
+           myadd := func a, b do add(a, b) end;
+           myadd(2, 3)
+        """) == 5
+
+        assert self.walk("func a, b do add(a, b) end (2, 3, 4)") == 5
+
+        with pytest.raises(AssertionError, match="Undefined variable @ val: b"):
+            self.walk("func a, b do add(a, b) end (2)")
+
+        with pytest.raises(AssertionError, match="Expected do @ consume: add"):
+            self.walk("func a add(a, 2) end")
+
+        with pytest.raises(AssertionError, match="Expected end @ consume: \\$EOF"):
+            self.walk("func a do add(a, 2)")
+
+    def test_recursion_gcd(self):
+        self.walk("""
+            gcd := func a, b do
+                if equal(b, 0) then
+                    a
+                else
+                    gcd(b, mod(a, b))
+                end
+            end
+        """)
+        assert self.walk("gcd(12, 18)") == 6
+
+    def test_recursion_fac(self):
+        self.walk("""
+            fac := func n do
+                if equal(n, 0) then 1
+                else mul(n, fac(sub(n, 1)))
+                end
+            end
+        """)
+        assert self.walk("fac(0)") == 1
+        assert self.walk("fac(1)") == 1
+        assert self.walk("fac(4)") == 24
+
+    def test_recursion_fib(self):
+        self.walk("""
+            fib := func n do
+                if equal(n, 0) then 0
+                elif equal(n, 1) then 1
+                else add(fib(sub(n, 1)), fib(sub(n, 2)))
+                end
+            end
+        """)
+        assert self.walk("fib(0)") == 0
+        assert self.walk("fib(1)") == 1
+        assert self.walk("fib(6)") == 8
+
+    def test_mutual_recursion(self):
+        self.walk("""
+            even := func n do
+                if equal(n, 0) then True else odd(sub(n, 1)) end
+            end;
+
+            odd := func n do
+                if equal(n, 0) then False else even(sub(n, 1)) end
+            end
+        """)
+        assert self.walk("even(2)") is True
+        assert self.walk("even(3)") is False
+        assert self.walk("odd(2)") is False
+        assert self.walk("odd(3)") is True
+
+    def test_closure_counter(self):
+        self.walk("""
+            make_counter := func do
+                count := 0;
+                func do
+                    count = add(count, 1);
+                    count
+                end
+            end;
+
+            c1 := make_counter();
+            c2 := make_counter()
+        """)
+        assert self.walk("c1()") == 1
+        assert self.walk("c1()") == 2
+        assert self.walk("c2()") == 1
+        assert self.walk("c2()") == 2
 
     def test_empty_source(self):
         with pytest.raises(AssertionError, match="Unexpected token"):

@@ -659,11 +659,11 @@ class Evaluator:
             case dict():
                 if not isinstance(value, dict): return False
                 return match_dict()
-            case (Ident("ident"), [name_expr]):
+            case (Ident("Ident"), [name_expr]):
                 if not isinstance(name_expr, str): return False
                 if not isinstance(value, Ident): return False
                 return name_expr == value.name
-            case (Ident("expr"), args):
+            case (Ident("Expr"), args):
                 if not isinstance(value, tuple): return False
                 if len(args) != len(value): return False
                 for sub_pattern, sub_value in zip(args, value):
@@ -685,8 +685,8 @@ class Interpreter:
         return Evaluator().eval(ast, module_env)
 
     def type(self, expr):
-        return "expr" if type(expr) is tuple else \
-            "ident" if type(expr) is Ident else \
+        return "Expr" if type(expr) is tuple else \
+            "Ident" if type(expr) is Ident else \
             type(expr).__name__
 
     def init_env(self):
@@ -746,8 +746,8 @@ class Interpreter:
         self._env.define("type", lambda args: self.type(args[0]))
         self._env.define("str", lambda args: str(args[0]))
         self._env.define("int", lambda args: int(args[0]))
-        self._env.define("ident", lambda args: Ident(args[0]))
-        self._env.define("expr", lambda args: tuple(args))
+        self._env.define("Ident", lambda args: Ident(args[0]))
+        self._env.define("Expr", lambda args: tuple(args))
 
         self._env.define("print", lambda args: print(*args))
 
@@ -842,9 +842,9 @@ class Interpreter:
             end;
 
             defmacro __core_defmethod params name, params_, body do
-                expr(ident("assign"), [
-                        expr(ident("dot"),
-                        [ident("self"), str(name)
+                Expr(Ident("assign"), [
+                        Expr(Ident("dot"),
+                        [Ident("self"), str(name)
                     ]),
                     quote func self, !!params_ do !body end end
                 ])

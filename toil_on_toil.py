@@ -29,7 +29,7 @@ i.walk("""
 
                 ch := self._current_char();
                 if ch == '$EOF' then
-                    self._tokens.push(ident('$EOF')); break()
+                    self._tokens.push(Ident('$EOF')); break()
                 elif ch.isdigit() then
                     self._number()
                 elif ch.is_ident_first() then
@@ -37,7 +37,7 @@ i.walk("""
                 elif ch.in(':') then
                     self._two_char_operator('=')
                 elif ch.in('=(),;') then
-                    self._tokens.push(ident(ch)); self._advance()
+                    self._tokens.push(Ident(ch)); self._advance()
                 else
                     raise('Invalid character @ tokenize: ' + ch)
                 end
@@ -65,7 +65,7 @@ i.walk("""
                 case 'None' then self._tokens.push(None)
                 case 'True' then self._tokens.push(True)
                 case 'False' then self._tokens.push(False)
-                case _ then self._tokens.push(ident(token))
+                case _ then self._tokens.push(Ident(token))
             end
         end;
 
@@ -75,7 +75,7 @@ i.walk("""
             if self._current_char().in(successors) then
                 self._advance()
             end;
-            self._tokens.push(ident(self._src.slice(start, self._pos)))
+            self._tokens.push(Ident(self._src.slice(start, self._pos)))
         end;
 
         defmethod _advance params do self._pos = self._pos + 1 end;
@@ -97,7 +97,7 @@ i.walk("""
 
         defmethod parse params do
             expr := self._expression();
-            if self._current() != ident('$EOF') then
+            if self._current() != Ident('$EOF') then
                 raise('Extra token @ parse: ' + str(self._current()))
             end;
             expr
@@ -109,26 +109,26 @@ i.walk("""
 
         defmethod _sequence params do
             exprs := [self._define_assign()];
-            while self._current() == ident(';') do
+            while self._current() == Ident(';') do
                 self._current_and_advance();
                 exprs.push(self._define_assign())
             end;
-            if exprs.len() == 1 then exprs[0] else expr(ident('seq'), exprs) end
+            if exprs.len() == 1 then exprs[0] else Expr(Ident('seq'), exprs) end
         end;
 
         defmethod _define_assign params do
             self._binary_right({
-                ':=': ident('define'),
-                '=': ident('assign')
+                ':=': Ident('define'),
+                '=': Ident('assign')
             }, self._call)
         end;
 
         defmethod _call params do
             target := self._primary();
-            while self._current() == ident('(') do
+            while self._current() == Ident('(') do
                 self._current_and_advance();
-                target = expr(target, self._comma_separated_exprs(ident(')')));
-                self._consume(ident(')'))
+                target = Expr(target, self._comma_separated_exprs(Ident(')')));
+                self._consume(Ident(')'))
             end;
             target
         end;
@@ -138,8 +138,9 @@ i.walk("""
                 case 'NoneType' then self._current_and_advance()
                 case 'bool' then self._current_and_advance()
                 case 'int' then self._current_and_advance()
-                case 'ident' then
+                case 'Ident' then
                     match str(self._current())
+                        case 'func' then self._func()
                         case 'scope' then self._scope()
                         case 'if' then self._if()
                         case 'while' then self._while()
@@ -154,48 +155,57 @@ i.walk("""
             end
         end;
 
+        defmethod _func params do
+            self._current_and_advance();
+            params := self._comma_separated_exprs(Ident('do'));
+            self._consume(Ident('do'));
+            body_expr := self._expression();
+            self._consume(Ident('end'));
+            Expr(Ident('func'), [params, body_expr])
+        end;
+
         defmethod _scope params do
             self._current_and_advance();
             body_expr := self._expression();
-            self._consume(ident('end'));
-            expr(ident('scope'), [body_expr])
+            self._consume(Ident('end'));
+            Expr(Ident('scope'), [body_expr])
         end;
 
         defmethod _if params do
             self._current_and_advance();
             cond_expr := self._expression();
-            self._consume(ident('then'));
+            self._consume(Ident('then'));
             then_expr := self._expression();
             else_expr := None;
-            if self._current() == ident('elif') then
+            if self._current() == Ident('elif') then
                 else_expr = self._if()
-            elif self._current() == ident('else') then
+            elif self._current() == Ident('else') then
                 self._current_and_advance();
                 else_expr = self._expression();
-                self._consume(ident('end'))
+                self._consume(Ident('end'))
             else
                 else_expr = None;
-                self._consume(ident('end'))
+                self._consume(Ident('end'))
             end;
-            expr(ident('if'), [cond_expr, then_expr, else_expr])
+            Expr(Ident('if'), [cond_expr, then_expr, else_expr])
         end;
 
         defmethod _while params do
             self._current_and_advance();
             cond_expr := self._expression();
-            self._consume(ident('do'));
+            self._consume(Ident('do'));
             body_expr := self._expression();
-            self._consume(ident('end'));
-            expr(ident('while'), [cond_expr, body_expr])
+            self._consume(Ident('end'));
+            Expr(Ident('while'), [cond_expr, body_expr])
         end;
 
         defmethod _binary_right params ops, sub_elem do
             left := sub_elem();
-            if self._current().type() == 'ident' and
+            if self._current().type() == 'Ident' and
                (op := str(self._current())).in(ops) then
                 self._current_and_advance();
                 right := self._binary_right(ops, sub_elem);
-                expr(ops[op], [left, right])
+                Expr(ops[op], [left, right])
             else
                 left
             end
@@ -205,7 +215,7 @@ i.walk("""
             cse := [];
             if self._current() != terminator then
                 cse.push(self._expression());
-                while self._current() == ident(',') do
+                while self._current() == Ident(',') do
                     self._current_and_advance();
                     cse.push(self._expression())
                 end
@@ -272,22 +282,24 @@ i.walk("""
                 case 'NoneType' then expr
                 case 'bool' then expr
                 case 'int' then expr
-                case 'ident' then env.val(str(expr))
-                case 'expr' then
+                case 'Ident' then env.val(str(expr))
+                case 'Expr' then
                     match expr
-                        case expr(ident('scope'), [body_expr]) then
+                        case Expr(Ident('func'), [params, body_expr]) then
+                            Expr(Ident('closure'), [params, body_expr, env])
+                        case Expr(Ident('scope'), [body_expr]) then
                             self.eval(body_expr, Environment(env))
-                        case expr(ident('define'), [name, val_expr]) then
+                        case Expr(Ident('define'), [name, val_expr]) then
                             self._define(name, val_expr, env)
-                        case expr(ident('assign'), [name, val_expr]) then
+                        case Expr(Ident('assign'), [name, val_expr]) then
                             self._assign(name, val_expr, env)
-                        case expr(ident('seq'), exprs) then
+                        case Expr(Ident('seq'), exprs) then
                             self._seq(exprs, env)
-                        case expr(ident('if'), [cond_expr, then_expr, else_expr]) then
+                        case Expr(Ident('if'), [cond_expr, then_expr, else_expr]) then
                             self._if(cond_expr, then_expr, else_expr, env)
-                        case expr(ident('while'), [cond_expr, body_expr]) then
+                        case Expr(Ident('while'), [cond_expr, body_expr]) then
                             self._while(cond_expr, body_expr, env)
-                        case expr(op_expr, args_expr) then
+                        case Expr(op_expr, args_expr) then
                             self._op(op_expr, args_expr, env)
                     end
             end
@@ -331,7 +343,13 @@ i.walk("""
 
         defmethod apply params op_val, args_val do
             match op_val
-                case ["hostfunc", f] then f(args_val)
+                case Expr(Ident("hostfunc"), f) then f(args_val)
+                case Expr(Ident("closure"), [params, body_expr, closure_env]) then
+                    new_env := Environment(closure_env);
+                    for [param, arg] in zip(params, args_val) do
+                        new_env.define(str(param), arg)
+                    end;
+                    self.eval(body_expr, new_env)
                 case _ then raise('Invalid operator @ apply: ' + str(op_val))
             end
         end
@@ -351,43 +369,43 @@ i.walk("""
         defmethod _builtins params do
             self._env.define("__builtins", None);
 
-            self._env.define("add", ["hostfunc", func args do args[0] + args[1] end]);
-            self._env.define("sub", ["hostfunc", func args do args[0] - args[1] end]);
-            self._env.define("mul", ["hostfunc", func args do args[0] * args[1] end]);
-            self._env.define("div", ["hostfunc", func args do args[0] / args[1] end]);
-            self._env.define("mod", ["hostfunc", func args do args[0] % args[1] end]);
-            self._env.define("neg", ["hostfunc", func args do -args[0] end]);
+            self._env.define("add", Expr(Ident("hostfunc"), func args do args[0] + args[1] end));
+            self._env.define("sub", Expr(Ident("hostfunc"), func args do args[0] - args[1] end));
+            self._env.define("mul", Expr(Ident("hostfunc"), func args do args[0] * args[1] end));
+            self._env.define("div", Expr(Ident("hostfunc"), func args do args[0] / args[1] end));
+            self._env.define("mod", Expr(Ident("hostfunc"), func args do args[0] % args[1] end));
+            self._env.define("neg", Expr(Ident("hostfunc"), func args do -args[0] end));
 
-            self._env.define("equal", ["hostfunc", func args do args[0] == args[1] end]);
-            self._env.define("not_equal", ["hostfunc", func args do args[0] != args[1] end]);
-            self._env.define("less", ["hostfunc", func args do args[0] < args[1] end]);
-            self._env.define("greater", ["hostfunc", func args do args[0] > args[1] end]);
-            self._env.define("less_equal", ["hostfunc", func args do args[0] <= args[1] end]);
-            self._env.define("greater_equal", ["hostfunc", func args do args[0] >= args[1] end]);
-            self._env.define("not", ["hostfunc", func args do not args[0] end]);
+            self._env.define("equal", Expr(Ident("hostfunc"), func args do args[0] == args[1] end));
+            self._env.define("not_equal", Expr(Ident("hostfunc"), func args do args[0] != args[1] end));
+            self._env.define("less", Expr(Ident("hostfunc"), func args do args[0] < args[1] end));
+            self._env.define("greater", Expr(Ident("hostfunc"), func args do args[0] > args[1] end));
+            self._env.define("less_equal", Expr(Ident("hostfunc"), func args do args[0] <= args[1] end));
+            self._env.define("greater_equal", Expr(Ident("hostfunc"), func args do args[0] >= args[1] end));
+            self._env.define("not", Expr(Ident("hostfunc"), func args do not args[0] end));
 
-            self._env.define("len", ["hostfunc", func args do len(args[0]) end]);
-            self._env.define("index", ["hostfunc", func args do index(args[0], args[1]) end]);
-            self._env.define("slice", ["hostfunc", func args do slice(args[0], args[1], args[2]) end]);
-            self._env.define("push", ["hostfunc", func args do push(args[0], args[1]) end]);
-            self._env.define("pop", ["hostfunc", func args do pop(args[0]) end]);
-            self._env.define("in", ["hostfunc", func args do in(args[0], args[1]) end]);
-            self._env.define("copy", ["hostfunc", func args do copy(args[0]) end]);
+            self._env.define("len", Expr(Ident("hostfunc"), func args do len(args[0]) end));
+            self._env.define("index", Expr(Ident("hostfunc"), func args do index(args[0], args[1]) end));
+            self._env.define("slice", Expr(Ident("hostfunc"), func args do slice(args[0], args[1], args[2]) end));
+            self._env.define("push", Expr(Ident("hostfunc"), func args do push(args[0], args[1]) end));
+            self._env.define("pop", Expr(Ident("hostfunc"), func args do pop(args[0]) end));
+            self._env.define("in", Expr(Ident("hostfunc"), func args do in(args[0], args[1]) end));
+            self._env.define("copy", Expr(Ident("hostfunc"), func args do copy(args[0]) end));
 
-            self._env.define("chr", ["hostfunc", func args do chr(args[0]) end]);
-            self._env.define("ord", ["hostfunc", func args do ord(args[0]) end]);
-            self._env.define("join", ["hostfunc", func args do join(args[0], args[1]) end]);
+            self._env.define("chr", Expr(Ident("hostfunc"), func args do chr(args[0]) end));
+            self._env.define("ord", Expr(Ident("hostfunc"), func args do ord(args[0]) end));
+            self._env.define("join", Expr(Ident("hostfunc"), func args do join(args[0], args[1]) end));
 
-            self._env.define("keys", ["hostfunc", func args do keys(args[0]) end]);
-            self._env.define("items", ["hostfunc", func args do items(args[0]) end]);
+            self._env.define("keys", Expr(Ident("hostfunc"), func args do keys(args[0]) end));
+            self._env.define("items", Expr(Ident("hostfunc"), func args do items(args[0]) end));
 
-            self._env.define("type", ["hostfunc", func args do type(args[0]) end]);
-            self._env.define("str", ["hostfunc", func args do str(args[0]) end]);
-            self._env.define("int", ["hostfunc", func args do int(args[0]) end]);
-            self._env.define("ident", ["hostfunc", func args do ident(args[0]) end]);
-            self._env.define("expr", ["hostfunc", func args do apply(expr, args) end]);
+            self._env.define("type", Expr(Ident("hostfunc"), func args do type(args[0]) end));
+            self._env.define("str", Expr(Ident("hostfunc"), func args do str(args[0]) end));
+            self._env.define("int", Expr(Ident("hostfunc"), func args do int(args[0]) end));
+            self._env.define("Ident", Expr(Ident("hostfunc"), func args do Ident(args[0]) end));
+            self._env.define("Expr", Expr(Ident("hostfunc"), func args do apply(Expr, args) end));
 
-            self._env.define("print", ["hostfunc", func args do apply(print, args) end])
+            self._env.define("print", Expr(Ident("hostfunc"), func args do apply(print, args) end))
         end;
 
         defmethod scan params src do Scanner(src).tokenize() end;
@@ -406,19 +424,120 @@ if __name__ == "__main__":
     # Example
 
     i.walk(r"""
-        # Builtin function call
-        print(tot.scan('print()')); # -> [print, (, ), $EOF]
-        print(tot.scan('print(2)')); # -> [print, (, 2, ), $EOF]
-        print(tot.scan('print(2, 3)')); # -> [print, (, 2, ,, 3, ), $EOF]
-        print(tot.ast('print()')); # -> (print, [])
-        print(tot.ast('print(2)')); # -> (print, [2])
-        print(tot.ast('print(2, 3)')); # -> (print, [2, 3])
-        tot.walk('print()'); # -> \n
-        tot.walk('print(2)'); # -> 2\n
-        tot.walk('print(2, 3)'); # -> 2 3\n
+        # User defined function
+        print(tot.scan('func do 2 end')); # -> [func, do, 2, end, $EOF]
+        print(tot.ast('func do 2 end')); # -> (func, [[], 2])
+        print(tot.walk('func do 2 end ()')); # -> 2
 
-        tot.walk('print(2; 3)'); # -> 3\n
-        tot.walk('print(add(2, 3))'); # -> 5\n
+        print(tot.scan('func a do add(a, 2) end')); # -> [func, a, do, add, (, a, ,, 2, ), end, $EOF]
+        print(tot.ast('func a do add(a, 2) end')); # -> (func, [[a], (add, [a, 2])])
+        print(tot.walk('func a do add(a, 2) end (3)')); # -> 5
+
+        print(tot.scan('func a, b do add(a, b) end')); # -> [func, a, ,, b, do, add, (, a, ,, b, ), end, $EOF]
+        print(tot.ast('func a, b do add(a, b) end')); # -> (func, [[a, b], (add, [a, b])])
+        print(tot.walk('func a, b do add(a, b) end (2, 3)')); # -> 5
+
+        print(tot.walk('func a, b do add(a, b) end (add(2, 3), 4; 5)')); # -> 10
+        print(tot.walk('
+           myadd := func a, b do add(a, b) end;
+           myadd(2, 3)
+        ')); # -> 5
+
+        print(tot.walk('func a, b do add(a, b) end (2, 3, 4)')); # -> 5 (not an error)
+        # print(tot.walk('func a, b do add(a, b) end (2)')); # -> Undefined variable @ val: b
+        # print(tot.walk('func a add(a, 2) end')); # -> Expected do @ consume: add
+        # print(tot.walk('func a do add(a, 2)')); # -> Expected end @ consume: $EOF
 
         None
-    """) # ->
+    """) # ->, b
+
+    i.walk(r"""
+        # GCD by recursion with function calls
+        tot.walk('
+            gcd := func a, b do
+                if equal(b, 0) then
+                    a
+                else
+                    gcd(b, mod(a, b))
+                end
+            end
+        ');
+        tot.walk('print(gcd(12, 18))'); # -> 6
+        None
+    """)
+
+    i.walk(r"""
+        # Factorial by recursion with function calls
+        tot.walk('
+            fac := func n do
+                if equal(n, 0) then 1
+                else mul(n, fac(sub(n, 1)))
+                end
+            end
+        ');
+        tot.walk('print(fac(0))'); # -> 1
+        tot.walk('print(fac(1))'); # -> 1
+        tot.walk('print(fac(4))'); # -> 24
+
+        None
+    """)
+
+    i.walk(r"""
+        # Fibonacci by recursive with function calls
+        tot.walk('
+            fib := func n do
+                if equal(n, 0) then 0
+                elif equal(n, 1) then 1
+                else add(fib(sub(n, 1)), fib(sub(n, 2)))
+                end
+            end
+        ');
+        tot.walk('print(fib(0))'); # -> 0
+        tot.walk('print(fib(1))'); # -> 1
+        tot.walk('print(fib(6))'); # -> 8
+
+        None
+    """)
+
+    i.walk(r"""
+        # Mutual recursion
+        tot.walk('
+            even := func n do
+                if equal(n, 0) then True else odd(sub(n, 1)) end
+            end;
+
+            odd := func n do
+                if equal(n, 0) then False else even(sub(n, 1)) end
+            end
+        ');
+
+        tot.walk('print(even(2))'); # -> True
+        tot.walk('print(even(3))'); # -> False
+        tot.walk('print(odd(2))'); # -> False
+        tot.walk('print(odd(3))'); # -> True
+
+        None
+    """)
+
+    i.walk(r"""
+        # Closure and state: Counter
+        tot.walk('
+            make_counter := func do
+                count := 0;
+                func do
+                    count = add(count, 1);
+                    count
+                end
+            end;
+
+            c1 := make_counter();
+            c2 := make_counter()
+        ');
+
+        tot.walk('print(c1())'); # -> 1
+        tot.walk('print(c2())'); # -> 1
+        tot.walk('print(c1())'); # -> 2
+        tot.walk('print(c2())'); # -> 2
+
+        None
+    """)
