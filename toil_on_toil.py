@@ -27,6 +27,13 @@ i.walk("""
             while True do
                 while self._current_char().isspace() do self._advance() end;
 
+                if self._current_char() == '#' then
+                    while not self._current_char().in("\n", '$EOF')
+                         do self._advance()
+                    end;
+                    continue()
+                end;
+
                 ch := self._current_char();
                 if ch == '$EOF' then
                     self._tokens.push(Ident('$EOF')); break()
@@ -420,124 +427,80 @@ if __name__ == "__main__":
     i.walk(r"""
         tot := Interpreter().init_env()
     """)
+    def walk(src): return i.walk(f""" tot.walk('{src}') """)
 
     # Example
 
-    i.walk(r"""
-        # User defined function
-        print(tot.scan('func do 2 end')); # -> [func, do, 2, end, $EOF]
-        print(tot.ast('func do 2 end')); # -> (func, [[], 2])
-        print(tot.walk('func do 2 end ()')); # -> 2
-
-        print(tot.scan('func a do add(a, 2) end')); # -> [func, a, do, add, (, a, ,, 2, ), end, $EOF]
-        print(tot.ast('func a do add(a, 2) end')); # -> (func, [[a], (add, [a, 2])])
-        print(tot.walk('func a do add(a, 2) end (3)')); # -> 5
-
-        print(tot.scan('func a, b do add(a, b) end')); # -> [func, a, ,, b, do, add, (, a, ,, b, ), end, $EOF]
-        print(tot.ast('func a, b do add(a, b) end')); # -> (func, [[a, b], (add, [a, b])])
-        print(tot.walk('func a, b do add(a, b) end (2, 3)')); # -> 5
-
-        print(tot.walk('func a, b do add(a, b) end (add(2, 3), 4; 5)')); # -> 10
-        print(tot.walk('
-           myadd := func a, b do add(a, b) end;
-           myadd(2, 3)
-        ')); # -> 5
-
-        print(tot.walk('func a, b do add(a, b) end (2, 3, 4)')); # -> 5 (not an error)
-        # print(tot.walk('func a, b do add(a, b) end (2)')); # -> Undefined variable @ val: b
-        # print(tot.walk('func a add(a, 2) end')); # -> Expected do @ consume: add
-        # print(tot.walk('func a do add(a, 2)')); # -> Expected end @ consume: $EOF
-
-        None
-    """) # ->, b
-
-    i.walk(r"""
+    walk(r"""
         # GCD by recursion with function calls
-        tot.walk('
-            gcd := func a, b do
-                if equal(b, 0) then
-                    a
-                else
-                    gcd(b, mod(a, b))
-                end
+        gcd := func a, b do
+            if equal(b, 0) then
+                a
+            else
+                gcd(b, mod(a, b))
             end
-        ');
-        tot.walk('print(gcd(12, 18))'); # -> 6
-        None
+        end;
+
+        print(gcd(12, 18)) # -> 6
     """)
 
-    i.walk(r"""
+    walk(r"""
         # Factorial by recursion with function calls
-        tot.walk('
-            fac := func n do
-                if equal(n, 0) then 1
-                else mul(n, fac(sub(n, 1)))
-                end
+        fac := func n do
+            if equal(n, 0) then 1
+            else mul(n, fac(sub(n, 1)))
             end
-        ');
-        tot.walk('print(fac(0))'); # -> 1
-        tot.walk('print(fac(1))'); # -> 1
-        tot.walk('print(fac(4))'); # -> 24
+        end;
 
-        None
+        print(fac(0)); # -> 1
+        print(fac(1)); # -> 1
+        print(fac(4))  # -> 24
     """)
 
-    i.walk(r"""
+    walk(r"""
         # Fibonacci by recursive with function calls
-        tot.walk('
-            fib := func n do
-                if equal(n, 0) then 0
-                elif equal(n, 1) then 1
-                else add(fib(sub(n, 1)), fib(sub(n, 2)))
-                end
+        fib := func n do
+            if equal(n, 0) then 0
+            elif equal(n, 1) then 1
+            else add(fib(sub(n, 1)), fib(sub(n, 2)))
             end
-        ');
-        tot.walk('print(fib(0))'); # -> 0
-        tot.walk('print(fib(1))'); # -> 1
-        tot.walk('print(fib(6))'); # -> 8
+        end;
 
-        None
+        print(fib(0)); # -> 0
+        print(fib(1)); # -> 1
+        print(fib(6))  # -> 8
     """)
 
-    i.walk(r"""
+    walk(r"""
         # Mutual recursion
-        tot.walk('
-            even := func n do
-                if equal(n, 0) then True else odd(sub(n, 1)) end
-            end;
+        even := func n do
+            if equal(n, 0) then True else odd(sub(n, 1)) end
+        end;
 
-            odd := func n do
-                if equal(n, 0) then False else even(sub(n, 1)) end
-            end
-        ');
+        odd := func n do
+            if equal(n, 0) then False else even(sub(n, 1)) end
+        end;
 
-        tot.walk('print(even(2))'); # -> True
-        tot.walk('print(even(3))'); # -> False
-        tot.walk('print(odd(2))'); # -> False
-        tot.walk('print(odd(3))'); # -> True
-
-        None
+        print(even(2)); # -> True
+        print(even(3)); # -> False
+        print(odd(2)); # -> False
+        print(odd(3)) # -> True
     """)
 
-    i.walk(r"""
+    walk(r"""
         # Closure and state: Counter
-        tot.walk('
-            make_counter := func do
-                count := 0;
-                func do
-                    count = add(count, 1);
-                    count
-                end
-            end;
+        make_counter := func do
+            count := 0;
+            func do
+                count = add(count, 1);
+                count
+            end
+        end;
 
-            c1 := make_counter();
-            c2 := make_counter()
-        ');
-
-        tot.walk('print(c1())'); # -> 1
-        tot.walk('print(c2())'); # -> 1
-        tot.walk('print(c1())'); # -> 2
-        tot.walk('print(c2())'); # -> 2
-
-        None
+        c1 := make_counter();
+        c2 := make_counter();
+        print(c1()); # -> 1
+        print(c2()); # -> 1
+        print(c1()); # -> 2
+        print(c2()) # -> 2
     """)
