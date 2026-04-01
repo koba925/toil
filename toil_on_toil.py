@@ -445,11 +445,39 @@ if __name__ == "__main__":
     """)
 
     walk(r"""
+        # GCD by iteration with function calls
+        gcd := func a, b do
+            while greater(b, 0) do
+                tmp := b; b = mod(a, b); a = tmp
+            end;
+            a
+        end;
+
+        print(gcd(12, 18)) # -> 6
+    """)
+
+    walk(r"""
         # Factorial by recursion with function calls
         fac := func n do
             if equal(n, 0) then 1
             else mul(n, fac(sub(n, 1)))
             end
+        end;
+
+        print(fac(0)); # -> 1
+        print(fac(1)); # -> 1
+        print(fac(4))  # -> 24
+    """)
+
+    walk(r"""
+        # Factorial by iteration with function calls
+        fac := func n do
+            result := 1;
+            while greater(n, 0) do
+                result = mul(result, n);
+                n = sub(n, 1)
+            end;
+            result
         end;
 
         print(fac(0)); # -> 1
@@ -464,6 +492,22 @@ if __name__ == "__main__":
             elif equal(n, 1) then 1
             else add(fib(sub(n, 1)), fib(sub(n, 2)))
             end
+        end;
+
+        print(fib(0)); # -> 0
+        print(fib(1)); # -> 1
+        print(fib(6))  # -> 8
+    """)
+
+    walk(r"""
+        # Fibonacci by iteration with function calls
+        fib := func n do
+            a := 0; b := 1;
+            while greater(n, 0) do
+                tmp := b; b = add(a, b); a = tmp;
+                n = sub(n, 1)
+            end;
+            a
         end;
 
         print(fib(0)); # -> 0

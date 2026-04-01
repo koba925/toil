@@ -299,6 +299,47 @@ class TestToT:
         assert self.walk("c2()") == 1
         assert self.walk("c2()") == 2
 
+    def test_iteration_gcd(self):
+        self.walk("""
+            gcd := func a, b do
+                while greater(b, 0) do
+                    tmp := b; b = mod(a, b); a = tmp
+                end;
+                a
+            end
+        """)
+        assert self.walk("gcd(12, 18)") == 6
+
+    def test_iteration_fac(self):
+        self.walk("""
+            fac := func n do
+                result := 1;
+                while greater(n, 0) do
+                    result = mul(result, n);
+                    n = sub(n, 1)
+                end;
+                result
+            end
+        """)
+        assert self.walk("fac(0)") == 1
+        assert self.walk("fac(1)") == 1
+        assert self.walk("fac(4)") == 24
+
+    def test_iteration_fib(self):
+        self.walk("""
+            fib := func n do
+                a := 0; b := 1;
+                while greater(n, 0) do
+                    tmp := b; b = add(a, b); a = tmp;
+                    n = sub(n, 1)
+                end;
+                a
+            end
+        """)
+        assert self.walk("fib(0)") == 0
+        assert self.walk("fib(1)") == 1
+        assert self.walk("fib(6)") == 8
+
     def test_empty_source(self):
         with pytest.raises(AssertionError, match="Unexpected token"):
             self.walk(r"""  """)
