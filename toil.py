@@ -21,42 +21,44 @@ class Environment:
             assert False, f"Undefined variable @ lookup(): {name}"
 
 class Evaluator:
-    def evaluate(self, expr, env):
+    def eval(self, expr, env):
         match expr:
             case None | bool() | int():
                 return expr
             case str(name):
                 return env.lookup(name)
+            case ("quote", expr):
+                return expr
             case ("define", str(name), val):
-                return env.define(name, self.evaluate(val, env))
+                return env.define(name, self.eval(val, env))
             case ("seq", exprs):
-                return self._evaluate_seq(exprs, env)
+                return self._seq(exprs, env)
             case ("if", cond_expr, then_expr, else_expr):
-                return self._evaluate_if(cond_expr, then_expr, else_expr, env)
+                return self._if(cond_expr, then_expr, else_expr, env)
             case ("func", params, body):
                 return ("closure", params, body, env)
             case ("scope", expr):
-                return self.evaluate(expr, Environment(env))
+                return self.eval(expr, Environment(env))
             case (op_expr, args_expr):
-                return self._eval_op(op_expr, args_expr, env)
+                return self._op(op_expr, args_expr, env)
             case unexpected:
                 assert False, f"Unexpected expression @ evaluate(): {unexpected}"
 
-    def _evaluate_seq(self, exprs, env):
+    def _seq(self, exprs, env):
         val = None
         for expr in exprs:
-            val = self.evaluate(expr, env)
+            val = self.eval(expr, env)
         return val
 
-    def _evaluate_if(self, cond_expr, then_expr, else_expr, env):
-        if self.evaluate(cond_expr, env):
-            return self.evaluate(then_expr, env)
+    def _if(self, cond_expr, then_expr, else_expr, env):
+        if self.eval(cond_expr, env):
+            return self.eval(then_expr, env)
         else:
-            return self.evaluate(else_expr, env)
+            return self.eval(else_expr, env)
 
-    def _eval_op(self, op_expr, args_expr, env):
-        op_val = self.evaluate(op_expr, env)
-        args_val = [self.evaluate(arg, env) for arg in args_expr]
+    def _op(self, op_expr, args_expr, env):
+        op_val = self.eval(op_expr, env)
+        args_val = [self.eval(arg, env) for arg in args_expr]
 
         match op_val:
             case c if callable(c):
@@ -65,7 +67,7 @@ class Evaluator:
                 new_env = Environment(closure_env)
                 for param, arg in zip(params, args_val):
                     new_env.define(param, arg)
-                return self.evaluate(body, new_env)
+                return self.eval(body, new_env)
             case _:
                 assert False, f"Illegal operator @ eval_op(): {op_val}"
 
@@ -79,40 +81,43 @@ class Interpreter:
         self._env.define("sub", lambda args: args[0] - args[1])
         self._env.define("mul", lambda args: args[0] * args[1])
         self._env.define("equal", lambda args: args[0] == args[1])
+
+        self._env.define("type", lambda args: type(args[0]).__name__)
+
         self._env.define("print", lambda args: print(*args))
 
         self._env = Environment(self._env)
         return self
 
-    def evaluate(self, expr):
-        return Evaluator().evaluate(expr, self._env)
+    def eval(self, expr):
+        return Evaluator().eval(expr, self._env)
 
 
 if __name__ == "__main__":
     i = Interpreter().init_env()
 
-    i.evaluate(("print", [
+    i.eval(("print", [
         ("define", "add2", ("func",["a"], ("add", ["a", 2]))
     )])) # -> ('closure', ...)
-    i.evaluate(("print", [("add2", [3])])) # -> 5
+    i.eval(("print", [("add2", [3])])) # -> 5
 
-    i.evaluate(("define", "sum3", ("func", ["a", "b", "c"],
+    i.eval(("define", "sum3", ("func", ["a", "b", "c"],
             ("add", ["a", ("add", ["b", "c"])]))
     ))
-    i.evaluate(("print", [("sum3", [2, 3, 4])])) # -> 9
+    i.eval(("print", [("sum3", [2, 3, 4])])) # -> 9
 
-    i.evaluate(("define", "fac", ("func",["n"],
+    i.eval(("define", "fac", ("func",["n"],
         ("if", ("equal", ["n", 1]),
             1,
             ("mul", ["n", ("fac", [("sub", ["n", 1])])])
         )
     )))
-    i.evaluate(("print", [("fac", [1])])) # -> 1
-    i.evaluate(("print", [("fac", [3])])) # -> 6
-    i.evaluate(("print", [("fac", [5])])) # -> 120
+    i.eval(("print", [("fac", [1])])) # -> 1
+    i.eval(("print", [("fac", [3])])) # -> 6
+    i.eval(("print", [("fac", [5])])) # -> 120
 
-    i.evaluate(("define", "make_adder", ("func", ["x"],
+    i.eval(("define", "make_adder", ("func", ["x"],
         ("func", ["y"], ("add", ["x", "y"]))
     )))
-    i.evaluate(("define", "add10", ("make_adder", [10])))
-    i.evaluate(("print", [("add10", [5])])) # -> 15
+    i.eval(("define", "add10", ("make_adder", [10])))
+    i.eval(("print", [("add10", [5])])) # -> 15
