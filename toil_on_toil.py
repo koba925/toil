@@ -43,7 +43,7 @@ i.walk("""
                     self._ident()
                 elif ch.in(':') then
                     self._two_char_operator('=')
-                elif ch.in('=(),;') then
+                elif ch.in('+-*/%=(),;') then
                     self._tokens.push(Ident(ch)); self._advance()
                 else
                     raise('Invalid character @ tokenize: ' + ch)
@@ -125,8 +125,19 @@ i.walk("""
 
         defmethod _define_assign params do
             self._binary_right({
-                ':=': Ident('define'),
-                '=': Ident('assign')
+                ':=': Ident('define'), '=': Ident('assign')
+            }, self._add_sub)
+        end;
+
+        defmethod _add_sub params do
+            self._binary_left({
+                '+': Ident('add'), '-': Ident('sub')
+            }, self._mul_div_mod)
+        end;
+
+        defmethod _mul_div_mod params do
+            self._binary_left({
+                '*': Ident('mul'), '/': Ident('div'), '%': Ident('mod')
             }, self._call)
         end;
 
@@ -216,6 +227,16 @@ i.walk("""
             else
                 left
             end
+        end;
+
+        defmethod _binary_left params ops, sub_elem do
+            left := sub_elem();
+            while type(op := self._current()) == 'Ident' and str(op).in(ops) do
+                self._current_and_advance();
+                right := sub_elem();
+                left = Expr(ops[str(op)], [left, right])
+            end;
+            left
         end;
 
         defmethod _comma_separated_exprs params terminator do
@@ -427,9 +448,44 @@ if __name__ == "__main__":
     i.walk(r"""
         tot := Interpreter().init_env()
     """)
+    def scan(src): return i.walk(f""" tot.scan('{src}') """)
+    def ast(src): return i.walk(f""" tot.ast('{src}') """)
     def walk(src): return i.walk(f""" tot.walk('{src}') """)
 
     # Example
+
+    # add/sub by operator
+    print(scan(r""" 2 + 3 """)) # -> [2, +, 3, $EOF]
+    print(ast(r""" 2 + 3 """)) # -> (add, [2, 3])
+    print(walk(r""" 2 + 3 """)) # -> 5
+
+    print(scan(r""" 2 + 3 - 4 """)) # -> [2, +, 3, -, 4, $EOF]
+    print(ast(r""" 2 + 3 - 4 """)) # -> (sub, [(add, [2, 3]), 4])
+    print(walk(r""" 2 + 3 - 4 """)) # -> 1
+
+    print(scan(r""" a := 2 + sub(4, 3) """)) # -> [a, :=, 2, +, sub, (, 4, ,, 3, ), $EOF]
+    print(ast(r""" a := 2 + sub(4, 3) """)) # -> (define, [a, (add, [2, (sub, [4, 3])])])
+    print(walk(r""" a := 2 + sub(4, 3) """)) # -> 3
+
+    # mul/div/mod by operator
+
+    print(scan(r""" 2 * 3 """)) # -> [2, *, 3, $EOF]
+    print(ast(r""" 2 * 3 """)) # -> (mul, [2, 3])
+    print(walk(r""" 2 * 3 """)) # -> 6
+
+    print(scan(r""" 4 / 2 * 3 """)) # -> [4, /, 2, *, 3, $EOF]
+    print(ast(r""" 4 / 2 * 3 """)) # -> (mul, [(div, [4, 2]), 3])
+    print(walk(r""" 4 / 2 * 3 """)) # -> 6
+
+    print(scan(r""" 2 * 3 % 4 """)) # -> [2, *, 3, %, 4, $EOF]
+    print(ast(r""" 2 * 3 % 4 """)) # -> (mod, [(mul, [2, 3]), 4])
+    print(walk(r""" 2 * 3 % 4 """)) # -> 2
+
+    print(scan(r""" 2 + 3 * add(4, 5) """)) # -> [2, +, 3, *, add, (, 4, ,, 5, ), $EOF]
+    print(ast(r""" 2 + 3 * add(4, 5) """)) # -> (add, [2, (mul, [3, (add, [4, 5])])])
+    print(walk(r""" 2 + 3 * add(4, 5) """)) # -> 29
+
+    exit()
 
     walk(r"""
         # GCD by recursion with function calls

@@ -340,6 +340,16 @@ class TestToT:
         assert self.walk("fib(1)") == 1
         assert self.walk("fib(6)") == 8
 
+    def test_arithmetic_operations(self):
+        assert self.walk(r""" 2 + 3 """) == 5
+        assert self.walk(r""" 2 + 3 - 4 """) == 1
+        assert self.walk(r""" a := 2 + sub(4, 3) """) == 3
+
+        assert self.walk(r""" 2 * 3 """) == 6
+        assert self.walk(r""" 4 / 2 * 3 """) == 6
+        assert self.walk(r""" 2 * 3 % 4 """) == 2
+        assert self.walk(r""" 2 + 3 * add(4, 5) """) == 29
+
     def test_empty_source(self):
         with pytest.raises(AssertionError, match="Unexpected token"):
             self.walk(r"""  """)
