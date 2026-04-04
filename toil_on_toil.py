@@ -158,6 +158,7 @@ i.walk("""
                 case 'int' then self._current_and_advance()
                 case 'Ident' then
                     match str(self._current())
+                        case '(' then self._paren()
                         case 'func' then self._func()
                         case 'scope' then self._scope()
                         case 'if' then self._if()
@@ -166,11 +167,18 @@ i.walk("""
                             if name.is_ident() then
                                 self._current_and_advance()
                             else
-                                raise('Unexpected token: ' + str(self._current()))
+                                raise('Unexpected token @ primary(): ' + str(self._current()))
                             end
                     end
-                case _ then raise('Unexpected token: ' + str(self._current()))
+                case _ then raise('Unexpected token: @ primary(): ' + str(self._current()))
             end
+        end;
+
+        defmethod _paren params do
+            self._current_and_advance();
+            expr := self._expression();
+            self._consume(Ident(')'));
+            expr
         end;
 
         defmethod _func params do
@@ -454,36 +462,11 @@ if __name__ == "__main__":
 
     # Example
 
-    # add/sub by operator
-    print(scan(r""" 2 + 3 """)) # -> [2, +, 3, $EOF]
-    print(ast(r""" 2 + 3 """)) # -> (add, [2, 3])
-    print(walk(r""" 2 + 3 """)) # -> 5
+    print(scan(r""" (2 + 3) * 4 """)) # -> [(, 2, +, 3, ), *, 4, $EOF]
+    print(ast(r""" (2 + 3) * 4 """)) # -> (mul, [(add, [2, 3]), 4])
+    print(walk(r""" (2 + 3) * 4 """)) # -> 20
 
-    print(scan(r""" 2 + 3 - 4 """)) # -> [2, +, 3, -, 4, $EOF]
-    print(ast(r""" 2 + 3 - 4 """)) # -> (sub, [(add, [2, 3]), 4])
-    print(walk(r""" 2 + 3 - 4 """)) # -> 1
-
-    print(scan(r""" a := 2 + sub(4, 3) """)) # -> [a, :=, 2, +, sub, (, 4, ,, 3, ), $EOF]
-    print(ast(r""" a := 2 + sub(4, 3) """)) # -> (define, [a, (add, [2, (sub, [4, 3])])])
-    print(walk(r""" a := 2 + sub(4, 3) """)) # -> 3
-
-    # mul/div/mod by operator
-
-    print(scan(r""" 2 * 3 """)) # -> [2, *, 3, $EOF]
-    print(ast(r""" 2 * 3 """)) # -> (mul, [2, 3])
-    print(walk(r""" 2 * 3 """)) # -> 6
-
-    print(scan(r""" 4 / 2 * 3 """)) # -> [4, /, 2, *, 3, $EOF]
-    print(ast(r""" 4 / 2 * 3 """)) # -> (mul, [(div, [4, 2]), 3])
-    print(walk(r""" 4 / 2 * 3 """)) # -> 6
-
-    print(scan(r""" 2 * 3 % 4 """)) # -> [2, *, 3, %, 4, $EOF]
-    print(ast(r""" 2 * 3 % 4 """)) # -> (mod, [(mul, [2, 3]), 4])
-    print(walk(r""" 2 * 3 % 4 """)) # -> 2
-
-    print(scan(r""" 2 + 3 * add(4, 5) """)) # -> [2, +, 3, *, add, (, 4, ,, 5, ), $EOF]
-    print(ast(r""" 2 + 3 * add(4, 5) """)) # -> (add, [2, (mul, [3, (add, [4, 5])])])
-    print(walk(r""" 2 + 3 * add(4, 5) """)) # -> 29
+    print(walk(r""" (2) * 3 """)) # -> 6
 
     exit()
 

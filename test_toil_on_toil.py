@@ -350,6 +350,10 @@ class TestToT:
         assert self.walk(r""" 2 * 3 % 4 """) == 2
         assert self.walk(r""" 2 + 3 * add(4, 5) """) == 29
 
+    def test_grouping(self):
+        assert self.walk(r""" (2 + 3) * 4 """) == 20
+        assert self.walk(r""" (2) * 3 """) == 6
+
     def test_empty_source(self):
         with pytest.raises(AssertionError, match="Unexpected token"):
             self.walk(r"""  """)
