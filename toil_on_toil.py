@@ -41,9 +41,9 @@ i.walk("""
                     self._number()
                 elif ch.is_ident_first() then
                     self._ident()
-                elif ch.in(':') then
+                elif ch.in('=!<>:') then
                     self._two_char_operator('=')
-                elif ch.in('+-*/%=(),;') then
+                elif ch.in('+-*/%(),;') then
                     self._tokens.push(Ident(ch)); self._advance()
                 else
                     raise('Invalid character @ tokenize: ' + ch)
@@ -126,6 +126,14 @@ i.walk("""
         defmethod _define_assign params do
             self._binary_right({
                 ':=': Ident('define'), '=': Ident('assign')
+            }, self._comparison)
+        end;
+
+        defmethod _comparison params do
+            self._binary_left({
+                '==': Ident('equal'), '!=': Ident('not_equal'),
+                '<': Ident('less'), '>': Ident('greater'),
+                '<=': Ident('less_equal'), '>=': Ident('greater_equal')
             }, self._add_sub)
         end;
 
@@ -462,11 +470,28 @@ if __name__ == "__main__":
 
     # Example
 
-    print(scan(r""" (2 + 3) * 4 """)) # -> [(, 2, +, 3, ), *, 4, $EOF]
-    print(ast(r""" (2 + 3) * 4 """)) # -> (mul, [(add, [2, 3]), 4])
-    print(walk(r""" (2 + 3) * 4 """)) # -> 20
+    print(walk(r""" 2 + 5 == 3 + 4 """)) # -> True
+    print(walk(r""" 2 + 3 == 3 + 4 """)) # -> False
+    print(walk(r""" 2 + 5 != 3 + 4 """)) # -> False
+    print(walk(r""" 2 + 3 != 3 + 4 """)) # -> True
+    print(walk(r""" 2 + 4 < 3 + 4 """)) # -> True
+    print(walk(r""" 2 + 5 < 3 + 4 """)) # -> False
+    print(walk(r""" 2 + 5 < 2 + 4 """)) # -> False
+    print(walk(r""" 2 + 4 > 3 + 4 """)) # -> False
+    print(walk(r""" 2 + 5 > 3 + 4 """)) # -> False
+    print(walk(r""" 2 + 5 > 2 + 4 """)) # -> True
+    print(walk(r""" 2 + 4 <= 3 + 4 """)) # -> True
+    print(walk(r""" 2 + 5 <= 3 + 4 """)) # -> True
+    print(walk(r""" 2 + 5 <= 2 + 4 """)) # -> False
+    print(walk(r""" 2 + 4 >= 3 + 4 """)) # -> False
+    print(walk(r""" 2 + 5 >= 3 + 4 """)) # -> True
+    print(walk(r""" 2 + 5 >= 2 + 4 """)) # -> True
 
-    print(walk(r""" (2) * 3 """)) # -> 6
+    print(ast(r""" 2 == 2 == 2 """)) # -> (equal, [(equal, [2, 2]), 2])
+    print(walk(r""" 2 == 2 == 2 """)) # -> False
+
+    print(ast(r""" a := 2 == 3 + 4 """)) # -> (define, [a, (equal, [2, (add, [3, 4])])])
+    print(walk(r""" a := 2 == 3 + 4 """)) # -> False
 
     exit()
 

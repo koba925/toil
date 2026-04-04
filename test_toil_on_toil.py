@@ -354,6 +354,35 @@ class TestToT:
         assert self.walk(r""" (2 + 3) * 4 """) == 20
         assert self.walk(r""" (2) * 3 """) == 6
 
+    def test_comparison_operations(self):
+        assert self.walk(r""" 2 + 5 == 3 + 4 """) is True
+        assert self.walk(r""" 2 + 3 == 3 + 4 """) is False
+        assert self.walk(r""" 2 + 5 != 3 + 4 """) is False
+        assert self.walk(r""" 2 + 3 != 3 + 4 """) is True
+
+        assert self.walk(r""" 2 + 4 < 3 + 4 """) is True
+        assert self.walk(r""" 2 + 5 < 3 + 4 """) is False
+        assert self.walk(r""" 2 + 5 < 2 + 4 """) is False
+
+        assert self.walk(r""" 2 + 4 > 3 + 4 """) is False
+        assert self.walk(r""" 2 + 5 > 3 + 4 """) is False
+        assert self.walk(r""" 2 + 5 > 2 + 4 """) is True
+
+        assert self.walk(r""" 2 + 4 <= 3 + 4 """) is True
+        assert self.walk(r""" 2 + 5 <= 3 + 4 """) is True
+        assert self.walk(r""" 2 + 5 <= 2 + 4 """) is False
+
+        assert self.walk(r""" 2 + 4 >= 3 + 4 """) is False
+        assert self.walk(r""" 2 + 5 >= 3 + 4 """) is True
+        assert self.walk(r""" 2 + 5 >= 2 + 4 """) is True
+
+        assert self.walk(r""" 2 == 2 == 2 """) is False
+        assert self.walk(r""" a := 2 == 3 + 4 """) is False
+
+        assert self.walk(r""" True == True """) is True
+        assert self.walk(r""" None == None """) is True
+        assert self.walk(r""" False != True """) is True
+
     def test_empty_source(self):
         with pytest.raises(AssertionError, match="Unexpected token"):
             self.walk(r"""  """)
