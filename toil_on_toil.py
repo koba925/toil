@@ -541,6 +541,82 @@ i.walk("""
             end))
         end;
 
+        defmethod stdlib params do
+            self.walk('
+                deffunc first params a do a[0] end;
+                deffunc rest params a do slice(a, 1, None) end;
+                deffunc last params a do a[-1] end
+            ');
+            self.walk('
+                deffunc map params a, f do
+                    b := []; l := len(a);
+                    i := 0; while i < l do
+                        push(b, f(a[i]));
+                        i = i + 1
+                    end;
+                    b
+                end
+            ');
+            self.walk('
+                deffunc filter params a, f do
+                    b := []; l := len(a);
+                    i := 0; while i < l do
+                        if f(a[i]) then push(b, a[i]) end;
+                        i = i + 1
+                    end;
+                    b
+                end
+            ');
+            self.walk('
+                deffunc zip params a, b do
+                    z := []; la := len(a); lb := len(b);
+                    i := 0; while i < la and i < lb do
+                        push(z, [a[i], b[i]]);
+                        i = i + 1
+                    end;
+                    z
+                end
+            ');
+            self.walk('
+                deffunc reduce params a, f, init do
+                    acc := init; l := len(a);
+                    i := 0; while i < l do
+                        acc = f(acc, a[i]);
+                        i = i + 1
+                    end;
+                    acc
+                end
+            ');
+            self.walk('
+                deffunc reverse params a do
+                    b := []; i := len(a) - 1;
+                    while i >= 0 do
+                        push(b, a[i]);
+                        i = i - 1
+                    end;
+                    b
+                end
+            ');
+            self.walk('
+                deffunc range params start, stop do
+                    b := [];
+                    i := start; while i < stop do
+                        push(b, i);
+                        i = i + 1
+                    end;
+                    b
+                end
+            ');
+            self.walk('
+                deffunc enumerate params a do
+                    zip(range(0, len(a)), a)
+                end
+            ');
+
+            self._env = Environment(self._env);
+            self
+        end;
+
         defmethod scan params src do Scanner(src).tokenize() end;
         defmethod parse params tokens do Parser(tokens).parse() end;
         defmethod ast params src do Parser(self.scan(src)).parse() end;
@@ -551,7 +627,7 @@ i.walk("""
 
 if __name__ == "__main__":
     i.walk(r"""
-        tot := Interpreter().init_env()
+        tot := Interpreter().init_env().stdlib()
     """)
     def scan(src): return i.walk(f""" tot.scan('{src}') """)
     def ast(src): return i.walk(f""" tot.ast('{src}') """)
@@ -559,46 +635,64 @@ if __name__ == "__main__":
 
     # Example
 
-    # List
-    print(walk(""" [] """)) # -> []
-    print(walk(""" [2 + 3] """)) # -> [5]
-    print(walk(""" [2, 3, [4, 5]] """)) # ->  [2, 3, [4, 5]]
-    walk(""" [print(2), print(3)] """) # ->  2\n3
+    print(walk(r""" a := range(2, 10) """)) # -> [2, 3, 4, 5, 6, 7, 8, 9]
+    print(walk(r""" first(a) """)) # -> 2
+    print(walk(r""" rest(a) """)) # -> [3, 4, 5, 6, 7, 8, 9]
+    print(walk(r""" last(a) """)) # -> 9
+    print(walk(r""" map(a, func n do n * 2 end) """)) # -> [4, 6, 8, 10, 12, 14, 16, 18]
+    print(walk(r""" filter(a, func n do n % 2 == 0 end) """)) # -> [2, 4, 6, 8]
+    print(walk(r""" reduce(a, add, 0) """)) # -> 44
+    print(walk(r""" reverse(a) """)) # -> [9, 8, 7, 6, 5, 4, 3, 2]
+    print(walk(r""" zip(a, [4, 5, 6]) """)) # -> [[2, 4], [3, 5], [4, 6]]
+    print(walk(r""" enumerate(a) """)) # -> [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
 
-    # List index
-    walk(""" a := [2, 3, [4, 5]] """)
-    print(walk(""" a[2][0] """)) # ->  4
-    print(walk(""" a[2][-1] """)) # ->  5
+    print(walk(r"""
+        deffunc bubblesort params a do
+            n := len(a);
+            i := 0; while i < n do
+                j := 0; while j < n - i - 1 do
+                    if a[j] > a[j + 1] then
+                        tmp := a[j];
+                        a[j] = a[j + 1];
+                        a[j + 1] = tmp
+                    end;
+                    j = j + 1
+                end;
+                i = i + 1
+            end;
+            a
+        end;
 
-    walk(""" c := func do [add, sub] end """)
-    print(walk(""" c()[0](2, 3) """)) # ->  5
+        bubblesort([5, 3, 8, 4, 2])
+    """)) # -> [2, 3, 4, 5, 8]
 
-    # walk(""" e := [1]; e[None] = 2 """) # -> Error
-    # walk(""" None[2] = 3 """)
+    print(walk(r"""
+        deffunc quicksort params a do
+            if len(a) <= 1 then a
+            else
+                pivot := first(a);
+                rem := rest(a);
+                left := filter(rem, func x do x < pivot end);
+                right := filter(rem, func x do x >= pivot end);
+                quicksort(left) + [pivot] + quicksort(right)
+            end
+        end;
 
-    # List assignment
-    walk(""" b := [2, 3, [4, 5]] """)
-    walk(""" b[0] = 6 """)
-    print(walk(""" b[0] """)) # ->  6
-    walk(""" b[2][1] = 7 """)
-    print(walk(""" b[2][1] """)) # ->  7
-    print(walk(""" b """)) # ->  [6, 3, [4, 7]]
+        quicksort([5, 3, 8, 4, 2])
+    """)) # -> [2, 3, 4, 5, 8]
 
-    # List functions
-    walk(""" d := [2, 3, 4] """)
-    print(walk(""" len(d) """)) # ->  3
-    print(walk(""" index(d, 2) """)) # ->  4
-    print(walk(""" slice(d, 1, None) """)) # ->  [3, 4]
-    print(walk(""" slice(d, 1, 2) """)) # ->  [3]
-    print(walk(""" slice(d, None, 2) """)) # ->  [2, 3]
-    print(walk(""" slice(d, None, None) """)) # ->  [2, 3, 4]
-    print(walk(""" push(d, 5) """)) # -> None
-    print(walk(""" d """)) # ->  [2, 3, 4, 5]
-    print(walk(""" pop(d) """)) # ->  5
-    print(walk(""" d """)) # ->  [2, 3, 4]
-    print(walk(""" in(2, d) """)) # ->  True
-    print(walk(""" in(5, d) """)) # ->  False
-    print(walk(""" dd := copy(d); dd[0] = 6; [d, dd] """)) # -> [[2, 3, 4], [6, 3, 4]]
+    print(walk(r"""
+        n := 10;
+        sieve := [False, False] + [True] * (n - 2);
+        i := 2; while i * i < n do
+            if sieve[i] then
+                j := i * i; while j < n do
+                    sieve[j] = False;
+                    j = j + i
+                end
+            end;
+            i = i + 1
+        end;
 
-    print(walk(""" [2, 3] + [4, 5] """)) # ->  [2, 3, 4, 5]
-    print(walk(""" [2, 3] * 3 """)) # ->  [2, 3, 2, 3, 2, 3]
+        map(filter(enumerate(sieve), last), first)
+    """)) # -> [2, 3, 5, 7]

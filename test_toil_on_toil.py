@@ -104,7 +104,7 @@ class TestBase:
 
     @pytest.fixture(autouse=True)
     def setup_env(self):
-        i.walk(""" tot.init_env() """)
+        i.walk(""" tot.init_env().stdlib() """)
 
     def scan(self, src): return i.walk(f""" tot.scan('{src}') """)
     def parse(self, tokens): return i.walk(f""" tot.parse({tokens}) """)
@@ -367,6 +367,18 @@ class TestToT(TestBase):
         assert self.walk(""" [2, 3] + [4, 5] """) == [2, 3, 4, 5]
         assert self.walk(""" [2, 3] * 3 """) == [2, 3, 2, 3, 2, 3]
 
+    def test_stdlib(self):
+        assert self.walk(""" a := range(2, 10) """) == [2, 3, 4, 5, 6, 7, 8, 9]
+        assert self.walk(""" first(a) """) == 2
+        assert self.walk(""" rest(a) """) == [3, 4, 5, 6, 7, 8, 9]
+        assert self.walk(""" last(a) """) == 9
+        assert self.walk(""" map(a, func n do n * 2 end) """) == [4, 6, 8, 10, 12, 14, 16, 18]
+        assert self.walk(""" filter(a, func n do n % 2 == 0 end) """) == [2, 4, 6, 8]
+        assert self.walk(""" reduce(a, add, 0) """) == 44
+        assert self.walk(""" reverse(a) """) == [9, 8, 7, 6, 5, 4, 3, 2]
+        assert self.walk(""" zip(a, [4, 5, 6]) """) == [[2, 4], [3, 5], [4, 6]]
+        assert self.walk(""" enumerate(a) """) == [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
+
     def test_whitespace(self):
         assert self.walk(r"""   2 """) == 2
         assert self.walk(r""" 2   """) == 2
@@ -573,18 +585,67 @@ class TestExamplesWithDeffunc(TestBase):
 
     def test_mutual_recursion(self):
         self.walk("""
-            deffunc even params n do
-                if n == 0 then True else odd(n - 1) end
-            end;
-
-            deffunc odd params n do
-                if n == 0 then False else even(n - 1) end
-            end
+            deffunc even params n do if n == 0 then True else odd(n - 1) end end;
+            deffunc odd params n do if n == 0 then False else even(n - 1) end end
         """)
         assert self.walk("even(2)") is True
         assert self.walk("even(3)") is False
         assert self.walk("odd(2)") is False
         assert self.walk("odd(3)") is True
+
+    def test_bubblesort(self):
+        assert self.walk("""
+            deffunc bubblesort params a do
+                n := len(a);
+                i := 0; while i < n do
+                    j := 0; while j < n - i - 1 do
+                        if a[j] > a[j + 1] then
+                            tmp := a[j];
+                            a[j] = a[j + 1];
+                            a[j + 1] = tmp
+                        end;
+                        j = j + 1
+                    end;
+                    i = i + 1
+                end;
+                a
+            end;
+
+            bubblesort([5, 3, 8, 4, 2])
+        """) == [2, 3, 4, 5, 8]
+
+    def test_quicksort(self):
+        assert self.walk("""
+            deffunc quicksort params a do
+                if len(a) <= 1 then a
+                else
+                    pivot := first(a);
+                    rem := rest(a);
+                    left := filter(rem, func x do x < pivot end);
+                    right := filter(rem, func x do x >= pivot end);
+                    quicksort(left) + [pivot] + quicksort(right)
+                end
+            end;
+
+            quicksort([5, 3, 8, 4, 2])
+        """) == [2, 3, 4, 5, 8]
+
+    def test_sieve(self):
+        assert self.walk("""
+            n := 10;
+            sieve := [False, False] + [True] * (n - 2);
+            i := 2; while i * i < n do
+                if sieve[i] then
+                    j := i * i; while j < n do
+                        sieve[j] = False;
+                        j = j + i
+                    end
+                end;
+                i = i + 1
+            end;
+
+            map(filter(enumerate(sieve), last), first)
+        """) == [2, 3, 5, 7]
 
 if __name__ == "__main__":
     pytest.main([__file__])
