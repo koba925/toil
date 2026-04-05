@@ -121,11 +121,6 @@ class TestToT(TestBase):
         assert self.eval(r""" 2 """) == 2
         assert self.walk(r""" 2 """) == 2
 
-    def test_whitespace(self):
-        assert self.walk(r"""   2 """) == 2
-        assert self.walk(r""" 2   """) == 2
-        assert self.walk("""\n  2  \n""") == 2
-
     def test_sequence(self):
         assert self.walk(r""" if True then 2 end; if True then 3 end """) == 3
         assert self.walk(r""" if True then 2 end; if True then 3 end; 4 """) == 4
@@ -238,6 +233,12 @@ class TestToT(TestBase):
         assert self.walk(r""" True """) is True
         assert self.walk(r""" False """) is False
 
+    def test_quote(self, capsys):
+        assert self.walk(r""" quote(hello_world) """) == Ident("hello_world")
+        assert self.walk(r""" quote(if 2 == 3 then 4 else 5 end) """) == (
+            Ident("if"), [(Ident("equal"), [2, 3]), 4, 5]
+        )
+
     def test_scope(self):
         assert self.walk(r""" a := 2; scope a end """) == 2
         assert self.walk(r""" a := 2; scope scope a end end """) == 2
@@ -306,6 +307,11 @@ class TestToT(TestBase):
             self.walk(r""" if False then 2 elif True 3 end """)
         with pytest.raises(AssertionError, match="Expected end"):
             self.walk(r""" if False then 2 elif True then 3 """)
+
+    def test_whitespace(self):
+        assert self.walk(r"""   2 """) == 2
+        assert self.walk(r""" 2   """) == 2
+        assert self.walk("""\n  2  \n""") == 2
 
     def test_empty_source(self):
         with pytest.raises(AssertionError, match="Unexpected token"):

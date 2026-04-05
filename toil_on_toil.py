@@ -383,6 +383,8 @@ i.walk("""
                 case 'Ident' then env.val(str(expr))
                 case 'Expr' then
                     match expr
+                        case Expr(Ident('quote'), [expr]) then
+                            expr
                         case Expr(Ident('func'), [params, body_expr]) then
                             Expr(Ident('closure'), [params, body_expr, env])
                         case Expr(Ident('scope'), [body_expr]) then
@@ -524,9 +526,13 @@ if __name__ == "__main__":
 
     # Example
 
-    print(ast(r""" deffunc myadd params a, b do a + b end """)) # -> (define, [myadd, (func, [[a, b], (add, [a, b])])])
-    walk(r""" deffunc myadd params a, b do a + b end """)
-    print(walk(r""" myadd(2, 3) """)) # -> 5
+    print(ast(r""" quote(hello_world) """)) # -> (quote, [hello_world])
+    print(walk(r""" quote(hello_world) """)) # -> hello_world
+    walk(r""" print(quote(hello_world)) """) # -> hello_world
+
+    print(walk(r""" quote(if 2 == 3 then 4 else 5 end) """)) # -> (if, [(equal, [2, 3]), 4, 5])
+
+    exit()
 
     # Problems by deffunc and operators
     walk(r"""
