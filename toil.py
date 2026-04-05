@@ -979,32 +979,7 @@ if __name__ == "__main__":
             run(sys.argv[1])
 
     # Example
-    i.walk("""
-        defclass Animal params name do
-            self._name = name;
-            defmethod introduce params do print("I'm", self._name) end;
-            defmethod new_name params name do self._name = name end;
-            defmethod make_sound params do print("crying") end
-        end
-    """)
-    i.walk("""
-        animal1 := Animal("Rocky");
-        animal2 := Animal("Lucy");
-        animal1.introduce();       # -> I'm Rocky
-        animal1.make_sound();      # -> crying
-        animal2.introduce();       # -> I'm Lucy
-        animal2.new_name("Bella");
-        animal2.introduce();       # -> I'm Bella
-        animal2.make_sound()       # -> crying
-    """)
-    i.walk("""
-        defclass Dog params name do
-            inherits(Animal(name));
-            defmethod make_sound params do print("woof") end
-        end
-    """)
-    i.walk("""
-        dog1 := Dog("Leo");
-        dog1.introduce(); # -> I'm Leo
-        dog1.make_sound() # -> woof
-    """)
+    print(i.walk(""" print(2) and 3 """)) # -> 2\nNone
+    print(i.walk(""" not print(2) or 3 """)) # -> 2\nTrue
+
+

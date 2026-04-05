@@ -411,6 +411,11 @@ class TestGo(TestBase):
         assert self.i.walk(""" False or 2 """) == 2
         assert self.i.walk(""" 1 or 2 / 0 """) == 1
 
+        assert self.i.walk(""" print(2) and 3 """) is None
+        assert capsys.readouterr().out == "2\n"
+        assert self.i.walk(""" not print(2) or 3 """) is True
+        assert capsys.readouterr().out == "2\n"
+
     def test_neg(self):
         assert self.i.walk(""" -2 """) == -2
         assert self.i.walk(""" --2 """) == 2

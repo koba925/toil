@@ -28,7 +28,7 @@ i.walk("""
                 while self._current_char().isspace() do self._advance() end;
 
                 if self._current_char() == '#' then
-                    while not self._current_char().in('\n', '$EOF')
+                    while not self._current_char().in("\n", '$EOF')
                          do self._advance()
                     end;
                     continue()
