@@ -383,6 +383,12 @@ class TestToT:
         assert self.walk(r""" None == None """) is True
         assert self.walk(r""" False != True """) is True
 
+    def test_unary_operations(self):
+        assert self.walk(r""" -2 """) == -2
+        assert self.walk(r""" --2 """) == 2
+        assert self.walk(r""" 3--2 """) == 5
+        assert self.walk(r""" -add(2, 3) * 4 """) == -20
+
     def test_empty_source(self):
         with pytest.raises(AssertionError, match="Unexpected token"):
             self.walk(r"""  """)

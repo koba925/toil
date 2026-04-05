@@ -103,6 +103,7 @@ i.walk("""
         self._pos = 0;
 
         defmethod parse params do
+            # print(self._tokens);
             expr := self._expression();
             if self._current() != Ident('$EOF') then
                 raise('Extra token @ parse: ' + str(self._current()))
@@ -146,6 +147,13 @@ i.walk("""
         defmethod _mul_div_mod params do
             self._binary_left({
                 '*': Ident('mul'), '/': Ident('div'), '%': Ident('mod')
+            }, self._unaries)
+        end;
+
+        defmethod _unaries params do
+            self._unary({
+                "-": Ident("neg"), "+": Ident("+"), "*": Ident("*"),
+                "!": Ident("!"), "!!": Ident("!!")
             }, self._call)
         end;
 
@@ -233,18 +241,6 @@ i.walk("""
             Expr(Ident('while'), [cond_expr, body_expr])
         end;
 
-        defmethod _binary_right params ops, sub_elem do
-            left := sub_elem();
-            if self._current().type() == 'Ident' and
-               (op := str(self._current())).in(ops) then
-                self._current_and_advance();
-                right := self._binary_right(ops, sub_elem);
-                Expr(ops[op], [left, right])
-            else
-                left
-            end
-        end;
-
         defmethod _binary_left params ops, sub_elem do
             left := sub_elem();
             while type(op := self._current()) == 'Ident' and str(op).in(ops) do
@@ -253,6 +249,26 @@ i.walk("""
                 left = Expr(ops[str(op)], [left, right])
             end;
             left
+        end;
+
+        defmethod _binary_right params ops, sub_elem do
+            left := sub_elem();
+            if type(op := self._current()) == 'Ident' and str(op).in(ops) then
+                self._current_and_advance();
+                right := self._binary_right(ops, sub_elem);
+                Expr(ops[str(op)], [left, right])
+            else
+                left
+            end
+        end;
+
+        defmethod _unary params ops, sub_elem do
+            if type(op := self._current()) == 'Ident' and str(op).in(ops) then
+                self._current_and_advance();
+                Expr(ops[str(op)], [self._unary(ops, sub_elem)])
+            else
+                sub_elem()
+            end
         end;
 
         defmethod _comma_separated_exprs params terminator do
@@ -470,28 +486,12 @@ if __name__ == "__main__":
 
     # Example
 
-    print(walk(r""" 2 + 5 == 3 + 4 """)) # -> True
-    print(walk(r""" 2 + 3 == 3 + 4 """)) # -> False
-    print(walk(r""" 2 + 5 != 3 + 4 """)) # -> False
-    print(walk(r""" 2 + 3 != 3 + 4 """)) # -> True
-    print(walk(r""" 2 + 4 < 3 + 4 """)) # -> True
-    print(walk(r""" 2 + 5 < 3 + 4 """)) # -> False
-    print(walk(r""" 2 + 5 < 2 + 4 """)) # -> False
-    print(walk(r""" 2 + 4 > 3 + 4 """)) # -> False
-    print(walk(r""" 2 + 5 > 3 + 4 """)) # -> False
-    print(walk(r""" 2 + 5 > 2 + 4 """)) # -> True
-    print(walk(r""" 2 + 4 <= 3 + 4 """)) # -> True
-    print(walk(r""" 2 + 5 <= 3 + 4 """)) # -> True
-    print(walk(r""" 2 + 5 <= 2 + 4 """)) # -> False
-    print(walk(r""" 2 + 4 >= 3 + 4 """)) # -> False
-    print(walk(r""" 2 + 5 >= 3 + 4 """)) # -> True
-    print(walk(r""" 2 + 5 >= 2 + 4 """)) # -> True
+    print(walk(r""" -2 """)) # -> -2
+    print(walk(r""" --2 """)) # -> 2
+    print(walk(r""" 3--2 """)) # -> 5
 
-    print(ast(r""" 2 == 2 == 2 """)) # -> (equal, [(equal, [2, 2]), 2])
-    print(walk(r""" 2 == 2 == 2 """)) # -> False
-
-    print(ast(r""" a := 2 == 3 + 4 """)) # -> (define, [a, (equal, [2, (add, [3, 4])])])
-    print(walk(r""" a := 2 == 3 + 4 """)) # -> False
+    print(ast(r""" -add(2, 3) * 4 """)) # -> (mul, [(neg, [(add, [2, 3])]), 4])
+    print(walk(r""" -add(2, 3) * 4 """)) # -> -20
 
     exit()
 
