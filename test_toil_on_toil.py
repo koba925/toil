@@ -96,7 +96,8 @@ class TestFunctions:
         assert i.walk(""" 'a'.in({'a': 2, 'b': 3}) """) is True
         assert i.walk(""" 'c'.in({'a': 2, 'b': 3}) """) is False
 
-class TestToT:
+
+class TestBase:
     @pytest.fixture(scope="class", autouse=True)
     def setup_tot(self):
         i.walk(""" tot := Interpreter() """)
@@ -111,6 +112,8 @@ class TestToT:
     def eval(self, ast): return i.walk(f""" tot.eval({ast}) """)
     def walk(self, src): return i.walk(f""" tot.walk('{src}') """)
 
+
+class TestToT(TestBase):
     def test_overall_structure(self):
         assert self.scan(r""" 2 """) == [2, Ident('$EOF')]
         assert self.parse(r""" [2, Ident('$EOF')] """) == 2
@@ -118,23 +121,16 @@ class TestToT:
         assert self.eval(r""" 2 """) == 2
         assert self.walk(r""" 2 """) == 2
 
-    def test_numbers(self):
-        assert self.walk(r"""2""") == 2
-        assert self.walk(r"""23""") == 23
-        assert self.walk(r"""0""") == 0
-        assert self.walk(r"""023""") == 23
-
-    def test_bool_none(self):
-        assert self.walk(r""" None """) is None
-        assert self.walk(r""" True """) is True
-        assert self.walk(r""" False """) is False
-
     def test_whitespace(self):
         assert self.walk(r"""   2 """) == 2
         assert self.walk(r""" 2   """) == 2
         assert self.walk("""\n  2  \n""") == 2
 
-    def test_variable(self):
+    def test_sequence(self):
+        assert self.walk(r""" if True then 2 end; if True then 3 end """) == 3
+        assert self.walk(r""" if True then 2 end; if True then 3 end; 4 """) == 4
+
+    def test_define_assign(self):
         assert self.walk(r""" a := 2 """) == 2
         assert self.walk(r""" a """) == 2
 
@@ -160,6 +156,88 @@ class TestToT:
         with pytest.raises(AssertionError, match="Unexpected token"):
             self.walk(r""" a := """)
 
+    def test_logical_operations(self, capsys):
+        assert self.walk(r""" True and False """) is False
+        assert self.walk(r""" False and True """) is False
+        assert self.walk(r""" True or False """) is True
+        assert self.walk(r""" False or True """) is True
+
+        assert self.walk(r""" True and 2 """) == 2
+        assert self.walk(r""" 0 and 2 / 0 """) == 0
+        assert self.walk(r""" False or 2 """) == 2
+        assert self.walk(r""" 1 or 2 / 0 """) == 1
+
+        assert self.walk(r""" print(2) and 3 """) is None
+        assert capsys.readouterr().out == "2\n"
+        assert self.walk(r""" not print(2) or 3 """) is True
+        assert capsys.readouterr().out == "2\n"
+
+        assert self.walk(r""" not True """) is False
+        assert self.walk(r""" not False """) is True
+        assert self.walk(r""" not not True """) is True
+
+        assert self.walk(r""" a := not 2 == 2 or True """) is True
+
+    def test_comparison_operations(self):
+        assert self.walk(r""" 2 + 5 == 3 + 4 """) is True
+        assert self.walk(r""" 2 + 3 == 3 + 4 """) is False
+        assert self.walk(r""" 2 + 5 != 3 + 4 """) is False
+        assert self.walk(r""" 2 + 3 != 3 + 4 """) is True
+
+        assert self.walk(r""" 2 + 4 < 3 + 4 """) is True
+        assert self.walk(r""" 2 + 5 < 3 + 4 """) is False
+        assert self.walk(r""" 2 + 5 < 2 + 4 """) is False
+
+        assert self.walk(r""" 2 + 4 > 3 + 4 """) is False
+        assert self.walk(r""" 2 + 5 > 3 + 4 """) is False
+        assert self.walk(r""" 2 + 5 > 2 + 4 """) is True
+
+        assert self.walk(r""" 2 + 4 <= 3 + 4 """) is True
+        assert self.walk(r""" 2 + 5 <= 3 + 4 """) is True
+        assert self.walk(r""" 2 + 5 <= 2 + 4 """) is False
+
+        assert self.walk(r""" 2 + 4 >= 3 + 4 """) is False
+        assert self.walk(r""" 2 + 5 >= 3 + 4 """) is True
+        assert self.walk(r""" 2 + 5 >= 2 + 4 """) is True
+
+        assert self.walk(r""" 2 == 2 == 2 """) is False
+        assert self.walk(r""" a := 2 == 3 + 4 """) is False
+
+        assert self.walk(r""" True == True """) is True
+        assert self.walk(r""" None == None """) is True
+        assert self.walk(r""" False != True """) is True
+
+    def test_arithmetic_operations(self):
+        assert self.walk(r""" 2 + 3 """) == 5
+        assert self.walk(r""" 2 + 3 - 4 """) == 1
+        assert self.walk(r""" a := 2 + sub(4, 3) """) == 3
+
+        assert self.walk(r""" 2 * 3 """) == 6
+        assert self.walk(r""" 4 / 2 * 3 """) == 6
+        assert self.walk(r""" 2 * 3 % 4 """) == 2
+        assert self.walk(r""" 2 + 3 * add(4, 5) """) == 29
+
+    def test_grouping(self):
+        assert self.walk(r""" (2 + 3) * 4 """) == 20
+        assert self.walk(r""" (2) * 3 """) == 6
+
+    def test_unary_operations(self):
+        assert self.walk(r""" -2 """) == -2
+        assert self.walk(r""" --2 """) == 2
+        assert self.walk(r""" 3--2 """) == 5
+        assert self.walk(r""" -add(2, 3) * 4 """) == -20
+
+    def test_numbers(self):
+        assert self.walk(r"""2""") == 2
+        assert self.walk(r"""23""") == 23
+        assert self.walk(r"""0""") == 0
+        assert self.walk(r"""023""") == 23
+
+    def test_bool_none(self):
+        assert self.walk(r""" None """) is None
+        assert self.walk(r""" True """) is True
+        assert self.walk(r""" False """) is False
+
     def test_scope(self):
         assert self.walk(r""" a := 2; scope a end """) == 2
         assert self.walk(r""" a := 2; scope scope a end end """) == 2
@@ -174,9 +252,27 @@ class TestToT:
         with pytest.raises(AssertionError, match="Undefined variable"):
             self.walk(r""" d """)
 
-    def test_seq(self):
-        assert self.walk(r""" if True then 2 end; if True then 3 end """) == 3
-        assert self.walk(r""" if True then 2 end; if True then 3 end; 4 """) == 4
+    def test_func(self):
+        assert self.walk("func do 2 end ()") == 2
+        assert self.walk("func a do add(a, 2) end (3)") == 5
+        assert self.walk("func a, b do add(a, b) end (2, 3)") == 5
+
+        assert self.walk("func a, b do add(a, b) end (add(2, 3), 4; 5)") == 10
+        assert self.walk("""
+           myadd := func a, b do add(a, b) end;
+           myadd(2, 3)
+        """) == 5
+
+        assert self.walk("func a, b do add(a, b) end (2, 3, 4)") == 5
+
+        with pytest.raises(AssertionError, match="Undefined variable @ val: b"):
+            self.walk("func a, b do add(a, b) end (2)")
+
+        with pytest.raises(AssertionError, match="Expected do @ consume: add"):
+            self.walk("func a add(a, 2) end")
+
+        with pytest.raises(AssertionError, match="Expected end @ consume: \\$EOF"):
+            self.walk("func a do add(a, 2)")
 
     def test_if(self):
         assert self.walk(r""" if True then 2 end """) == 2
@@ -207,28 +303,19 @@ class TestToT:
         with pytest.raises(AssertionError, match="Expected end"):
             self.walk(r""" if False then 2 elif True then 3 """)
 
-    def test_func(self):
-        assert self.walk("func do 2 end ()") == 2
-        assert self.walk("func a do add(a, 2) end (3)") == 5
-        assert self.walk("func a, b do add(a, b) end (2, 3)") == 5
+    def test_empty_source(self):
+        with pytest.raises(AssertionError, match="Unexpected token"):
+            self.walk(r"""  """)
 
-        assert self.walk("func a, b do add(a, b) end (add(2, 3), 4; 5)") == 10
-        assert self.walk("""
-           myadd := func a, b do add(a, b) end;
-           myadd(2, 3)
-        """) == 5
+    def test_invalid_character(self):
+        with pytest.raises(AssertionError, match="Invalid character"):
+            self.walk(r""" ~ """)
 
-        assert self.walk("func a, b do add(a, b) end (2, 3, 4)") == 5
+    def test_extra_token(self):
+        with pytest.raises(AssertionError, match="Extra token"):
+            self.walk(r""" 2 3 """)
 
-        with pytest.raises(AssertionError, match="Undefined variable @ val: b"):
-            self.walk("func a, b do add(a, b) end (2)")
-
-        with pytest.raises(AssertionError, match="Expected do @ consume: add"):
-            self.walk("func a add(a, 2) end")
-
-        with pytest.raises(AssertionError, match="Expected end @ consume: \\$EOF"):
-            self.walk("func a do add(a, 2)")
-
+class TestProblemsWithFunctions(TestBase):
     def test_recursion_gcd(self):
         self.walk("""
             gcd := func a, b do
@@ -339,67 +426,6 @@ class TestToT:
         assert self.walk("fib(0)") == 0
         assert self.walk("fib(1)") == 1
         assert self.walk("fib(6)") == 8
-
-    def test_arithmetic_operations(self):
-        assert self.walk(r""" 2 + 3 """) == 5
-        assert self.walk(r""" 2 + 3 - 4 """) == 1
-        assert self.walk(r""" a := 2 + sub(4, 3) """) == 3
-
-        assert self.walk(r""" 2 * 3 """) == 6
-        assert self.walk(r""" 4 / 2 * 3 """) == 6
-        assert self.walk(r""" 2 * 3 % 4 """) == 2
-        assert self.walk(r""" 2 + 3 * add(4, 5) """) == 29
-
-    def test_grouping(self):
-        assert self.walk(r""" (2 + 3) * 4 """) == 20
-        assert self.walk(r""" (2) * 3 """) == 6
-
-    def test_comparison_operations(self):
-        assert self.walk(r""" 2 + 5 == 3 + 4 """) is True
-        assert self.walk(r""" 2 + 3 == 3 + 4 """) is False
-        assert self.walk(r""" 2 + 5 != 3 + 4 """) is False
-        assert self.walk(r""" 2 + 3 != 3 + 4 """) is True
-
-        assert self.walk(r""" 2 + 4 < 3 + 4 """) is True
-        assert self.walk(r""" 2 + 5 < 3 + 4 """) is False
-        assert self.walk(r""" 2 + 5 < 2 + 4 """) is False
-
-        assert self.walk(r""" 2 + 4 > 3 + 4 """) is False
-        assert self.walk(r""" 2 + 5 > 3 + 4 """) is False
-        assert self.walk(r""" 2 + 5 > 2 + 4 """) is True
-
-        assert self.walk(r""" 2 + 4 <= 3 + 4 """) is True
-        assert self.walk(r""" 2 + 5 <= 3 + 4 """) is True
-        assert self.walk(r""" 2 + 5 <= 2 + 4 """) is False
-
-        assert self.walk(r""" 2 + 4 >= 3 + 4 """) is False
-        assert self.walk(r""" 2 + 5 >= 3 + 4 """) is True
-        assert self.walk(r""" 2 + 5 >= 2 + 4 """) is True
-
-        assert self.walk(r""" 2 == 2 == 2 """) is False
-        assert self.walk(r""" a := 2 == 3 + 4 """) is False
-
-        assert self.walk(r""" True == True """) is True
-        assert self.walk(r""" None == None """) is True
-        assert self.walk(r""" False != True """) is True
-
-    def test_unary_operations(self):
-        assert self.walk(r""" -2 """) == -2
-        assert self.walk(r""" --2 """) == 2
-        assert self.walk(r""" 3--2 """) == 5
-        assert self.walk(r""" -add(2, 3) * 4 """) == -20
-
-    def test_empty_source(self):
-        with pytest.raises(AssertionError, match="Unexpected token"):
-            self.walk(r"""  """)
-
-    def test_invalid_character(self):
-        with pytest.raises(AssertionError, match="Invalid character"):
-            self.walk(r""" ~ """)
-
-    def test_extra_token(self):
-        with pytest.raises(AssertionError, match="Extra token"):
-            self.walk(r""" 2 3 """)
 
 if __name__ == "__main__":
     pytest.main([__file__])

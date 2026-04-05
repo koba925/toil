@@ -127,7 +127,33 @@ i.walk("""
         defmethod _define_assign params do
             self._binary_right({
                 ':=': Ident('define'), '=': Ident('assign')
-            }, self._comparison)
+            }, self._and_or)
+        end;
+
+        defmethod _and_or params do
+            left := self._not();
+            while type(op := self._current()) == 'Ident' and str(op).in(['and', 'or']) do
+                self._current_and_advance();
+                right := self._not();
+                if op == Ident("and") then
+                    left := Expr(Ident('scope'), [Expr(Ident('if'), [
+                        Expr(Ident('define'), [Ident('__core_and_left'), left]),
+                        right,
+                        Ident('__core_and_left')
+                    ])])
+                else
+                    left := Expr(Ident('scope'), [Expr(Ident('if'), [
+                        Expr(Ident('define'), [Ident('__core_or_left'), left]),
+                        Ident('__core_or_left'),
+                        right
+                    ])])
+                end
+            end;
+            left
+        end;
+
+        defmethod _not params do
+            self._unary({"not": Ident("not")}, self._comparison)
         end;
 
         defmethod _comparison params do
@@ -486,12 +512,28 @@ if __name__ == "__main__":
 
     # Example
 
-    print(walk(r""" -2 """)) # -> -2
-    print(walk(r""" --2 """)) # -> 2
-    print(walk(r""" 3--2 """)) # -> 5
+    print(ast(r""" True and False """)) # -> (scope, [(if, [(define, [__core_and_left, True]), False, __core_and_left])])
+    print(walk(r""" True and False """)) # -> False
+    print(walk(r""" False and True """)) # -> False
 
-    print(ast(r""" -add(2, 3) * 4 """)) # -> (mul, [(neg, [(add, [2, 3])]), 4])
-    print(walk(r""" -add(2, 3) * 4 """)) # -> -20
+    print(ast(r""" True or False """)) # ->
+    print(walk(r""" True or False """)) # -> True
+    print(walk(r""" False or True """)) # -> True
+
+    print(walk(r""" True and 2 """)) # -> 2
+    print(walk(r""" 0 and 2 / 0 """)) # -> 0
+    print(walk(r""" False or 2 """)) # -> 2
+    print(walk(r""" 1 or 2 / 0 """)) # -> 1
+
+    print(walk(r""" print(2) and 3 """)) # -> 2\nNone
+    print(walk(r""" not print(2) or 3 """)) # -> 2\nTrue
+
+    print(walk(r""" not True """)) # -> False
+    print(walk(r""" not False """)) # -> True
+    print(walk(r""" not not True """)) # -> True
+
+    print(ast(r""" a := not 2 == 2 or True """)) # -> (define, [a, (scope, [(if, [(define, [__core_or_left, (not, [(equal, [2, 2])])]), __core_or_left, True])])])
+    print(walk(r""" a := not 2 == 2 or True """)) # -> True
 
     exit()
 
