@@ -227,7 +227,7 @@ class Parser:
 
     def _primary(self):
         match self._current_token():
-            case Ident("("): return self._paren()
+            case Ident("("): return self._group()
             case Ident("["): return self._list()
             case Ident("{"): return self._dict()
             case None | bool() | int() | str(): return self._advance()
@@ -237,7 +237,7 @@ class Parser:
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
 
-    def _paren(self):
+    def _group(self):
         self._advance()
         expr = self._expression()
         self._consume(Ident(")"))
@@ -245,9 +245,9 @@ class Parser:
 
     def _list(self):
         self._advance()
-        array = self._comma_separated_exprs(Ident("]"))
+        exprs = self._comma_separated_exprs(Ident("]"))
         self._consume(Ident("]"))
-        return array
+        return exprs
 
     def _dict(self):
         def _parse_key_value(dic):
@@ -509,10 +509,10 @@ class Evaluator:
                     case dict(), str():
                         coll_val[index_val] = right_val
                     case _:
-                        assert False, f"Invalid indexing @ _evaluate_assign(): {coll_val}"
+                        assert False, f"Invalid indexing @ _assign(): {coll_val}, {index_val}"
                 return right_val
             case unexpected:
-                assert False, f"Invalid assign target @ _evaluate_assign(): {unexpected}"
+                assert False, f"Invalid assign target @ _assign(): {unexpected}"
 
     def _seq(self, exprs, env):
         val = None

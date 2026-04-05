@@ -151,6 +151,16 @@ class TestToT(TestBase):
         with pytest.raises(AssertionError, match="Unexpected token"):
             self.walk(r""" a := """)
 
+    def test_list_assign(self):
+        self.walk(""" b := [2, 3, [4, 5]] """)
+        self.walk(""" b[0] = 6 """)
+        assert self.walk(""" b[0] """) == 6
+        self.walk(""" b[2][1] = 7 """)
+        assert self.walk(""" b[2][1] """) == 7
+        assert self.walk(""" b """) == [6, 3, [4, 7]]
+
+        assert self.walk(""" a := [1, 2]; b := [3, 4]; a[0] = b[1] = 5; [a, b] """) == [[5, 2], [3, 5]]
+
     def test_logical_operations(self, capsys):
         assert self.walk(r""" True and False """) is False
         assert self.walk(r""" False and True """) is False
@@ -212,9 +222,39 @@ class TestToT(TestBase):
         assert self.walk(r""" 2 * 3 % 4 """) == 2
         assert self.walk(r""" 2 + 3 * add(4, 5) """) == 29
 
+    def test_call_index(self):
+        assert self.walk(r""" neg(2) """) == -2
+        assert self.walk(r""" add(2, 3) """) == 5
+
+        self.walk(""" a := [2, 3, [4, 5]] """)
+        assert self.walk(""" a[2][0] """) == 4
+        assert self.walk(""" a[2][-1] """) == 5
+
+        self.walk(""" c := func do [add, sub] end """)
+        assert self.walk(""" c()[0](2, 3) """) == 5
+
+        self.walk(""" e := [1] """)
+        with pytest.raises(Exception):
+            self.walk(""" e[None] = 2 """)
+        with pytest.raises(Exception):
+            self.walk(""" None[2] = 3 """)
+        with pytest.raises(Exception):
+            self.walk(""" [1, 2][5] """)
+        with pytest.raises(Exception):
+            self.walk(""" [1, 2][None] """)
+        with pytest.raises(Exception):
+            self.walk(""" None[0] """)
+
     def test_grouping(self):
         assert self.walk(r""" (2 + 3) * 4 """) == 20
         assert self.walk(r""" (2) * 3 """) == 6
+
+    def test_list(self, capsys):
+        assert self.walk(""" [] """) == []
+        assert self.walk(""" [2 + 3] """) == [5]
+        assert self.walk(""" [2, 3, [4, 5]] """) == [2, 3, [4, 5]]
+        self.walk(""" [print(2), print(3)] """)
+        assert capsys.readouterr().out == "2\n3\n"
 
     def test_unary_operations(self):
         assert self.walk(r""" -2 """) == -2
@@ -307,6 +347,25 @@ class TestToT(TestBase):
             self.walk(r""" if False then 2 elif True 3 end """)
         with pytest.raises(AssertionError, match="Expected end"):
             self.walk(r""" if False then 2 elif True then 3 """)
+
+    def test_list_functions(self, capsys):
+        self.walk(""" d := [2, 3, 4] """)
+        assert self.walk(""" len(d) """) == 3
+        assert self.walk(""" index(d, 2) """) == 4
+        assert self.walk(""" slice(d, 1, None) """) == [3, 4]
+        assert self.walk(""" slice(d, 1, 2) """) == [3]
+        assert self.walk(""" slice(d, None, 2) """) == [2, 3]
+        assert self.walk(""" slice(d, None, None) """) == [2, 3, 4]
+        assert self.walk(""" push(d, 5) """) is None
+        assert self.walk(""" d """) == [2, 3, 4, 5]
+        assert self.walk(""" pop(d) """) == 5
+        assert self.walk(""" d """) == [2, 3, 4]
+        assert self.walk(""" in(2, d) """) is True
+        assert self.walk(""" in(5, d) """) is False
+        assert self.walk(""" dd := copy(d); dd[0] = 6; [d, dd] """) == [[2, 3, 4], [6, 3, 4]]
+
+        assert self.walk(""" [2, 3] + [4, 5] """) == [2, 3, 4, 5]
+        assert self.walk(""" [2, 3] * 3 """) == [2, 3, 2, 3, 2, 3]
 
     def test_whitespace(self):
         assert self.walk(r"""   2 """) == 2

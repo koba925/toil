@@ -43,7 +43,7 @@ i.walk("""
                     self._ident()
                 elif ch.in('=!<>:') then
                     self._two_char_operator('=')
-                elif ch.in('+-*/%(),;') then
+                elif ch.in('+-*/%()[],;') then
                     self._tokens.push(Ident(ch)); self._advance()
                 else
                     raise('Invalid character @ tokenize: ' + ch)
@@ -180,15 +180,21 @@ i.walk("""
             self._unary({
                 '-': Ident('neg'), '+': Ident('+'), '*': Ident('*'),
                 '!': Ident('!'), '!!': Ident('!!')
-            }, self._call)
+            }, self._call_index)
         end;
 
-        defmethod _call params do
+        defmethod _call_index params do
             target := self._primary();
-            while self._current() == Ident('(') do
-                self._current_and_advance();
-                target = Expr(target, self._comma_separated_exprs(Ident(')')));
-                self._consume(Ident(')'))
+            while (op := self._current()).in([Ident('('), Ident('[')]) do
+                if op == Ident('(') then
+                    self._current_and_advance();
+                    target = Expr(target, self._comma_separated_exprs(Ident(')')));
+                    self._consume(Ident(')'))
+                else
+                    self._current_and_advance();
+                    target = Expr(Ident('index'), [target, self._expression()]);
+                    self._consume(Ident(']'))
+                end
             end;
             target
         end;
@@ -200,7 +206,8 @@ i.walk("""
                 case 'int' then self._current_and_advance()
                 case 'Ident' then
                     match str(self._current())
-                        case '(' then self._paren()
+                        case '(' then self._group()
+                        case '[' then self._list()
                         case 'func' then self._func()
                         case 'deffunc' then self._deffunc()
                         case 'scope' then self._scope()
@@ -217,11 +224,18 @@ i.walk("""
             end
         end;
 
-        defmethod _paren params do
+        defmethod _group params do
             self._current_and_advance();
             expr := self._expression();
             self._consume(Ident(')'));
             expr
+        end;
+
+        defmethod _list params do
+            self._current_and_advance();
+            exprs := self._comma_separated_exprs(Ident(']'));
+            self._consume(Ident(']'));
+            exprs
         end;
 
         defmethod _func params do
@@ -380,6 +394,7 @@ i.walk("""
                 case 'NoneType' then expr
                 case 'bool' then expr
                 case 'int' then expr
+                case 'list' then expr.map(func e do self.eval(e, env) end)
                 case 'Ident' then env.val(str(expr))
                 case 'Expr' then
                     match expr
@@ -410,9 +425,23 @@ i.walk("""
             env.define(str(name), val)
         end;
 
-        defmethod _assign params name, val_expr, env do
-            val := self.eval(val_expr, env);
-            env.assign(str(name), val)
+        defmethod _assign params left_expr, right_expr, env do
+            right_val := self.eval(right_expr, env);
+            match left_expr.type()
+                case 'Ident' then
+                    env.assign(str(left_expr), right_val)
+                case 'Expr' then
+                    match left_expr
+                        case Expr(Ident('index'), [coll_expr, index_expr]) then
+                            coll_val := self.eval(coll_expr, env);
+                            index_val := self.eval(index_expr, env);
+                            coll_val[index_val] = right_val
+                        case _ then
+                            raise('Invalid assign target @ _assign: ' + str(left_expr))
+                    end
+                case _ then
+                    raise('Invalid assign target @ _assign: ' + str(left_expr))
+            end
         end;
 
         defmethod _seq params exprs, env do
@@ -530,126 +559,46 @@ if __name__ == "__main__":
 
     # Example
 
-    print(walk(r""" quote(if 2 == 3 then 4 else 5 end) """)) # -> (if, [(equal, [2, 3]), 4, 5])
-    print(walk(r""" eval_expr(quote(if 2 == 3 then 4 else 5 end)) """)) # -> 5
+    # List
+    print(walk(""" [] """)) # -> []
+    print(walk(""" [2 + 3] """)) # -> [5]
+    print(walk(""" [2, 3, [4, 5]] """)) # ->  [2, 3, [4, 5]]
+    walk(""" [print(2), print(3)] """) # ->  2\n3
 
-    exit()
+    # List index
+    walk(""" a := [2, 3, [4, 5]] """)
+    print(walk(""" a[2][0] """)) # ->  4
+    print(walk(""" a[2][-1] """)) # ->  5
 
-    # Problems by deffunc and operators
-    walk(r"""
-        # GCD by recursion with function calls
-        deffunc gcd params a, b do
-            if b == 0 then
-                a
-            else
-                gcd(b, a % b)
-            end
-        end;
+    walk(""" c := func do [add, sub] end """)
+    print(walk(""" c()[0](2, 3) """)) # ->  5
 
-        print(gcd(12, 18)) # -> 6
-    """)
+    # walk(""" e := [1]; e[None] = 2 """) # -> Error
+    # walk(""" None[2] = 3 """)
 
-    walk(r"""
-        # GCD by iteration with function calls
-        deffunc gcd params a, b do
-            while b > 0 do
-                tmp := b; b = a % b; a = tmp
-            end;
-            a
-        end;
+    # List assignment
+    walk(""" b := [2, 3, [4, 5]] """)
+    walk(""" b[0] = 6 """)
+    print(walk(""" b[0] """)) # ->  6
+    walk(""" b[2][1] = 7 """)
+    print(walk(""" b[2][1] """)) # ->  7
+    print(walk(""" b """)) # ->  [6, 3, [4, 7]]
 
-        print(gcd(12, 18)) # -> 6
-    """)
+    # List functions
+    walk(""" d := [2, 3, 4] """)
+    print(walk(""" len(d) """)) # ->  3
+    print(walk(""" index(d, 2) """)) # ->  4
+    print(walk(""" slice(d, 1, None) """)) # ->  [3, 4]
+    print(walk(""" slice(d, 1, 2) """)) # ->  [3]
+    print(walk(""" slice(d, None, 2) """)) # ->  [2, 3]
+    print(walk(""" slice(d, None, None) """)) # ->  [2, 3, 4]
+    print(walk(""" push(d, 5) """)) # -> None
+    print(walk(""" d """)) # ->  [2, 3, 4, 5]
+    print(walk(""" pop(d) """)) # ->  5
+    print(walk(""" d """)) # ->  [2, 3, 4]
+    print(walk(""" in(2, d) """)) # ->  True
+    print(walk(""" in(5, d) """)) # ->  False
+    print(walk(""" dd := copy(d); dd[0] = 6; [d, dd] """)) # -> [[2, 3, 4], [6, 3, 4]]
 
-    walk(r"""
-        # Factorial by recursion with function calls
-        deffunc fac params n do
-            if n == 0 then 1
-            else n * fac(n - 1)
-            end
-        end;
-
-        print(fac(0)); # -> 1
-        print(fac(1)); # -> 1
-        print(fac(4))  # -> 24
-    """)
-
-    walk(r"""
-        # Factorial by iteration with function calls
-        deffunc fac params n do
-            result := 1;
-            while n > 0 do
-                result = result * n;
-                n = n - 1
-            end;
-            result
-        end
-
-        print(fac(0)); # -> 1
-        print(fac(1)); # -> 1
-        print(fac(4))  # -> 24
-    """)
-
-    walk(r"""
-        # Fibonacci by recursive with function calls
-        deffunc fib params n do
-            if n == 0 then 0
-            elif n == 1 then 1
-            else fib(n - 1) + fib(n - 2)
-            end
-        end;
-
-        print(fib(0)); # -> 0
-        print(fib(1)); # -> 1
-        print(fib(6))  # -> 8
-    """)
-
-    walk(r"""
-        # Fibonacci by iteration with function calls
-        deffunc fib params n do
-            a := 0; b := 1;
-            while n > 0 do
-                tmp := b; b = a + b; a = tmp;
-                n = n - 1
-            end;
-            a
-        end;
-
-        print(fib(0)); # -> 0
-        print(fib(1)); # -> 1
-        print(fib(6))  # -> 8
-    """)
-
-    walk(r"""
-        # Mutual recursion
-        deffunc even params n do
-            if n == 0 then True else odd(n - 1) end
-        end;
-
-        deffunc odd params n do
-            if n == 0 then False else even(n - 1) end
-        end;
-
-        print(even(2)); # -> True
-        print(even(3)); # -> False
-        print(odd(2)); # -> False
-        print(odd(3)) # -> True
-    """)
-
-    walk(r"""
-        # Closure and state: Counter
-        deffunc make_counter params do
-            count := 0;
-            func do
-                count = add(count, 1);
-                count
-            end
-        end;
-
-        c1 := make_counter();
-        c2 := make_counter();
-        print(c1()); # -> 1
-        print(c2()); # -> 1
-        print(c1()); # -> 2
-        print(c2()) # -> 2
-    """)
+    print(walk(""" [2, 3] + [4, 5] """)) # ->  [2, 3, 4, 5]
+    print(walk(""" [2, 3] * 3 """)) # ->  [2, 3, 2, 3, 2, 3]
