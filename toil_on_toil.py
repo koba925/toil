@@ -28,7 +28,7 @@ i.walk("""
                 while self._current_char().isspace() do self._advance() end;
 
                 if self._current_char() == '#' then
-                    while not self._current_char().in("\n", '$EOF')
+                    while not self._current_char().in('\n', '$EOF')
                          do self._advance()
                     end;
                     continue()
@@ -135,7 +135,7 @@ i.walk("""
             while type(op := self._current()) == 'Ident' and str(op).in(['and', 'or']) do
                 self._current_and_advance();
                 right := self._not();
-                if op == Ident("and") then
+                if op == Ident('and') then
                     left := Expr(Ident('scope'), [Expr(Ident('if'), [
                         Expr(Ident('define'), [Ident('__core_and_left'), left]),
                         right,
@@ -153,7 +153,7 @@ i.walk("""
         end;
 
         defmethod _not params do
-            self._unary({"not": Ident("not")}, self._comparison)
+            self._unary({'not': Ident('not')}, self._comparison)
         end;
 
         defmethod _comparison params do
@@ -178,8 +178,8 @@ i.walk("""
 
         defmethod _unaries params do
             self._unary({
-                "-": Ident("neg"), "+": Ident("+"), "*": Ident("*"),
-                "!": Ident("!"), "!!": Ident("!!")
+                '-': Ident('neg'), '+': Ident('+'), '*': Ident('*'),
+                '!': Ident('!'), '!!': Ident('!!')
             }, self._call)
         end;
 
@@ -202,6 +202,7 @@ i.walk("""
                     match str(self._current())
                         case '(' then self._paren()
                         case 'func' then self._func()
+                        case 'deffunc' then self._deffunc()
                         case 'scope' then self._scope()
                         case 'if' then self._if()
                         case 'while' then self._while()
@@ -230,6 +231,17 @@ i.walk("""
             body_expr := self._expression();
             self._consume(Ident('end'));
             Expr(Ident('func'), [params, body_expr])
+        end;
+
+        defmethod _deffunc params do
+            self._current_and_advance();
+            name := self._current_and_advance();
+            self._consume(Ident('params'));
+            params := self._comma_separated_exprs(Ident('do'));
+            self._consume(Ident('do'));
+            body_expr := self._expression();
+            self._consume(Ident('end'));
+            Expr(Ident('define'), [name, Expr(Ident('func'), [params, body_expr])])
         end;
 
         defmethod _scope params do
@@ -429,8 +441,8 @@ i.walk("""
 
         defmethod apply params op_val, args_val do
             match op_val
-                case Expr(Ident("hostfunc"), f) then f(args_val)
-                case Expr(Ident("closure"), [params, body_expr, closure_env]) then
+                case Expr(Ident('hostfunc'), f) then f(args_val)
+                case Expr(Ident('closure'), [params, body_expr, closure_env]) then
                     new_env := Environment(closure_env);
                     for [param, arg] in zip(params, args_val) do
                         new_env.define(str(param), arg)
@@ -453,45 +465,45 @@ i.walk("""
         end;
 
         defmethod _builtins params do
-            self._env.define("__builtins", None);
+            self._env.define('__builtins', None);
 
-            self._env.define("add", Expr(Ident("hostfunc"), func args do args[0] + args[1] end));
-            self._env.define("sub", Expr(Ident("hostfunc"), func args do args[0] - args[1] end));
-            self._env.define("mul", Expr(Ident("hostfunc"), func args do args[0] * args[1] end));
-            self._env.define("div", Expr(Ident("hostfunc"), func args do args[0] / args[1] end));
-            self._env.define("mod", Expr(Ident("hostfunc"), func args do args[0] % args[1] end));
-            self._env.define("neg", Expr(Ident("hostfunc"), func args do -args[0] end));
+            self._env.define('add', Expr(Ident('hostfunc'), func args do args[0] + args[1] end));
+            self._env.define('sub', Expr(Ident('hostfunc'), func args do args[0] - args[1] end));
+            self._env.define('mul', Expr(Ident('hostfunc'), func args do args[0] * args[1] end));
+            self._env.define('div', Expr(Ident('hostfunc'), func args do args[0] / args[1] end));
+            self._env.define('mod', Expr(Ident('hostfunc'), func args do args[0] % args[1] end));
+            self._env.define('neg', Expr(Ident('hostfunc'), func args do -args[0] end));
 
-            self._env.define("equal", Expr(Ident("hostfunc"), func args do args[0] == args[1] end));
-            self._env.define("not_equal", Expr(Ident("hostfunc"), func args do args[0] != args[1] end));
-            self._env.define("less", Expr(Ident("hostfunc"), func args do args[0] < args[1] end));
-            self._env.define("greater", Expr(Ident("hostfunc"), func args do args[0] > args[1] end));
-            self._env.define("less_equal", Expr(Ident("hostfunc"), func args do args[0] <= args[1] end));
-            self._env.define("greater_equal", Expr(Ident("hostfunc"), func args do args[0] >= args[1] end));
-            self._env.define("not", Expr(Ident("hostfunc"), func args do not args[0] end));
+            self._env.define('equal', Expr(Ident('hostfunc'), func args do args[0] == args[1] end));
+            self._env.define('not_equal', Expr(Ident('hostfunc'), func args do args[0] != args[1] end));
+            self._env.define('less', Expr(Ident('hostfunc'), func args do args[0] < args[1] end));
+            self._env.define('greater', Expr(Ident('hostfunc'), func args do args[0] > args[1] end));
+            self._env.define('less_equal', Expr(Ident('hostfunc'), func args do args[0] <= args[1] end));
+            self._env.define('greater_equal', Expr(Ident('hostfunc'), func args do args[0] >= args[1] end));
+            self._env.define('not', Expr(Ident('hostfunc'), func args do not args[0] end));
 
-            self._env.define("len", Expr(Ident("hostfunc"), func args do len(args[0]) end));
-            self._env.define("index", Expr(Ident("hostfunc"), func args do index(args[0], args[1]) end));
-            self._env.define("slice", Expr(Ident("hostfunc"), func args do slice(args[0], args[1], args[2]) end));
-            self._env.define("push", Expr(Ident("hostfunc"), func args do push(args[0], args[1]) end));
-            self._env.define("pop", Expr(Ident("hostfunc"), func args do pop(args[0]) end));
-            self._env.define("in", Expr(Ident("hostfunc"), func args do in(args[0], args[1]) end));
-            self._env.define("copy", Expr(Ident("hostfunc"), func args do copy(args[0]) end));
+            self._env.define('len', Expr(Ident('hostfunc'), func args do len(args[0]) end));
+            self._env.define('index', Expr(Ident('hostfunc'), func args do index(args[0], args[1]) end));
+            self._env.define('slice', Expr(Ident('hostfunc'), func args do slice(args[0], args[1], args[2]) end));
+            self._env.define('push', Expr(Ident('hostfunc'), func args do push(args[0], args[1]) end));
+            self._env.define('pop', Expr(Ident('hostfunc'), func args do pop(args[0]) end));
+            self._env.define('in', Expr(Ident('hostfunc'), func args do in(args[0], args[1]) end));
+            self._env.define('copy', Expr(Ident('hostfunc'), func args do copy(args[0]) end));
 
-            self._env.define("chr", Expr(Ident("hostfunc"), func args do chr(args[0]) end));
-            self._env.define("ord", Expr(Ident("hostfunc"), func args do ord(args[0]) end));
-            self._env.define("join", Expr(Ident("hostfunc"), func args do join(args[0], args[1]) end));
+            self._env.define('chr', Expr(Ident('hostfunc'), func args do chr(args[0]) end));
+            self._env.define('ord', Expr(Ident('hostfunc'), func args do ord(args[0]) end));
+            self._env.define('join', Expr(Ident('hostfunc'), func args do join(args[0], args[1]) end));
 
-            self._env.define("keys", Expr(Ident("hostfunc"), func args do keys(args[0]) end));
-            self._env.define("items", Expr(Ident("hostfunc"), func args do items(args[0]) end));
+            self._env.define('keys', Expr(Ident('hostfunc'), func args do keys(args[0]) end));
+            self._env.define('items', Expr(Ident('hostfunc'), func args do items(args[0]) end));
 
-            self._env.define("type", Expr(Ident("hostfunc"), func args do type(args[0]) end));
-            self._env.define("str", Expr(Ident("hostfunc"), func args do str(args[0]) end));
-            self._env.define("int", Expr(Ident("hostfunc"), func args do int(args[0]) end));
-            self._env.define("Ident", Expr(Ident("hostfunc"), func args do Ident(args[0]) end));
-            self._env.define("Expr", Expr(Ident("hostfunc"), func args do apply(Expr, args) end));
+            self._env.define('type', Expr(Ident('hostfunc'), func args do type(args[0]) end));
+            self._env.define('str', Expr(Ident('hostfunc'), func args do str(args[0]) end));
+            self._env.define('int', Expr(Ident('hostfunc'), func args do int(args[0]) end));
+            self._env.define('Ident', Expr(Ident('hostfunc'), func args do Ident(args[0]) end));
+            self._env.define('Expr', Expr(Ident('hostfunc'), func args do apply(Expr, args) end));
 
-            self._env.define("print", Expr(Ident("hostfunc"), func args do apply(print, args) end))
+            self._env.define('print', Expr(Ident('hostfunc'), func args do apply(print, args) end))
         end;
 
         defmethod scan params src do Scanner(src).tokenize() end;
@@ -512,38 +524,18 @@ if __name__ == "__main__":
 
     # Example
 
-    print(ast(r""" True and False """)) # -> (scope, [(if, [(define, [__core_and_left, True]), False, __core_and_left])])
-    print(walk(r""" True and False """)) # -> False
-    print(walk(r""" False and True """)) # -> False
+    print(ast(r""" deffunc myadd params a, b do a + b end """)) # -> (define, [myadd, (func, [[a, b], (add, [a, b])])])
+    walk(r""" deffunc myadd params a, b do a + b end """)
+    print(walk(r""" myadd(2, 3) """)) # -> 5
 
-    print(ast(r""" True or False """)) # ->
-    print(walk(r""" True or False """)) # -> True
-    print(walk(r""" False or True """)) # -> True
-
-    print(walk(r""" True and 2 """)) # -> 2
-    print(walk(r""" 0 and 2 / 0 """)) # -> 0
-    print(walk(r""" False or 2 """)) # -> 2
-    print(walk(r""" 1 or 2 / 0 """)) # -> 1
-
-    print(walk(r""" print(2) and 3 """)) # -> 2\nNone
-    print(walk(r""" not print(2) or 3 """)) # -> 2\nTrue
-
-    print(walk(r""" not True """)) # -> False
-    print(walk(r""" not False """)) # -> True
-    print(walk(r""" not not True """)) # -> True
-
-    print(ast(r""" a := not 2 == 2 or True """)) # -> (define, [a, (scope, [(if, [(define, [__core_or_left, (not, [(equal, [2, 2])])]), __core_or_left, True])])])
-    print(walk(r""" a := not 2 == 2 or True """)) # -> True
-
-    exit()
-
+    # Problems by deffunc and operators
     walk(r"""
         # GCD by recursion with function calls
-        gcd := func a, b do
-            if equal(b, 0) then
+        deffunc gcd params a, b do
+            if b == 0 then
                 a
             else
-                gcd(b, mod(a, b))
+                gcd(b, a % b)
             end
         end;
 
@@ -552,9 +544,9 @@ if __name__ == "__main__":
 
     walk(r"""
         # GCD by iteration with function calls
-        gcd := func a, b do
-            while greater(b, 0) do
-                tmp := b; b = mod(a, b); a = tmp
+        deffunc gcd params a, b do
+            while b > 0 do
+                tmp := b; b = a % b; a = tmp
             end;
             a
         end;
@@ -564,9 +556,9 @@ if __name__ == "__main__":
 
     walk(r"""
         # Factorial by recursion with function calls
-        fac := func n do
-            if equal(n, 0) then 1
-            else mul(n, fac(sub(n, 1)))
+        deffunc fac params n do
+            if n == 0 then 1
+            else n * fac(n - 1)
             end
         end;
 
@@ -577,14 +569,14 @@ if __name__ == "__main__":
 
     walk(r"""
         # Factorial by iteration with function calls
-        fac := func n do
+        deffunc fac params n do
             result := 1;
-            while greater(n, 0) do
-                result = mul(result, n);
-                n = sub(n, 1)
+            while n > 0 do
+                result = result * n;
+                n = n - 1
             end;
             result
-        end;
+        end
 
         print(fac(0)); # -> 1
         print(fac(1)); # -> 1
@@ -593,10 +585,10 @@ if __name__ == "__main__":
 
     walk(r"""
         # Fibonacci by recursive with function calls
-        fib := func n do
-            if equal(n, 0) then 0
-            elif equal(n, 1) then 1
-            else add(fib(sub(n, 1)), fib(sub(n, 2)))
+        deffunc fib params n do
+            if n == 0 then 0
+            elif n == 1 then 1
+            else fib(n - 1) + fib(n - 2)
             end
         end;
 
@@ -607,11 +599,11 @@ if __name__ == "__main__":
 
     walk(r"""
         # Fibonacci by iteration with function calls
-        fib := func n do
+        deffunc fib params n do
             a := 0; b := 1;
-            while greater(n, 0) do
-                tmp := b; b = add(a, b); a = tmp;
-                n = sub(n, 1)
+            while n > 0 do
+                tmp := b; b = a + b; a = tmp;
+                n = n - 1
             end;
             a
         end;
@@ -623,12 +615,12 @@ if __name__ == "__main__":
 
     walk(r"""
         # Mutual recursion
-        even := func n do
-            if equal(n, 0) then True else odd(sub(n, 1)) end
+        deffunc even params n do
+            if n == 0 then True else odd(n - 1) end
         end;
 
-        odd := func n do
-            if equal(n, 0) then False else even(sub(n, 1)) end
+        deffunc odd params n do
+            if n == 0 then False else even(n - 1) end
         end;
 
         print(even(2)); # -> True
@@ -639,7 +631,7 @@ if __name__ == "__main__":
 
     walk(r"""
         # Closure and state: Counter
-        make_counter := func do
+        deffunc make_counter params do
             count := 0;
             func do
                 count = add(count, 1);

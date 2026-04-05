@@ -274,6 +274,10 @@ class TestToT(TestBase):
         with pytest.raises(AssertionError, match="Expected end @ consume: \\$EOF"):
             self.walk("func a do add(a, 2)")
 
+    def test_deffunc(self):
+        self.walk(r""" deffunc myadd params a, b do a + b end """)
+        assert self.walk(r""" myadd(2, 3) """) == 5
+
     def test_if(self):
         assert self.walk(r""" if True then 2 end """) == 2
         assert self.walk(r""" if False then 2 end """) is None
@@ -315,7 +319,7 @@ class TestToT(TestBase):
         with pytest.raises(AssertionError, match="Extra token"):
             self.walk(r""" 2 3 """)
 
-class TestProblemsWithFunctions(TestBase):
+class TestExamplesWithFunc(TestBase):
     def test_recursion_gcd(self):
         self.walk("""
             gcd := func a, b do
@@ -426,6 +430,96 @@ class TestProblemsWithFunctions(TestBase):
         assert self.walk("fib(0)") == 0
         assert self.walk("fib(1)") == 1
         assert self.walk("fib(6)") == 8
+
+class TestExamplesWithDeffunc(TestBase):
+    def test_recursion_gcd(self):
+        self.walk("""
+            deffunc gcd params a, b do
+                if b == 0 then a else gcd(b, a % b) end
+            end
+        """)
+        assert self.walk("gcd(12, 18)") == 6
+
+    def test_iteration_gcd(self):
+        self.walk("""
+            deffunc gcd params a, b do
+                while b > 0 do
+                    tmp := b; b = a % b; a = tmp
+                end;
+                a
+            end
+        """)
+        assert self.walk("gcd(12, 18)") == 6
+
+    def test_recursion_fac(self):
+        self.walk("""
+            deffunc fac params n do
+                if n == 0 then 1
+                else n * fac(n - 1)
+                end
+            end
+        """)
+        assert self.walk("fac(0)") == 1
+        assert self.walk("fac(1)") == 1
+        assert self.walk("fac(4)") == 24
+
+    def test_iteration_fac(self):
+        self.walk("""
+            deffunc fac params n do
+                result := 1;
+                while n > 0 do
+                    result = result * n;
+                    n = n - 1
+                end;
+                result
+            end
+        """)
+        assert self.walk("fac(0)") == 1
+        assert self.walk("fac(1)") == 1
+        assert self.walk("fac(4)") == 24
+
+    def test_recursion_fib(self):
+        self.walk("""
+            deffunc fib params n do
+                if n == 0 then 0
+                elif n == 1 then 1
+                else fib(n - 1) + fib(n - 2)
+                end
+            end
+        """)
+        assert self.walk("fib(0)") == 0
+        assert self.walk("fib(1)") == 1
+        assert self.walk("fib(6)") == 8
+
+    def test_iteration_fib(self):
+        self.walk("""
+            deffunc fib params n do
+                a := 0; b := 1;
+                while n > 0 do
+                    tmp := b; b = a + b; a = tmp;
+                    n = n - 1
+                end;
+                a
+            end
+        """)
+        assert self.walk("fib(0)") == 0
+        assert self.walk("fib(1)") == 1
+        assert self.walk("fib(6)") == 8
+
+    def test_mutual_recursion(self):
+        self.walk("""
+            deffunc even params n do
+                if n == 0 then True else odd(n - 1) end
+            end;
+
+            deffunc odd params n do
+                if n == 0 then False else even(n - 1) end
+            end
+        """)
+        assert self.walk("even(2)") is True
+        assert self.walk("even(3)") is False
+        assert self.walk("odd(2)") is False
+        assert self.walk("odd(3)") is True
 
 if __name__ == "__main__":
     pytest.main([__file__])
