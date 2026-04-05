@@ -10,7 +10,7 @@ i.walk("""
     end;
     deffunc isdigit params c do type(c) == 'str' and '0' <= c and c <= '9' end;
     deffunc isalnum params c do isalpha(c) or isdigit(c) end;
-    deffunc isspace params c do c == ' ' or c == '\n' end;
+    deffunc isspace params c do c == ' ' or c == "\n" end;
 
     deffunc is_ident_first params c do isalpha(c) or c == '_' end;
     deffunc is_ident_rest params c do isalnum(c) or c == '_' end;
@@ -505,7 +505,11 @@ i.walk("""
             self._env.define('Ident', Expr(Ident('hostfunc'), func args do Ident(args[0]) end));
             self._env.define('Expr', Expr(Ident('hostfunc'), func args do apply(Expr, args) end));
 
-            self._env.define('print', Expr(Ident('hostfunc'), func args do apply(print, args) end))
+            self._env.define('print', Expr(Ident('hostfunc'), func args do apply(print, args) end));
+
+            self._env.define('eval_expr', Expr(Ident('hostfunc'), func args do
+                Evaluator().eval(args[0], self._env)
+            end))
         end;
 
         defmethod scan params src do Scanner(src).tokenize() end;
@@ -526,11 +530,8 @@ if __name__ == "__main__":
 
     # Example
 
-    print(ast(r""" quote(hello_world) """)) # -> (quote, [hello_world])
-    print(walk(r""" quote(hello_world) """)) # -> hello_world
-    walk(r""" print(quote(hello_world)) """) # -> hello_world
-
     print(walk(r""" quote(if 2 == 3 then 4 else 5 end) """)) # -> (if, [(equal, [2, 3]), 4, 5])
+    print(walk(r""" eval_expr(quote(if 2 == 3 then 4 else 5 end)) """)) # -> 5
 
     exit()
 
