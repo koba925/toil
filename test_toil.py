@@ -686,7 +686,8 @@ class TestGo(TestBase):
             self.i.walk(""" None[2] = 3 """)
 
     def test_stdlib(self):
-        assert self.i.walk(""" a := range(2, 10) """) == [2, 3, 4, 5, 6, 7, 8, 9]
+        assert self.i.walk(""" a := range(2, 10, 1) """) == [2, 3, 4, 5, 6, 7, 8, 9]
+        assert self.i.walk(""" b := range(2, 10, 3) """) == [2, 5, 8]
         assert self.i.walk(""" first(a) """) == 2
         assert self.i.walk(""" rest(a) """) == [3, 4, 5, 6, 7, 8, 9]
         assert self.i.walk(""" last(a) """) == 9

@@ -213,6 +213,7 @@ i.walk("""
                         case 'scope' then self._scope()
                         case 'if' then self._if()
                         case 'while' then self._while()
+                        case 'for' then self._for()
                         case name then
                             if name.is_ident() then
                                 self._current_and_advance()
@@ -291,6 +292,42 @@ i.walk("""
             body_expr := self._expression();
             self._consume(Ident('end'));
             Expr(Ident('while'), [cond_expr, body_expr])
+        end;
+
+        defmethod _for params do
+            self._current_and_advance();
+            var_expr := self._expression();
+            self._consume(Ident('in'));
+            coll_expr := self._expression();
+            self._consume(Ident('do'));
+            body_expr := self._expression();
+            self._consume(Ident('end'));
+            Expr(Ident('scope'), [Expr(Ident('seq'), [
+                Expr(Ident('define'), [Ident('__for_coll'), coll_expr]),
+                Expr(Ident('define'), [Ident('__for_index'), -1]),
+                Expr(Ident('while'), [
+                    Expr(Ident('less'), [
+                        Expr(Ident('add'), [Ident('__for_index'), 1]),
+                        Expr(Ident('len'), [Ident('__for_coll')])
+                    ]),
+                    Expr(Ident('seq'), [
+                        Expr(Ident('assign'), [
+                            Ident('__for_index'),
+                            Expr(Ident('add'), [Ident('__for_index'), 1])
+                        ]),
+                        Expr(Ident('scope'), [Expr(Ident('seq'), [
+                            Expr(Ident('define'), [
+                                var_expr,
+                                Expr(Ident('index'), [
+                                    Ident('__for_coll'),
+                                    Ident('__for_index')
+                                ])
+                            ]),
+                            body_expr
+                        ])])
+                    ])
+                ])
+            ])])
         end;
 
         defmethod _binary_left params ops, sub_elem do
@@ -598,18 +635,18 @@ i.walk("""
                 end
             ');
             self.walk('
-                deffunc range params start, stop do
+                deffunc range params start, stop, step do
                     b := [];
                     i := start; while i < stop do
                         push(b, i);
-                        i = i + 1
+                        i = i + step
                     end;
                     b
                 end
             ');
             self.walk('
                 deffunc enumerate params a do
-                    zip(range(0, len(a)), a)
+                    zip(range(0, len(a), 1), a)
                 end
             ');
 
@@ -635,30 +672,19 @@ if __name__ == "__main__":
 
     # Example
 
-    print(walk(r""" a := range(2, 10) """)) # -> [2, 3, 4, 5, 6, 7, 8, 9]
-    print(walk(r""" first(a) """)) # -> 2
-    print(walk(r""" rest(a) """)) # -> [3, 4, 5, 6, 7, 8, 9]
-    print(walk(r""" last(a) """)) # -> 9
-    print(walk(r""" map(a, func n do n * 2 end) """)) # -> [4, 6, 8, 10, 12, 14, 16, 18]
-    print(walk(r""" filter(a, func n do n % 2 == 0 end) """)) # -> [2, 4, 6, 8]
-    print(walk(r""" reduce(a, add, 0) """)) # -> 44
-    print(walk(r""" reverse(a) """)) # -> [9, 8, 7, 6, 5, 4, 3, 2]
-    print(walk(r""" zip(a, [4, 5, 6]) """)) # -> [[2, 4], [3, 5], [4, 6]]
-    print(walk(r""" enumerate(a) """)) # -> [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
+    print(ast(r""" sum := 0; for n in range(2, 5, 1) do sum = sum + n end """))
+    # -> (seq, [(define, [sum, 0]), (scope, [(seq, [(define, [__for_coll, (range, [2, 5, 1])]), (define, [__for_index, -1]), (while, [(less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (scope, [(seq, [(define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])])])])])])])])
+    print(walk(r""" sum := 0; for n in range(2, 5, 1) do sum = sum + n end """)) # -> 9
 
     print(walk(r"""
         deffunc bubblesort params a do
             n := len(a);
-            i := 0; while i < n do
-                j := 0; while j < n - i - 1 do
+            for i in range(0, n, 1) do
+                for j in range(0, n - i - 1, 1) do
                     if a[j] > a[j + 1] then
-                        tmp := a[j];
-                        a[j] = a[j + 1];
-                        a[j + 1] = tmp
-                    end;
-                    j = j + 1
-                end;
-                i = i + 1
+                        tmp := a[j]; a[j] = a[j + 1]; a[j + 1] = tmp
+                    end
+                end
             end;
             a
         end;
@@ -668,10 +694,8 @@ if __name__ == "__main__":
 
     print(walk(r"""
         deffunc quicksort params a do
-            if len(a) <= 1 then a
-            else
-                pivot := first(a);
-                rem := rest(a);
+            if len(a) <= 1 then a else
+                pivot := first(a); rem := rest(a);
                 left := filter(rem, func x do x < pivot end);
                 right := filter(rem, func x do x >= pivot end);
                 quicksort(left) + [pivot] + quicksort(right)
@@ -682,17 +706,17 @@ if __name__ == "__main__":
     """)) # -> [2, 3, 4, 5, 8]
 
     print(walk(r"""
-        n := 10;
-        sieve := [False, False] + [True] * (n - 2);
-        i := 2; while i * i < n do
-            if sieve[i] then
-                j := i * i; while j < n do
-                    sieve[j] = False;
-                    j = j + i
-                end
+        deffunc sieve params n do
+            s := [False, False] + [True] * (n - 2);
+            i := 2; while i * i < n do
+                if s[i] then
+                    for j in range(i * i, n, i) do s[j] = False end
+                end;
+                i = i + 1
             end;
-            i = i + 1
+
+            map(filter(enumerate(s), last), first)
         end;
 
-        map(filter(enumerate(sieve), last), first)
+        sieve(10)
     """)) # -> [2, 3, 5, 7]

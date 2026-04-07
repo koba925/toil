@@ -368,7 +368,8 @@ class TestToT(TestBase):
         assert self.walk(""" [2, 3] * 3 """) == [2, 3, 2, 3, 2, 3]
 
     def test_stdlib(self):
-        assert self.walk(""" a := range(2, 10) """) == [2, 3, 4, 5, 6, 7, 8, 9]
+        assert self.walk(""" a := range(2, 10, 1) """) == [2, 3, 4, 5, 6, 7, 8, 9]
+        assert self.walk(""" b := range(2, 10, 3) """) == [2, 5, 8]
         assert self.walk(""" first(a) """) == 2
         assert self.walk(""" rest(a) """) == [3, 4, 5, 6, 7, 8, 9]
         assert self.walk(""" last(a) """) == 9
@@ -396,119 +397,7 @@ class TestToT(TestBase):
         with pytest.raises(AssertionError, match="Extra token"):
             self.walk(r""" 2 3 """)
 
-class TestExamplesWithFunc(TestBase):
-    def test_recursion_gcd(self):
-        self.walk("""
-            gcd := func a, b do
-                if equal(b, 0) then
-                    a
-                else
-                    gcd(b, mod(a, b))
-                end
-            end
-        """)
-        assert self.walk("gcd(12, 18)") == 6
-
-    def test_recursion_fac(self):
-        self.walk("""
-            fac := func n do
-                if equal(n, 0) then 1
-                else mul(n, fac(sub(n, 1)))
-                end
-            end
-        """)
-        assert self.walk("fac(0)") == 1
-        assert self.walk("fac(1)") == 1
-        assert self.walk("fac(4)") == 24
-
-    def test_recursion_fib(self):
-        self.walk("""
-            fib := func n do
-                if equal(n, 0) then 0
-                elif equal(n, 1) then 1
-                else add(fib(sub(n, 1)), fib(sub(n, 2)))
-                end
-            end
-        """)
-        assert self.walk("fib(0)") == 0
-        assert self.walk("fib(1)") == 1
-        assert self.walk("fib(6)") == 8
-
-    def test_mutual_recursion(self):
-        self.walk("""
-            even := func n do
-                if equal(n, 0) then True else odd(sub(n, 1)) end
-            end;
-
-            odd := func n do
-                if equal(n, 0) then False else even(sub(n, 1)) end
-            end
-        """)
-        assert self.walk("even(2)") is True
-        assert self.walk("even(3)") is False
-        assert self.walk("odd(2)") is False
-        assert self.walk("odd(3)") is True
-
-    def test_closure_counter(self):
-        self.walk("""
-            make_counter := func do
-                count := 0;
-                func do
-                    count = add(count, 1);
-                    count
-                end
-            end;
-
-            c1 := make_counter();
-            c2 := make_counter()
-        """)
-        assert self.walk("c1()") == 1
-        assert self.walk("c1()") == 2
-        assert self.walk("c2()") == 1
-        assert self.walk("c2()") == 2
-
-    def test_iteration_gcd(self):
-        self.walk("""
-            gcd := func a, b do
-                while greater(b, 0) do
-                    tmp := b; b = mod(a, b); a = tmp
-                end;
-                a
-            end
-        """)
-        assert self.walk("gcd(12, 18)") == 6
-
-    def test_iteration_fac(self):
-        self.walk("""
-            fac := func n do
-                result := 1;
-                while greater(n, 0) do
-                    result = mul(result, n);
-                    n = sub(n, 1)
-                end;
-                result
-            end
-        """)
-        assert self.walk("fac(0)") == 1
-        assert self.walk("fac(1)") == 1
-        assert self.walk("fac(4)") == 24
-
-    def test_iteration_fib(self):
-        self.walk("""
-            fib := func n do
-                a := 0; b := 1;
-                while greater(n, 0) do
-                    tmp := b; b = add(a, b); a = tmp;
-                    n = sub(n, 1)
-                end;
-                a
-            end
-        """)
-        assert self.walk("fib(0)") == 0
-        assert self.walk("fib(1)") == 1
-        assert self.walk("fib(6)") == 8
-
-class TestExamplesWithDeffunc(TestBase):
+class TestExamples(TestBase):
     def test_recursion_gcd(self):
         self.walk("""
             deffunc gcd params a, b do
@@ -531,9 +420,7 @@ class TestExamplesWithDeffunc(TestBase):
     def test_recursion_fac(self):
         self.walk("""
             deffunc fac params n do
-                if n == 0 then 1
-                else n * fac(n - 1)
-                end
+                if n == 0 then 1 else n * fac(n - 1) end
             end
         """)
         assert self.walk("fac(0)") == 1
@@ -544,9 +431,8 @@ class TestExamplesWithDeffunc(TestBase):
         self.walk("""
             deffunc fac params n do
                 result := 1;
-                while n > 0 do
-                    result = result * n;
-                    n = n - 1
+                for n in range(1, n + 1, 1) do
+                    result = result * n
                 end;
                 result
             end
@@ -572,9 +458,8 @@ class TestExamplesWithDeffunc(TestBase):
         self.walk("""
             deffunc fib params n do
                 a := 0; b := 1;
-                while n > 0 do
-                    tmp := b; b = a + b; a = tmp;
-                    n = n - 1
+                for n in range(0, n, 1) do
+                    tmp := b; b = a + b; a = tmp
                 end;
                 a
             end
@@ -593,20 +478,31 @@ class TestExamplesWithDeffunc(TestBase):
         assert self.walk("odd(2)") is False
         assert self.walk("odd(3)") is True
 
+    def test_closure_counter(self):
+        self.walk("""
+            make_counter := func do
+                count := 0;
+                func do count = count + 1 end
+            end;
+
+            c1 := make_counter();
+            c2 := make_counter()
+        """)
+        assert self.walk("c1()") == 1
+        assert self.walk("c1()") == 2
+        assert self.walk("c2()") == 1
+        assert self.walk("c2()") == 2
+
     def test_bubblesort(self):
         assert self.walk("""
             deffunc bubblesort params a do
                 n := len(a);
-                i := 0; while i < n do
-                    j := 0; while j < n - i - 1 do
+                for i in range(0, n, 1) do
+                    for j in range(0, n - i - 1, 1) do
                         if a[j] > a[j + 1] then
-                            tmp := a[j];
-                            a[j] = a[j + 1];
-                            a[j + 1] = tmp
-                        end;
-                        j = j + 1
-                    end;
-                    i = i + 1
+                            tmp := a[j]; a[j] = a[j + 1]; a[j + 1] = tmp
+                        end
+                    end
                 end;
                 a
             end;
@@ -617,10 +513,8 @@ class TestExamplesWithDeffunc(TestBase):
     def test_quicksort(self):
         assert self.walk("""
             deffunc quicksort params a do
-                if len(a) <= 1 then a
-                else
-                    pivot := first(a);
-                    rem := rest(a);
+                if len(a) <= 1 then a else
+                    pivot := first(a); rem := rest(a);
                     left := filter(rem, func x do x < pivot end);
                     right := filter(rem, func x do x >= pivot end);
                     quicksort(left) + [pivot] + quicksort(right)
@@ -632,19 +526,19 @@ class TestExamplesWithDeffunc(TestBase):
 
     def test_sieve(self):
         assert self.walk("""
-            n := 10;
-            sieve := [False, False] + [True] * (n - 2);
-            i := 2; while i * i < n do
-                if sieve[i] then
-                    j := i * i; while j < n do
-                        sieve[j] = False;
-                        j = j + i
-                    end
+            deffunc sieve params n do
+                s := [False, False] + [True] * (n - 2);
+                i := 2; while i * i < n do
+                    if s[i] then
+                        for j in range(i * i, n, i) do s[j] = False end
+                    end;
+                    i = i + 1
                 end;
-                i = i + 1
+
+                map(filter(enumerate(s), last), first)
             end;
 
-            map(filter(enumerate(sieve), last), first)
+            sieve(10)
         """) == [2, 3, 5, 7]
 
 if __name__ == "__main__":

@@ -907,17 +907,17 @@ class Interpreter:
                 b
             end;
 
-            deffunc range params start, stop do
+            deffunc range params start, stop, step do
                 b := [];
                 i := start; while i < stop do
                     push(b, i);
-                    i = i + 1
+                    i = i + step
                 end;
                 b
             end;
 
             deffunc enumerate params a do
-                zip(range(0, len(a)), a)
+                zip(range(0, len(a), 1), a)
             end
         """)
 
