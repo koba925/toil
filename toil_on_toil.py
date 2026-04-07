@@ -585,22 +585,23 @@ i.walk("""
                 deffunc last params a do a[-1] end
             ');
             self.walk('
+                deffunc range params start, stop, step do
+                    b := [];
+                    i := start; while i < stop do push(b, i); i = i + step end;
+                    b
+                end
+            ');
+            self.walk('
                 deffunc map params a, f do
-                    b := []; l := len(a);
-                    i := 0; while i < l do
-                        push(b, f(a[i]));
-                        i = i + 1
-                    end;
+                    b := [];
+                    for x in a do push(b, f(x)) end;
                     b
                 end
             ');
             self.walk('
                 deffunc filter params a, f do
-                    b := []; l := len(a);
-                    i := 0; while i < l do
-                        if f(a[i]) then push(b, a[i]) end;
-                        i = i + 1
-                    end;
+                    b := [];
+                    for x in a do if f(x) then push(b, x) end end;
                     b
                 end
             ');
@@ -608,39 +609,22 @@ i.walk("""
                 deffunc zip params a, b do
                     z := []; la := len(a); lb := len(b);
                     i := 0; while i < la and i < lb do
-                        push(z, [a[i], b[i]]);
-                        i = i + 1
+                        push(z, [a[i], b[i]]); i = i + 1
                     end;
                     z
                 end
             ');
             self.walk('
                 deffunc reduce params a, f, init do
-                    acc := init; l := len(a);
-                    i := 0; while i < l do
-                        acc = f(acc, a[i]);
-                        i = i + 1
-                    end;
+                    acc := init;
+                    for x in a do acc = f(acc, x) end;
                     acc
                 end
             ');
             self.walk('
                 deffunc reverse params a do
-                    b := []; i := len(a) - 1;
-                    while i >= 0 do
-                        push(b, a[i]);
-                        i = i - 1
-                    end;
-                    b
-                end
-            ');
-            self.walk('
-                deffunc range params start, stop, step do
-                    b := [];
-                    i := start; while i < stop do
-                        push(b, i);
-                        i = i + step
-                    end;
+                    b := []; l := len(a);
+                    for i in range(1, l + 1, 1) do push(b, a[l - i]) end;
                     b
                 end
             ');
@@ -671,10 +655,6 @@ if __name__ == "__main__":
     def walk(src): return i.walk(f""" tot.walk('{src}') """)
 
     # Example
-
-    print(ast(r""" sum := 0; for n in range(2, 5, 1) do sum = sum + n end """))
-    # -> (seq, [(define, [sum, 0]), (scope, [(seq, [(define, [__for_coll, (range, [2, 5, 1])]), (define, [__for_index, -1]), (while, [(less, [(add, [__for_index, 1]), (len, [__for_coll])]), (seq, [(assign, [__for_index, (add, [__for_index, 1])]), (scope, [(seq, [(define, [n, (index, [__for_coll, __for_index])]), (assign, [sum, (add, [sum, n])])])])])])])])])
-    print(walk(r""" sum := 0; for n in range(2, 5, 1) do sum = sum + n end """)) # -> 9
 
     print(walk(r"""
         deffunc bubblesort params a do

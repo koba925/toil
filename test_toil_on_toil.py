@@ -377,6 +377,7 @@ class TestToT(TestBase):
         assert self.walk(""" filter(a, func n do n % 2 == 0 end) """) == [2, 4, 6, 8]
         assert self.walk(""" reduce(a, add, 0) """) == 44
         assert self.walk(""" reverse(a) """) == [9, 8, 7, 6, 5, 4, 3, 2]
+        assert self.walk(""" reverse([]) """) == []
         assert self.walk(""" zip(a, [4, 5, 6]) """) == [[2, 4], [3, 5], [4, 6]]
         assert self.walk(""" enumerate(a) """) == [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
 
