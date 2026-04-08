@@ -381,6 +381,32 @@ class TestToT(TestBase):
         assert self.walk(""" zip(a, [4, 5, 6]) """) == [[2, 4], [3, 5], [4, 6]]
         assert self.walk(""" enumerate(a) """) == [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
 
+    def test_return(self):
+        self.walk("""
+            deffunc f params a do
+                if a == 2 then return(3) end;
+                4
+            end
+        """)
+        assert self.walk(""" f(2) """) == 3
+        assert self.walk(""" f(3) """) == 4
+
+        self.walk("""
+            deffunc fib params n do
+                if n == 0 then return(0) end;
+                if n == 1 then return(1) end;
+                fib(n - 1) + fib(n - 2)
+            end
+        """)
+        assert self.walk(""" fib(0) """) == 0
+        assert self.walk(""" fib(1) """) == 1
+        assert self.walk(""" fib(6) """) == 8
+
+        assert self.walk(""" func do return() end () """) is None
+
+        with pytest.raises(Exception):
+            self.walk(""" return() """)
+
     def test_whitespace(self):
         assert self.walk(r"""   2 """) == 2
         assert self.walk(r""" 2   """) == 2

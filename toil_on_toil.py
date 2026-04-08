@@ -424,6 +424,10 @@ i.walk("""
 """)
 
 i.walk("""
+    ReturnException := Ident('ReturnException')
+""")
+
+i.walk("""
     defclass Evaluator params do
         defmethod eval params expr, env do
             # print(expr);
@@ -439,6 +443,8 @@ i.walk("""
                             expr
                         case Expr(Ident('func'), [params, body_expr]) then
                             Expr(Ident('closure'), [params, body_expr, env])
+                        case Expr(Ident('return'), args) then
+                            raise([ReturnException, if args.len() == 0 then None else args[0] end])
                         case Expr(Ident('scope'), [body_expr]) then
                             self.eval(body_expr, Environment(env))
                         case Expr(Ident('define'), [name, val_expr]) then
@@ -515,7 +521,11 @@ i.walk("""
                     for [param, arg] in zip(params, args_val) do
                         new_env.define(str(param), arg)
                     end;
-                    self.eval(body_expr, new_env)
+                    try
+                        self.eval(body_expr, new_env)
+                    except [ReturnException, val] then
+                        val
+                    end
                 case _ then raise('Invalid operator @ apply: ' + str(op_val))
             end
         end
@@ -642,7 +652,13 @@ i.walk("""
         defmethod parse params tokens do Parser(tokens).parse() end;
         defmethod ast params src do Parser(self.scan(src)).parse() end;
         defmethod eval params ast do Evaluator().eval(ast, self._env) end;
-        defmethod walk params src do self.eval(self.ast(src)) end
+        defmethod walk params src do
+            try
+                self.eval(self.ast(src))
+            except [ReturnException, val] then
+                raise('Return from top level @ evaluate(): ' + str(val))
+            end
+        end
     end
 """)
 
@@ -656,47 +672,24 @@ if __name__ == "__main__":
 
     # Example
 
-    print(walk(r"""
-        deffunc bubblesort params a do
-            n := len(a);
-            for i in range(0, n, 1) do
-                for j in range(0, n - i - 1, 1) do
-                    if a[j] > a[j + 1] then
-                        tmp := a[j]; a[j] = a[j + 1]; a[j + 1] = tmp
-                    end
-                end
-            end;
-            a
-        end;
+    walk(r"""
+        deffunc f params a do
+            if a == 2 then return(3) end;
+            4
+        end
+    """)
+    print(walk(r""" f(2) """)) # -> 3
+    print(walk(r""" f(3) """)) # -> 4
 
-        bubblesort([5, 3, 8, 4, 2])
-    """)) # -> [2, 3, 4, 5, 8]
+    walk(r"""
+        deffunc fib params n do
+            if n == 0 then return(0) end;
+            if n == 1 then return(1) end;
+            fib(n - 1) + fib(n - 2)
+        end
+    """)
+    print(walk(r""" fib(0) """)) # -> 0
+    print(walk(r""" fib(1) """)) # -> 1
+    print(walk(r""" fib(6) """)) # -> 8
 
-    print(walk(r"""
-        deffunc quicksort params a do
-            if len(a) <= 1 then a else
-                pivot := first(a); rem := rest(a);
-                left := filter(rem, func x do x < pivot end);
-                right := filter(rem, func x do x >= pivot end);
-                quicksort(left) + [pivot] + quicksort(right)
-            end
-        end;
-
-        quicksort([5, 3, 8, 4, 2])
-    """)) # -> [2, 3, 4, 5, 8]
-
-    print(walk(r"""
-        deffunc sieve params n do
-            s := [False, False] + [True] * (n - 2);
-            i := 2; while i * i < n do
-                if s[i] then
-                    for j in range(i * i, n, i) do s[j] = False end
-                end;
-                i = i + 1
-            end;
-
-            map(filter(enumerate(s), last), first)
-        end;
-
-        sieve(10)
-    """)) # -> [2, 3, 5, 7]
+    walk(r""" return(2) """) # -> Error
