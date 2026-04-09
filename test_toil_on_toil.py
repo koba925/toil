@@ -315,6 +315,32 @@ class TestToT(TestBase):
         with pytest.raises(AssertionError, match="Expected end @ consume: \\$EOF"):
             self.walk("func a do add(a, 2)")
 
+    def test_return(self):
+        self.walk("""
+            deffunc f params a do
+                if a == 2 then return(3) end;
+                4
+            end
+        """)
+        assert self.walk(""" f(2) """) == 3
+        assert self.walk(""" f(3) """) == 4
+
+        self.walk("""
+            deffunc fib params n do
+                if n == 0 then return(0) end;
+                if n == 1 then return(1) end;
+                fib(n - 1) + fib(n - 2)
+            end
+        """)
+        assert self.walk(""" fib(0) """) == 0
+        assert self.walk(""" fib(1) """) == 1
+        assert self.walk(""" fib(6) """) == 8
+
+        assert self.walk(""" func do return() end () """) is None
+
+        with pytest.raises(Exception):
+            self.walk(""" return() """)
+
     def test_deffunc(self):
         self.walk(r""" deffunc myadd params a, b do a + b end """)
         assert self.walk(r""" myadd(2, 3) """) == 5
@@ -348,6 +374,90 @@ class TestToT(TestBase):
         with pytest.raises(AssertionError, match="Expected end"):
             self.walk(r""" if False then 2 elif True then 3 """)
 
+    def test_while(self):
+        assert self.walk("""
+            sum := i := 0;
+            while i < 10 do
+                sum = sum + i;
+                i = i + 1
+            end;
+            sum
+        """) == 45
+        assert self.walk("""
+            while False do 1 / 0 end
+        """) == None
+
+    def test_continue(self):
+        assert self.walk("""
+            a := [];
+            i := 0; while i < 5 do
+                i = i + 1;
+                if i == 3 then continue() end;
+                push(a, i)
+            end;
+            a
+        """) == [1, 2, 4, 5]
+
+        assert self.walk("""
+            a := []; i := 0; while i < 2 do
+                j := 0; while j < 3 do
+                    j = j + 1; if j == 2 then continue() end; push(a, [i, j])
+                end; i = i + 1
+            end;
+            a
+        """) == [[0, 1], [0, 3], [1, 1], [1, 3]]
+
+        with pytest.raises(Exception, match="Continue at top level"):
+            self.walk(""" continue() """)
+
+    def test_break(self):
+        assert self.walk("""
+            a := [];
+            i := 0; while i < 5 do
+                if i == 3 then break() end;
+                push(a, i);
+                i = i + 1
+            end;
+            a
+        """) == [0, 1, 2]
+
+        assert self.walk("""
+            a := []; i := 0; while i < 2 do
+                j := 0; while j < 3 do
+                    if j == 2 then break() end; push(a, [i, j]); j = j + 1
+                end; i = i + 1
+            end;
+            a
+        """) == [[0, 0], [0, 1], [1, 0], [1, 1]]
+
+        assert self.walk(""" while True do break() end """) is None
+        assert self.walk(""" while True do break(2 + 3) end """) == 5
+
+        with pytest.raises(Exception, match="Break at top level"):
+            self.walk(""" break() """)
+
+    def test_for(self):
+        assert self.walk("""
+            sum := 0;
+            for n in [2, 3, 4] do sum = sum + n end;
+            sum
+        """) == 9
+
+        assert self.walk("""
+            for i in [2, 3, 4] do
+                if i == 3 then break(5) end
+            end
+        """) == 5
+
+        assert self.walk("""
+            a := [];
+            for i in [2, 3, 4] do
+                if i == 3 then continue() end;
+                push(a, i)
+            end;
+            a
+        """) == [2, 4]
+
     def test_list_functions(self, capsys):
         self.walk(""" d := [2, 3, 4] """)
         assert self.walk(""" len(d) """) == 3
@@ -380,32 +490,6 @@ class TestToT(TestBase):
         assert self.walk(""" reverse([]) """) == []
         assert self.walk(""" zip(a, [4, 5, 6]) """) == [[2, 4], [3, 5], [4, 6]]
         assert self.walk(""" enumerate(a) """) == [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
-
-    def test_return(self):
-        self.walk("""
-            deffunc f params a do
-                if a == 2 then return(3) end;
-                4
-            end
-        """)
-        assert self.walk(""" f(2) """) == 3
-        assert self.walk(""" f(3) """) == 4
-
-        self.walk("""
-            deffunc fib params n do
-                if n == 0 then return(0) end;
-                if n == 1 then return(1) end;
-                fib(n - 1) + fib(n - 2)
-            end
-        """)
-        assert self.walk(""" fib(0) """) == 0
-        assert self.walk(""" fib(1) """) == 1
-        assert self.walk(""" fib(6) """) == 8
-
-        assert self.walk(""" func do return() end () """) is None
-
-        with pytest.raises(Exception):
-            self.walk(""" return() """)
 
     def test_whitespace(self):
         assert self.walk(r"""   2 """) == 2

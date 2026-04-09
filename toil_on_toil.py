@@ -424,10 +424,6 @@ i.walk("""
 """)
 
 i.walk("""
-    ReturnException := Ident('ReturnException')
-""")
-
-i.walk("""
     defclass Evaluator params do
         defmethod eval params expr, env do
             # print(expr);
@@ -444,7 +440,11 @@ i.walk("""
                         case Expr(Ident('func'), [params, body_expr]) then
                             Expr(Ident('closure'), [params, body_expr, env])
                         case Expr(Ident('return'), args) then
-                            raise([ReturnException, if args.len() == 0 then None else args[0] end])
+                            raise(['ReturnException',
+                                if args.len() == 0 then None else
+                                    self.eval(args[0], env)
+                                end
+                            ])
                         case Expr(Ident('scope'), [body_expr]) then
                             self.eval(body_expr, Environment(env))
                         case Expr(Ident('define'), [name, val_expr]) then
@@ -457,6 +457,14 @@ i.walk("""
                             self._if(cond_expr, then_expr, else_expr, env)
                         case Expr(Ident('while'), [cond_expr, body_expr]) then
                             self._while(cond_expr, body_expr, env)
+                        case Expr(Ident('continue'), []) then
+                            raise(['ContinueException'])
+                        case Expr(Ident('break'), args) then
+                            raise(['BreakException',
+                                if args.len() == 0 then None else
+                                    self.eval(args[0], env)
+                                end
+                            ])
                         case Expr(op_expr, args_expr) then
                             self._op(op_expr, args_expr, env)
                     end
@@ -503,7 +511,11 @@ i.walk("""
 
         defmethod _while params cond_expr, body_expr, env do
             while self.eval(cond_expr, env) do
-                self.eval(body_expr, env)
+                try
+                    self.eval(body_expr, env)
+                except ['ContinueException'] then continue()
+                except ['BreakException', val] then return(val)
+                end
             end
         end;
 
@@ -523,7 +535,7 @@ i.walk("""
                     end;
                     try
                         self.eval(body_expr, new_env)
-                    except [ReturnException, val] then
+                    except ['ReturnException', val] then
                         val
                     end
                 case _ then raise('Invalid operator @ apply: ' + str(op_val))
@@ -655,8 +667,12 @@ i.walk("""
         defmethod walk params src do
             try
                 self.eval(self.ast(src))
-            except [ReturnException, val] then
+            except ['ReturnException', val] then
                 raise('Return from top level @ evaluate(): ' + str(val))
+            except ['ContinueException'] then
+                raise('Continue at top level @ evaluate()')
+            except ['BreakException', val] then
+                raise('Break at top level @ evaluate(): ' + str(val))
             end
         end
     end
@@ -672,24 +688,61 @@ if __name__ == "__main__":
 
     # Example
 
-    walk(r"""
-        deffunc f params a do
-            if a == 2 then return(3) end;
-            4
-        end
-    """)
-    print(walk(r""" f(2) """)) # -> 3
-    print(walk(r""" f(3) """)) # -> 4
+    print(walk(r"""
+        a := [];
+        i := 0; while i < 5 do
+            i = i + 1;
+            if i == 3 then continue() end;
+            push(a, i)
+        end;
+        a
+    """)) # -> [1, 2, 4, 5]
 
-    walk(r"""
-        deffunc fib params n do
-            if n == 0 then return(0) end;
-            if n == 1 then return(1) end;
-            fib(n - 1) + fib(n - 2)
-        end
-    """)
-    print(walk(r""" fib(0) """)) # -> 0
-    print(walk(r""" fib(1) """)) # -> 1
-    print(walk(r""" fib(6) """)) # -> 8
+    print(walk(r"""
+        a := []; i := 0; while i < 2 do
+            j := 0; while j < 3 do
+                j = j + 1; if j == 2 then continue() end; push(a, [i, j])
+            end; i = i + 1
+        end;
+        a
+    """)) # -> [[0, 1], [0, 3], [1, 1], [1, 3]]
 
-    walk(r""" return(2) """) # -> Error
+    # walk(r""" continue() """) # -> Continue at top level
+
+    print(walk(r"""
+        a := [];
+        i := 0; while i < 5 do
+            if i == 3 then break() end;
+            push(a, i);
+            i = i + 1
+        end;
+        a
+    """)) # -> [0, 1, 2]
+
+    print(walk(r"""
+        a := []; i := 0; while i < 2 do
+            j := 0; while j < 3 do
+                if j == 2 then break() end; push(a, [i, j]); j = j + 1
+            end; i = i + 1
+        end; a
+    """)) # -> [[0, 0], [0, 1], [1, 0], [1, 1]]
+
+    print(walk(r""" while True do break() end """)) # -> None
+    print(walk(r""" while True do break(2 + 3) end """)) # -> 5
+
+    # walk(r""" break() """) # -> Break at top level
+
+    print(walk(r"""
+        for i in [2, 3, 4] do
+            if i == 3 then break(5) end
+        end
+    """)) # -> 5
+
+    print(walk(r"""
+        a := [];
+        for i in [2, 3, 4] do
+            if i == 3 then continue() end;
+            push(a, i)
+        end;
+        a
+    """)) # ->  [2, 4]

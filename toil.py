@@ -403,10 +403,10 @@ class ToilException(Exception):
 class ReturnException(Exception):
     def __init__(self, val=None): self.val = val
 
+class ContinueException(Exception): pass
+
 class BreakException(Exception):
     def __init__(self, val=None): self.val = val
-
-class ContinueException(Exception): pass
 
 class Evaluator:
     def eval(self, expr: Expr, env: Environment) -> Value:
@@ -941,9 +941,9 @@ class Interpreter:
         try:
             return Evaluator().eval(ast, self._env)
         except ToilException as e: assert False, f"ToilException @ evaluate(): {e.e}"
-        except ReturnException: assert False, "Return from top level @ evaluate()"
+        except ReturnException as e: assert False, f"Return from top level @ evaluate(): {e.val}"
         except ContinueException: assert False, "Continue at top level @ evaluate()"
-        except BreakException: assert False, "Break at top level @ evaluate()"
+        except BreakException as e: assert False, f"Break at top level @ evaluate(): {e.val}"
 
     def walk(self, src: str) -> Value:
         return self.evaluate(self.ast(src))
@@ -979,7 +979,7 @@ if __name__ == "__main__":
             run(sys.argv[1])
 
     # Example
-    print(i.walk(""" print(2) and 3 """)) # -> 2\nNone
-    print(i.walk(""" not print(2) or 3 """)) # -> 2\nTrue
+    # i.walk(""" return(2) """) # -> Error
+    # i.walk(""" break(2) """) # -> Error
 
 
