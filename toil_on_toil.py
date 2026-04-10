@@ -39,6 +39,8 @@ i.walk("""
                     self._tokens.push(Ident('$EOF')); break()
                 elif ch.isdigit() then
                     self._number()
+                elif ch == "'" then
+                    self._raw_string()
                 elif ch.is_ident_first() then
                     self._ident()
                 elif ch.in('=!<>:') then
@@ -59,6 +61,19 @@ i.walk("""
                 self._advance()
             end;
             self._tokens.push(int(self._src.slice(start, self._pos)))
+        end;
+
+        defmethod _raw_string params do
+            self._advance();
+            start := self._pos;
+            while (c := self._current_char()) != "'" do
+                if c == '$EOF' then
+                    raise('Unterminated string @ _raw_string()')
+                end;
+                self._advance()
+            end;
+            self._tokens.push(self._src.slice(start, self._pos));
+            self._advance()
         end;
 
         defmethod _ident params do
@@ -204,6 +219,7 @@ i.walk("""
                 case 'NoneType' then self._current_and_advance()
                 case 'bool' then self._current_and_advance()
                 case 'int' then self._current_and_advance()
+                case 'str' then self._current_and_advance()
                 case 'Ident' then
                     match str(self._current())
                         case '(' then self._group()
@@ -431,6 +447,7 @@ i.walk("""
                 case 'NoneType' then expr
                 case 'bool' then expr
                 case 'int' then expr
+                case 'str' then expr
                 case 'list' then expr.map(func e do self.eval(e, env) end)
                 case 'Ident' then env.val(str(expr))
                 case 'Expr' then
@@ -688,61 +705,10 @@ if __name__ == "__main__":
 
     # Example
 
-    print(walk(r"""
-        a := [];
-        i := 0; while i < 5 do
-            i = i + 1;
-            if i == 3 then continue() end;
-            push(a, i)
-        end;
-        a
-    """)) # -> [1, 2, 4, 5]
-
-    print(walk(r"""
-        a := []; i := 0; while i < 2 do
-            j := 0; while j < 3 do
-                j = j + 1; if j == 2 then continue() end; push(a, [i, j])
-            end; i = i + 1
-        end;
-        a
-    """)) # -> [[0, 1], [0, 3], [1, 1], [1, 3]]
-
-    # walk(r""" continue() """) # -> Continue at top level
-
-    print(walk(r"""
-        a := [];
-        i := 0; while i < 5 do
-            if i == 3 then break() end;
-            push(a, i);
-            i = i + 1
-        end;
-        a
-    """)) # -> [0, 1, 2]
-
-    print(walk(r"""
-        a := []; i := 0; while i < 2 do
-            j := 0; while j < 3 do
-                if j == 2 then break() end; push(a, [i, j]); j = j + 1
-            end; i = i + 1
-        end; a
-    """)) # -> [[0, 0], [0, 1], [1, 0], [1, 1]]
-
-    print(walk(r""" while True do break() end """)) # -> None
-    print(walk(r""" while True do break(2 + 3) end """)) # -> 5
-
-    # walk(r""" break() """) # -> Break at top level
-
-    print(walk(r"""
-        for i in [2, 3, 4] do
-            if i == 3 then break(5) end
-        end
-    """)) # -> 5
-
-    print(walk(r"""
-        a := [];
-        for i in [2, 3, 4] do
-            if i == 3 then continue() end;
-            push(a, i)
-        end;
-        a
-    """)) # ->  [2, 4]
+    print(i.walk(r""" tot.walk(" 'hello, world' ") """)) # -> hello, world
+    print(i.walk(r""" tot.walk(" '' ") """)) # -> (empty line)
+    print(i.walk(r""" tot.walk(" 'if ; #\"\\n' ") """)) # -> if ; #"\n
+    print(i.walk(r""" tot.walk(" 'a
+b' ") """)) # -> a\nb
+    # print(i.walk(r""" tot.walk(" ' ") """)) # -> Unterminated string @ _raw_string()
+    # print(i.walk(r""" tot.walk(" 'It's NG' ") """)) # -> Unterminated string @ _raw_string()

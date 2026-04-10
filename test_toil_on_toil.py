@@ -458,6 +458,18 @@ class TestToT(TestBase):
             a
         """) == [2, 4]
 
+    def test_raw_string(self):
+        assert i.walk(r""" tot.walk(" 'hello, world' ") """) == "hello, world"
+        assert i.walk(r""" tot.walk(" '' ") """) == ""
+        assert i.walk(r""" tot.walk(" 'if ; #\"\\n' ") """) == 'if ; #"\\n'
+        assert i.walk(" tot.walk(\" 'a\nb' \") ") == "a\nb"
+
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            i.walk(r""" tot.walk(" ' ") """)
+
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            i.walk(r""" tot.walk(" 'It's NG' ") """)
+
     def test_list_functions(self, capsys):
         self.walk(""" d := [2, 3, 4] """)
         assert self.walk(""" len(d) """) == 3
