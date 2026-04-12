@@ -48,7 +48,7 @@ i.walk(r"""
                     self._ident()
                 elif ch.in('=!<>:') then
                     self._two_char_operator('=')
-                elif ch.in('+-*/%()[],;') then
+                elif ch.in('+-*/%()[]{},;') then
                     self._tokens.push(Ident(ch)); self._advance()
                 else
                     raise('Invalid character @ tokenize: ' + ch)
@@ -247,6 +247,7 @@ i.walk(r"""
                     match str(self._current())
                         case '(' then self._group()
                         case '[' then self._list()
+                        case '{' then self._dict()
                         case 'func' then self._func()
                         case 'deffunc' then self._deffunc()
                         case 'scope' then self._scope()
@@ -276,6 +277,39 @@ i.walk(r"""
             exprs := self._comma_separated_exprs(Ident(']'));
             self._consume(Ident(']'));
             exprs
+        end;
+
+        defmethod _dict params do
+            deffunc _parse_key_value params dic do
+                match self._current().type()
+                    case 'Ident' then
+                        key := str(self._current_and_advance());
+                        if self._current() == Ident(':') then
+                            self._current_and_advance();
+                            dic[key] = self._expression()
+                        else
+                            dic[key] = Ident(key)
+                        end
+                    case 'str' then
+                        key := self._current_and_advance();
+                        self._consume(Ident(':'));
+                        dic[key] = self._expression()
+                    case _ then
+                        raise('Invalid key @ _dict(): ' + str(self._current()))
+                end
+            end;
+
+            self._current_and_advance();
+            dic := {};
+            if self._current() != Ident('}') then
+                _parse_key_value(dic);
+                while self._current() != Ident('}') do
+                    self._consume(Ident(','));
+                    _parse_key_value(dic)
+                end
+            end;
+            self._current_and_advance();
+            dic
         end;
 
         defmethod _func params do
@@ -472,6 +506,10 @@ i.walk(r"""
                 case 'int' then expr
                 case 'str' then expr
                 case 'list' then expr.map(func e do self.eval(e, env) end)
+                case 'dict' then
+                    expr.keys().map(func k do
+                        [self.eval(k, env), self.eval(expr[k], env)]
+                    end).dict()
                 case 'Ident' then env.val(str(expr))
                 case 'Expr' then
                     match expr
@@ -630,6 +668,8 @@ i.walk(r"""
             self._env.define('type', Expr(Ident('hostfunc'), func args do type(args[0]) end));
             self._env.define('str', Expr(Ident('hostfunc'), func args do str(args[0]) end));
             self._env.define('int', Expr(Ident('hostfunc'), func args do int(args[0]) end));
+            self._env.define('list', Expr(Ident('hostfunc'), func args do list(args[0]) end));
+            self._env.define('dict', Expr(Ident('hostfunc'), func args do dict(args[0]) end));
             self._env.define('Ident', Expr(Ident('hostfunc'), func args do Ident(args[0]) end));
             self._env.define('Expr', Expr(Ident('hostfunc'), func args do apply(Expr, args) end));
 
@@ -728,24 +768,30 @@ if __name__ == "__main__":
 
     # Example
 
-    # Raw string
-    print(i.walk(r""" tot.walk(" 'hello, world' ") """)) # -> hello, world
-    print(i.walk(r""" tot.walk(" '' ") """)) # -> (empty line)
-    print(i.walk(r""" tot.walk(" 'if ; #\"\\n' ") """)) # -> if ; #"\n
-    print(i.walk(r""" tot.walk(" 'a
-b' ") """)) # -> a\nb
-    # print(i.walk(r""" tot.walk(" ' ") """)) # -> Unterminated string @ _raw_string()
-    # print(i.walk(r""" tot.walk(" 'It's NG' ") """)) # -> Unterminated string @ _raw_string()
+    # Dicionary
+    walk(r""" ccc := 1 """)
+    print(scan(r""" {"aaa": 2 + 3, bbb: 4, ccc} """)) # -> [{, 'aaa', :, 2, +, 3, ,, bbb, :, 4, ,, ccc, }, $EOF]
+    print(ast(r""" {"aaa": 2 + 3, bbb: 4, ccc} """)) # -> {'aaa': (add, [2, 3]), 'bbb': 4, 'ccc': ccc}
+    print(walk(r""" a := {"aaa": 2 + 3, bbb: 4, ccc} """)) # -> {'aaa': 5, 'bbb': 4, 'ccc': 1}
+    print(walk(r""" a["aaa"] """)) # -> 5
+    walk(r""" a["aaa"] = 6 """)
+    walk(r""" a["ddd"] = 7 """)
+    print(walk(r""" a """)) # -> {'aaa': 6, 'bbb': 4, 'ccc': 1, 'ddd', 7}
 
-    # String
-    print(walk(r""" "hello, world" """)) # -> hello, world
-    print(walk(r""" "" """)) # -> (empty line)
-    print(walk(r""" "if ; #\"\\\n" """)) # -> if ; #"\(newline)
-    print(walk(r""" "a
-b" """)) # -> a\nb
-    # print(walk(r""" " """)) # -> Unterminated string @ _string()
-    # print(walk(r""" "\" """)) # -> Unterminated string @ _string()
+    print(walk(r""" {} """)) # -> {}
 
-    # String function
-    print(walk(r""" join(["ab", "cd", "ef"], ",") """)) # -> ab,cd,ef
+    # walk(r""" {"aaa"} """)  # -> Expected :
+    # walk(r""" {2: 3} """) # -> Invalid key
+    # walk(r""" a["eee"] """) # -> KeyError
+
+    # Dicionary functions
+    print(walk(r""" dict([["aaa", 2 + 3], ["bbb", 4]]) """)) # -> {'aaa': 5, 'bbb': 4}
+    print(walk(r""" len(a) """)) # -> 4
+    print(walk(r""" in("aaa", a) """)) # -> True
+    print(walk(r""" in("eee", a) """)) # -> False
+    print(walk(r""" keys(a) """)) # -> ['aaa', 'bbb', 'ccc', 'ddd']
+    print(walk(r""" items(a) """)) # -> [['aaa', 6], ['bbb', 4], ['ccc', 1], ['ddd', 7]]
+
+
+
 

@@ -317,6 +317,36 @@ class TestToT(TestBase):
         assert self.walk(""" [2, 3] + [4, 5] """) == [2, 3, 4, 5]
         assert self.walk(""" [2, 3] * 3 """) == [2, 3, 2, 3, 2, 3]
 
+    def test_dict(self):
+        assert self.walk(r""" {} """) == {}
+
+        self.walk(r""" ccc := 1 """)
+        assert self.walk(r""" a := {"aaa": 2 + 3, bbb: 4, ccc} """) == {'aaa': 5, 'bbb': 4, 'ccc': 1}
+        assert self.walk(r""" a["aaa"] """) == 5
+
+        self.walk(r""" a["aaa"] = 6 """)
+        self.walk(r""" a["ddd"] = 7 """)
+        assert self.walk(r""" a """) == {'aaa': 6, 'bbb': 4, 'ccc': 1, 'ddd': 7}
+
+        assert self.walk(r""" {outer: {inner: 1}} """) == {'outer': {'inner': 1}}
+
+        with pytest.raises(AssertionError, match="Expected :"):
+            self.walk(r""" {"aaa"} """)
+        with pytest.raises(AssertionError, match="Invalid key"):
+            self.walk(r""" {2: 3} """)
+        with pytest.raises(KeyError):
+            self.walk(r""" a["eee"] """)
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            self.walk(r""" {undefined_var} """)
+
+    def test_dict_functions(self):
+        assert self.walk(r""" a := dict([["aaa", 2], ["bbb", 3], ["ccc", 4]]) """) == {'aaa': 2, 'bbb': 3, 'ccc': 4}
+        assert self.walk(r""" len(a) """) == 3
+        assert self.walk(r""" in("aaa", a) """) is True
+        assert self.walk(r""" in("ddd", a) """) is False
+        assert self.walk(r""" keys(a) """) == ['aaa', 'bbb', 'ccc']
+        assert self.walk(r""" items(a) """) == [['aaa', 2], ['bbb', 3], ['ccc', 4]]
+
     def test_quote(self, capsys):
         assert self.walk(r""" quote(hello_world) """) == Ident("hello_world")
         assert self.walk(r""" quote(if 2 == 3 then 4 else 5 end) """) == (

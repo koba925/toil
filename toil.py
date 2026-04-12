@@ -746,6 +746,8 @@ class Interpreter:
         self._env.define("type", lambda args: self.type(args[0]))
         self._env.define("str", lambda args: str(args[0]))
         self._env.define("int", lambda args: int(args[0]))
+        self._env.define("list", lambda args: list(args[0]))
+        self._env.define("dict", lambda args: dict(args[0]))
         self._env.define("Ident", lambda args: Ident(args[0]))
         self._env.define("Expr", lambda args: tuple(args))
 
