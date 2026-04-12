@@ -217,10 +217,17 @@ class TestToT(TestBase):
         assert self.walk(r""" 2 + 3 - 4 """) == 1
         assert self.walk(r""" a := 2 + sub(4, 3) """) == 3
 
+    def test_mul_div_mod(self):
         assert self.walk(r""" 2 * 3 """) == 6
         assert self.walk(r""" 4 / 2 * 3 """) == 6
         assert self.walk(r""" 2 * 3 % 4 """) == 2
         assert self.walk(r""" 2 + 3 * add(4, 5) """) == 29
+
+    def test_unary_operations(self):
+        assert self.walk(r""" -2 """) == -2
+        assert self.walk(r""" --2 """) == 2
+        assert self.walk(r""" 3--2 """) == 5
+        assert self.walk(r""" -add(2, 3) * 4 """) == -20
 
     def test_call_index(self):
         assert self.walk(r""" neg(2) """) == -2
@@ -245,6 +252,41 @@ class TestToT(TestBase):
         with pytest.raises(Exception):
             self.walk(""" None[0] """)
 
+    def test_none_bool(self):
+        assert self.walk(r""" None """) is None
+        assert self.walk(r""" True """) is True
+        assert self.walk(r""" False """) is False
+
+    def test_numbers(self):
+        assert self.walk(r"""2""") == 2
+        assert self.walk(r"""23""") == 23
+        assert self.walk(r"""0""") == 0
+        assert self.walk(r"""023""") == 23
+
+    def test_raw_string(self):
+        assert i.walk(r""" tot.walk(" 'hello, world' ") """) == "hello, world"
+        assert i.walk(r""" tot.walk(" '' ") """) == ""
+        assert i.walk(r""" tot.walk(" 'if ; #\"\\n' ") """) == 'if ; #"\\n'
+        assert i.walk(" tot.walk(\" 'a\nb' \") ") == "a\nb"
+
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            i.walk(r""" tot.walk(" ' ") """)
+
+    def test_string(self):
+        assert i.walk(r""" tot.walk(' "hello, world" ') """) == "hello, world"
+        assert i.walk(r""" tot.walk(' "" ') """) == ""
+        assert i.walk(r""" tot.walk(' "if ; #\"\\\n" ') """) == 'if ; #"\\\n'
+        assert i.walk(" tot.walk(' \"a\nb\" ') ") == "a\nb"
+
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            i.walk(r""" tot.walk(' " ') """)
+
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            i.walk(r""" tot.walk(' "\" ') """)
+
+    def test_string_functions(self):
+        assert self.walk(r""" join(["ab", "cd", "ef"], ",") """) == "ab,cd,ef"
+
     def test_grouping(self):
         assert self.walk(r""" (2 + 3) * 4 """) == 20
         assert self.walk(r""" (2) * 3 """) == 6
@@ -256,22 +298,24 @@ class TestToT(TestBase):
         self.walk(""" [print(2), print(3)] """)
         assert capsys.readouterr().out == "2\n3\n"
 
-    def test_unary_operations(self):
-        assert self.walk(r""" -2 """) == -2
-        assert self.walk(r""" --2 """) == 2
-        assert self.walk(r""" 3--2 """) == 5
-        assert self.walk(r""" -add(2, 3) * 4 """) == -20
+    def test_list_functions(self, capsys):
+        self.walk(""" d := [2, 3, 4] """)
+        assert self.walk(""" len(d) """) == 3
+        assert self.walk(""" index(d, 2) """) == 4
+        assert self.walk(""" slice(d, 1, None) """) == [3, 4]
+        assert self.walk(""" slice(d, 1, 2) """) == [3]
+        assert self.walk(""" slice(d, None, 2) """) == [2, 3]
+        assert self.walk(""" slice(d, None, None) """) == [2, 3, 4]
+        assert self.walk(""" push(d, 5) """) is None
+        assert self.walk(""" d """) == [2, 3, 4, 5]
+        assert self.walk(""" pop(d) """) == 5
+        assert self.walk(""" d """) == [2, 3, 4]
+        assert self.walk(""" in(2, d) """) is True
+        assert self.walk(""" in(5, d) """) is False
+        assert self.walk(""" dd := copy(d); dd[0] = 6; [d, dd] """) == [[2, 3, 4], [6, 3, 4]]
 
-    def test_numbers(self):
-        assert self.walk(r"""2""") == 2
-        assert self.walk(r"""23""") == 23
-        assert self.walk(r"""0""") == 0
-        assert self.walk(r"""023""") == 23
-
-    def test_bool_none(self):
-        assert self.walk(r""" None """) is None
-        assert self.walk(r""" True """) is True
-        assert self.walk(r""" False """) is False
+        assert self.walk(""" [2, 3] + [4, 5] """) == [2, 3, 4, 5]
+        assert self.walk(""" [2, 3] * 3 """) == [2, 3, 2, 3, 2, 3]
 
     def test_quote(self, capsys):
         assert self.walk(r""" quote(hello_world) """) == Ident("hello_world")
@@ -457,37 +501,6 @@ class TestToT(TestBase):
             end;
             a
         """) == [2, 4]
-
-    def test_raw_string(self):
-        assert i.walk(r""" tot.walk(" 'hello, world' ") """) == "hello, world"
-        assert i.walk(r""" tot.walk(" '' ") """) == ""
-        assert i.walk(r""" tot.walk(" 'if ; #\"\\n' ") """) == 'if ; #"\\n'
-        assert i.walk(" tot.walk(\" 'a\nb' \") ") == "a\nb"
-
-        with pytest.raises(AssertionError, match="Unterminated string"):
-            i.walk(r""" tot.walk(" ' ") """)
-
-        with pytest.raises(AssertionError, match="Unterminated string"):
-            i.walk(r""" tot.walk(" 'It's NG' ") """)
-
-    def test_list_functions(self, capsys):
-        self.walk(""" d := [2, 3, 4] """)
-        assert self.walk(""" len(d) """) == 3
-        assert self.walk(""" index(d, 2) """) == 4
-        assert self.walk(""" slice(d, 1, None) """) == [3, 4]
-        assert self.walk(""" slice(d, 1, 2) """) == [3]
-        assert self.walk(""" slice(d, None, 2) """) == [2, 3]
-        assert self.walk(""" slice(d, None, None) """) == [2, 3, 4]
-        assert self.walk(""" push(d, 5) """) is None
-        assert self.walk(""" d """) == [2, 3, 4, 5]
-        assert self.walk(""" pop(d) """) == 5
-        assert self.walk(""" d """) == [2, 3, 4]
-        assert self.walk(""" in(2, d) """) is True
-        assert self.walk(""" in(5, d) """) is False
-        assert self.walk(""" dd := copy(d); dd[0] = 6; [d, dd] """) == [[2, 3, 4], [6, 3, 4]]
-
-        assert self.walk(""" [2, 3] + [4, 5] """) == [2, 3, 4, 5]
-        assert self.walk(""" [2, 3] * 3 """) == [2, 3, 2, 3, 2, 3]
 
     def test_stdlib(self):
         assert self.walk(""" a := range(2, 10, 1) """) == [2, 3, 4, 5, 6, 7, 8, 9]

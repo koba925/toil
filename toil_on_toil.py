@@ -4,7 +4,7 @@ from toil import Interpreter
 
 i = Interpreter().init_env().stdlib()
 
-i.walk("""
+i.walk(r"""
     deffunc isalpha params c do
        type(c) == 'str' and ('a' <= c and c <= 'z') or ('A' <= c and c <= 'Z')
     end;
@@ -17,13 +17,14 @@ i.walk("""
     deffunc is_ident params s do is_ident_first(s[0]) end
 """)
 
-i.walk("""
+i.walk(r"""
     defclass Scanner params src do
         self._src = src;
         self._pos = 0;
         self._tokens = [];
 
         defmethod tokenize params do
+            # print(src)
             while True do
                 while self._current_char().isspace() do self._advance() end;
 
@@ -41,6 +42,8 @@ i.walk("""
                     self._number()
                 elif ch == "'" then
                     self._raw_string()
+                elif ch == '"' then
+                    self._string()
                 elif ch.is_ident_first() then
                     self._ident()
                 elif ch.in('=!<>:') then
@@ -67,13 +70,33 @@ i.walk("""
             self._advance();
             start := self._pos;
             while (c := self._current_char()) != "'" do
-                if c == '$EOF' then
-                    raise('Unterminated string @ _raw_string()')
-                end;
+                if c == '$EOF' then raise('Unterminated string @ _raw_string()') end;
                 self._advance()
             end;
             self._tokens.push(self._src.slice(start, self._pos));
             self._advance()
+        end;
+
+        defmethod _string params do
+            self._advance();
+            s := [];
+            while (c := self._current_char()) != '"' do
+                if c == '$EOF' then raise('Unterminated string @ _string()') end;
+                if c == '\' then
+                    self._advance();
+                    c := self._current_char();
+                    if c == '$EOF' then raise('Unterminated string @ _string()') end;
+                    match c
+                        case 'n' then s.push("\n")
+                        case _ then s.push(c)
+                    end
+                else
+                    s.push(c)
+                end;
+                self._advance()
+            end;
+            self._advance();
+            self._tokens.push(s.join(''))
         end;
 
         defmethod _ident params do
@@ -112,7 +135,7 @@ i.walk("""
     end
 """)
 
-i.walk("""
+i.walk(r"""
     defclass Parser params tokens do
         self._tokens = tokens;
         self._pos = 0;
@@ -406,7 +429,7 @@ i.walk("""
     end
 """)
 
-i.walk("""
+i.walk(r"""
     defclass Environment params parent do
         self._parent = parent;
         self._vars = {};
@@ -439,7 +462,7 @@ i.walk("""
     end
 """)
 
-i.walk("""
+i.walk(r"""
     defclass Evaluator params do
         defmethod eval params expr, env do
             # print(expr);
@@ -561,7 +584,7 @@ i.walk("""
     end
 """)
 
-i.walk("""
+i.walk(r"""
     defclass Interpreter params do
         self._env = Environment(None);
 
@@ -705,6 +728,7 @@ if __name__ == "__main__":
 
     # Example
 
+    # Raw string
     print(i.walk(r""" tot.walk(" 'hello, world' ") """)) # -> hello, world
     print(i.walk(r""" tot.walk(" '' ") """)) # -> (empty line)
     print(i.walk(r""" tot.walk(" 'if ; #\"\\n' ") """)) # -> if ; #"\n
@@ -712,3 +736,16 @@ if __name__ == "__main__":
 b' ") """)) # -> a\nb
     # print(i.walk(r""" tot.walk(" ' ") """)) # -> Unterminated string @ _raw_string()
     # print(i.walk(r""" tot.walk(" 'It's NG' ") """)) # -> Unterminated string @ _raw_string()
+
+    # String
+    print(walk(r""" "hello, world" """)) # -> hello, world
+    print(walk(r""" "" """)) # -> (empty line)
+    print(walk(r""" "if ; #\"\\\n" """)) # -> if ; #"\(newline)
+    print(walk(r""" "a
+b" """)) # -> a\nb
+    # print(walk(r""" " """)) # -> Unterminated string @ _string()
+    # print(walk(r""" "\" """)) # -> Unterminated string @ _string()
+
+    # String function
+    print(walk(r""" join(["ab", "cd", "ef"], ",") """)) # -> ab,cd,ef
+

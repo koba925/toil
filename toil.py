@@ -113,7 +113,7 @@ class Scanner:
                 s.append(c)
             self._advance()
         self._advance()
-        return self._tokens.append("".join(s))
+        self._tokens.append("".join(s))
 
     def _ident(self):
         start = self._pos
