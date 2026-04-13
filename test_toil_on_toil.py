@@ -347,6 +347,24 @@ class TestToT(TestBase):
         assert self.walk(r""" keys(a) """) == ['aaa', 'bbb', 'ccc']
         assert self.walk(r""" items(a) """) == [['aaa', 2], ['bbb', 3], ['ccc', 4]]
 
+    def test_dot_notation(self):
+        self.walk(r""" a := {aaa: 2, bbb: 3} """)
+        assert self.walk(r""" a.aaa """) == 2
+
+        self.walk(r""" a.bbb = 4 """)
+        assert self.walk(r""" a """) == {'aaa': 2, 'bbb': 4}
+        self.walk(r""" a.ccc = 5 """)
+        assert self.walk(r""" a """) == {'aaa': 2, 'bbb': 4, 'ccc': 5}
+
+        with pytest.raises(KeyError):
+            self.walk(r""" a.not_found """)
+        with pytest.raises(AssertionError, match="Invalid property"):
+            self.walk(r""" a.1 """)
+        with pytest.raises(Exception):
+            self.walk(r""" [2, 3].aaa """)
+        with pytest.raises(Exception):
+            self.walk(r""" [2, 3].aaa = 4 """)
+
     def test_quote(self, capsys):
         assert self.walk(r""" quote(hello_world) """) == Ident("hello_world")
         assert self.walk(r""" quote(if 2 == 3 then 4 else 5 end) """) == (

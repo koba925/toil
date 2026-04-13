@@ -48,7 +48,7 @@ i.walk(r"""
                     self._ident()
                 elif ch.in('=!<>:') then
                     self._two_char_operator('=')
-                elif ch.in('+-*/%()[]{},;') then
+                elif ch.in('+-*/%()[]{}.,;') then
                     self._tokens.push(Ident(ch)); self._advance()
                 else
                     raise('Invalid character @ tokenize: ' + ch)
@@ -218,20 +218,27 @@ i.walk(r"""
             self._unary({
                 '-': Ident('neg'), '+': Ident('+'), '*': Ident('*'),
                 '!': Ident('!'), '!!': Ident('!!')
-            }, self._call_index)
+            }, self._call_index_dot)
         end;
 
-        defmethod _call_index params do
+        defmethod _call_index_dot params do
             target := self._primary();
-            while (op := self._current()).in([Ident('('), Ident('[')]) do
+            while (op := self._current()).in([Ident('('), Ident('['), Ident('.')]) do
                 if op == Ident('(') then
                     self._current_and_advance();
                     target = Expr(target, self._comma_separated_exprs(Ident(')')));
                     self._consume(Ident(')'))
-                else
+                elif op == Ident('[') then
                     self._current_and_advance();
                     target = Expr(Ident('index'), [target, self._expression()]);
                     self._consume(Ident(']'))
+                else
+                    self._current_and_advance();
+                    prop := self._current_and_advance();
+                    if prop.type() != 'Ident' then
+                        raise('Invalid property @ _call_index_dot(): ' + str(prop))
+                    end;
+                    target = Expr(Ident('dot'), [target, str(prop)])
                 end
             end;
             target
@@ -523,6 +530,8 @@ i.walk(r"""
                                     self.eval(args[0], env)
                                 end
                             ])
+                        case Expr(Ident('dot'), [target_expr, prop_expr]) then
+                            self.eval(target_expr, env)[prop_expr]
                         case Expr(Ident('scope'), [body_expr]) then
                             self.eval(body_expr, Environment(env))
                         case Expr(Ident('define'), [name, val_expr]) then
@@ -555,6 +564,12 @@ i.walk(r"""
         end;
 
         defmethod _assign params left_expr, right_expr, env do
+            deffunc _set_val params coll_expr, index_expr, right_val do
+                coll_val := self.eval(coll_expr, env);
+                index_val := self.eval(index_expr, env);
+                coll_val[index_val] = right_val
+            end;
+
             right_val := self.eval(right_expr, env);
             match left_expr.type()
                 case 'Ident' then
@@ -562,9 +577,9 @@ i.walk(r"""
                 case 'Expr' then
                     match left_expr
                         case Expr(Ident('index'), [coll_expr, index_expr]) then
-                            coll_val := self.eval(coll_expr, env);
-                            index_val := self.eval(index_expr, env);
-                            coll_val[index_val] = right_val
+                            _set_val(coll_expr, index_expr, right_val)
+                        case Expr(Ident('dot'), [coll_expr, index_expr]) then
+                            _set_val(coll_expr, index_expr, right_val)
                         case _ then
                             raise('Invalid assign target @ _assign: ' + str(left_expr))
                     end
@@ -768,30 +783,20 @@ if __name__ == "__main__":
 
     # Example
 
-    # Dicionary
-    walk(r""" ccc := 1 """)
-    print(scan(r""" {"aaa": 2 + 3, bbb: 4, ccc} """)) # -> [{, 'aaa', :, 2, +, 3, ,, bbb, :, 4, ,, ccc, }, $EOF]
-    print(ast(r""" {"aaa": 2 + 3, bbb: 4, ccc} """)) # -> {'aaa': (add, [2, 3]), 'bbb': 4, 'ccc': ccc}
-    print(walk(r""" a := {"aaa": 2 + 3, bbb: 4, ccc} """)) # -> {'aaa': 5, 'bbb': 4, 'ccc': 1}
-    print(walk(r""" a["aaa"] """)) # -> 5
-    walk(r""" a["aaa"] = 6 """)
-    walk(r""" a["ddd"] = 7 """)
-    print(walk(r""" a """)) # -> {'aaa': 6, 'bbb': 4, 'ccc': 1, 'ddd', 7}
+    # Dot notation
+    walk(r""" a := {aaa: 2 , bbb: 3} """)
 
-    print(walk(r""" {} """)) # -> {}
+    print(scan(r""" a.aaa """)) # -> [a, ., aaa, $EOF]
+    print(ast(r""" a.aaa """)) # -> (dot, [a, 'aaa'])
+    print(walk(r""" a.aaa """)) # -> 2
 
-    # walk(r""" {"aaa"} """)  # -> Expected :
-    # walk(r""" {2: 3} """) # -> Invalid key
-    # walk(r""" a["eee"] """) # -> KeyError
+    walk(r""" a.bbb = 4 """)
+    print(walk(r""" a """)) # -> {'aaa': 2, 'bbb': 4}
+    walk(r""" a.ccc = 5 """)
+    print(walk(r""" a """)) # -> {'aaa': 2, 'bbb': 4, 'ccc': 5}
 
-    # Dicionary functions
-    print(walk(r""" dict([["aaa", 2 + 3], ["bbb", 4]]) """)) # -> {'aaa': 5, 'bbb': 4}
-    print(walk(r""" len(a) """)) # -> 4
-    print(walk(r""" in("aaa", a) """)) # -> True
-    print(walk(r""" in("eee", a) """)) # -> False
-    print(walk(r""" keys(a) """)) # -> ['aaa', 'bbb', 'ccc', 'ddd']
-    print(walk(r""" items(a) """)) # -> [['aaa', 6], ['bbb', 4], ['ccc', 1], ['ddd', 7]]
-
-
-
+    # walk(r""" a.not_found """) # -> KeyError
+    # walk(r""" a.1 """) # -> Invalid property
+    # walk(r""" [2, 3].aaa """) # -> TypeError
+    # walk(r""" [2, 3].aaa = 4 """) # -> Invalid indexing
 
