@@ -531,7 +531,7 @@ i.walk(r"""
                                 end
                             ])
                         case Expr(Ident('dot'), [target_expr, prop_expr]) then
-                            self.eval(target_expr, env)[prop_expr]
+                            self._dot(target_expr, prop_expr, env)
                         case Expr(Ident('scope'), [body_expr]) then
                             self.eval(body_expr, Environment(env))
                         case Expr(Ident('define'), [name, val_expr]) then
@@ -555,6 +555,19 @@ i.walk(r"""
                         case Expr(op_expr, args_expr) then
                             self._op(op_expr, args_expr, env)
                     end
+            end
+        end;
+
+        defmethod _dot params target_expr, prop_expr, env do
+            target_val := self.eval(target_expr, env);
+            prop_val := self.eval(prop_expr, env);
+            if target_val.type() == 'dict' and prop_val.in(target_val) then
+                target_val[prop_val]
+            else
+                func_val := env.val(prop_val);
+                Expr(Ident('hostfunc'), func args do
+                    self.apply(func_val, [target_val] + args)
+                end)
             end
         end;
 
@@ -795,8 +808,20 @@ if __name__ == "__main__":
     walk(r""" a.ccc = 5 """)
     print(walk(r""" a """)) # -> {'aaa': 2, 'bbb': 4, 'ccc': 5}
 
+    walk(r""" a.ddd = add """)
+    print(walk(r""" a.ddd(2, 3) """)) # -> 5
+
     # walk(r""" a.not_found """) # -> KeyError
     # walk(r""" a.1 """) # -> Invalid property
     # walk(r""" [2, 3].aaa """) # -> TypeError
     # walk(r""" [2, 3].aaa = 4 """) # -> Invalid indexing
 
+    # UFCS
+    print(walk(r""" 2.add(3) """)) # -> 5
+    print(walk(r""" [2, 3, 4].len().add(5) """)) # -> 8
+
+    walk(r""" deffunc myadd params a, b do a + b end """)
+    print(walk(r""" 2.myadd(3) """))
+
+    # walk(r""" 2.not_found() """) # -> Undefined variable
+    # walk(r""" foo := 2; 3.foo() """) # -> Invalid operator
