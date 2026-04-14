@@ -356,7 +356,7 @@ class TestToT(TestBase):
         self.walk(r""" a.ccc = 5 """)
         assert self.walk(r""" a """) == {'aaa': 2, 'bbb': 4, 'ccc': 5}
 
-        with pytest.raises(KeyError):
+        with pytest.raises(AssertionError):
             self.walk(r""" a.not_found """)
         with pytest.raises(AssertionError, match="Invalid property"):
             self.walk(r""" a.1 """)
@@ -364,6 +364,19 @@ class TestToT(TestBase):
             self.walk(r""" [2, 3].aaa """)
         with pytest.raises(Exception):
             self.walk(r""" [2, 3].aaa = 4 """)
+
+    def test_ufcs(self):
+        assert self.walk(r""" 2.add(3) """) == 5
+        assert self.walk(r""" [2, 3, 4].len() """) == 3
+        assert self.walk(r""" [2, 3, 4].len().add(5) """) == 8
+
+        self.walk(r""" deffunc myadd params a, b do a + b end """)
+        assert self.walk(r""" 2.myadd(3) """) == 5
+
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            self.walk(r""" 2.not_found() """)
+        with pytest.raises(AssertionError, match="Invalid operator"):
+            self.walk(r""" foo := 2; 3.foo() """)
 
     def test_quote(self, capsys):
         assert self.walk(r""" quote(hello_world) """) == Ident("hello_world")
@@ -699,8 +712,8 @@ class TestExamples(TestBase):
             deffunc quicksort params a do
                 if len(a) <= 1 then a else
                     pivot := first(a); rem := rest(a);
-                    left := filter(rem, func x do x < pivot end);
-                    right := filter(rem, func x do x >= pivot end);
+                    left := rem.filter(func x do x < pivot end);
+                    right := rem.filter(func x do x >= pivot end);
                     quicksort(left) + [pivot] + quicksort(right)
                 end
             end;
@@ -719,7 +732,7 @@ class TestExamples(TestBase):
                     i = i + 1
                 end;
 
-                map(filter(enumerate(s), last), first)
+                enumerate(s).filter(last).map(first)
             end;
 
             sieve(10)

@@ -443,7 +443,7 @@ class Evaluator:
                 assert len(args) == 0, f"Continue takes no arguments @ evaluate(): {args}"
                 raise ContinueException()
             case (Ident("__core_func"), [params, body]):
-                return (Ident("closure"), params, body, env)
+                return (Ident("closure"), [params, body, env])
             case (Ident("return"), args):
                 assert len(args) <= 1, \
                     f"Return takes zero or one argument @ evaluate(): {args}"
@@ -558,7 +558,7 @@ class Evaluator:
             case dict() if attr_expr in target_val:
                 attr_val = target_val[attr_expr]
                 match attr_val:
-                    case (Ident("closure"), [Ident("self"), *_], _, _):
+                    case (Ident("closure"), [[Ident("self"), *_], _, _]):
                         return lambda args: self.apply(attr_val, [target_val] + args)
                 return attr_val
 
@@ -566,7 +566,7 @@ class Evaluator:
         match attr_val:
             case c if callable(c):
                 return lambda args: c([target_val] + args)
-            case (Ident("closure"), _, _, _):
+            case (Ident("closure"), [_, _, _]):
                 return lambda args: self.apply(attr_val, [target_val] + args)
 
     def _op(self, op_expr, args_expr, env):
@@ -600,7 +600,7 @@ class Evaluator:
         match op_val:
             case c if callable(c):
                 return c(args_val)
-            case (Ident("closure"), params, body, closure_env):
+            case (Ident("closure"), [params, body, closure_env]):
                 new_env = Environment(closure_env)
                 if self._match_pattern(params, args_val, new_env):
                     try:
