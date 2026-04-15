@@ -234,11 +234,11 @@ i.walk(r"""
                     self._consume(Ident(']'))
                 else
                     self._current_and_advance();
-                    prop := self._current_and_advance();
-                    if prop.type() != 'Ident' then
-                        raise('Invalid property @ _call_index_dot(): ' + str(prop))
+                    prop_name := self._current_and_advance();
+                    if prop_name.type() != 'Ident' then
+                        raise('Invalid property @ _call_index_dot(): ' + str(prop_name))
                     end;
-                    target = Expr(Ident('dot'), [target, str(prop)])
+                    target = Expr(Ident('dot'), [target, str(prop_name)])
                 end
             end;
             target
@@ -558,13 +558,20 @@ i.walk(r"""
             end
         end;
 
-        defmethod _dot params target_expr, prop_expr, env do
+        defmethod _dot params target_expr, prop_name, env do
             target_val := self.eval(target_expr, env);
-            prop_val := self.eval(prop_expr, env);
-            if target_val.type() == 'dict' and prop_val.in(target_val) then
-                target_val[prop_val]
+            if target_val.type() == 'dict' and prop_name.in(target_val) then
+                attr_val := target_val[prop_name];
+                match attr_val
+                    case Expr(Ident('closure'), [[Ident('self'), *_], _, _]) then
+                        Expr(Ident('hostfunc'), func args do
+                            self.apply(attr_val, [target_val] + args)
+                        end)
+                    case _ then
+                        attr_val
+                end
             else
-                func_val := env.val(prop_val);
+                func_val := env.val(prop_name);
                 Expr(Ident('hostfunc'), func args do
                     self.apply(func_val, [target_val] + args)
                 end)
@@ -826,33 +833,49 @@ if __name__ == "__main__":
     # walk(r""" 2.not_found() """) # -> Undefined variable
     # walk(r""" foo := 2; 3.foo() """) # -> Invalid operator
 
-    # Examples with UFCS
+    # Method notation
 
-    print(walk(r"""
-        deffunc quicksort params a do
-            if len(a) <= 1 then a else
-                pivot := first(a); rem := rest(a);
-                left := rem.filter(func x do x < pivot end);
-                right := rem.filter(func x do x >= pivot end);
-                quicksort(left) + [pivot] + quicksort(right)
-            end
-        end;
+    walk(r""" obj := {
+        set: func self, val do self.val = val end,
+        add: func self, a do self.val + a end,
+        val: None
+    } """)
+    walk(r""" obj.set(2) """)
+    print(walk(r""" obj.val """)) # -> 2
+    print(walk(r""" obj.add(3) """)) # -> 5
 
-        quicksort([5, 3, 8, 4, 2])
-    """))
+    print(walk(r""" {a: 2, b: 3}.keys() """)) # -> ['a', 'b']
+    print(walk(r""" { len: func self do "local" end }.len() """)) # -> local
 
-    print(walk(r"""
-        deffunc sieve params n do
-            s := [False, False] + [True] * (n - 2);
-            i := 2; while i * i < n do
-                if s[i] then
-                    for j in range(i * i, n, i) do s[j] = False end
-                end;
-                i = i + 1
-            end;
+    # Poor man's object
 
-            enumerate(s).filter(last).map(first)
-        end;
+    walk(r"""
+        deffunc Animal params name do
+            self := {};
+            self._name = name;
+            self.introduce = func self do print("I am", self._name) end;
+            self.make_sound = func self do print("crying") end;
+            self
+        end
+    """)
+    walk(r"""
+        animal1 := Animal("Rocky");
+        animal2 := Animal("Lucy");
+        animal1.introduce();
+        animal1.make_sound();
+        animal2.introduce();
+        animal2.make_sound()
+    """)
 
-        sieve(10)
-    """))
+    walk(r"""
+        deffunc Dog params name do
+            self := Animal(name);
+            self.make_sound = func self do print("woof") end;
+            self
+        end
+    """)
+    walk(r"""
+        dog1 := Dog("Leo");
+        dog1.introduce();
+        dog1.make_sound()
+    """)

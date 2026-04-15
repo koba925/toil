@@ -378,6 +378,19 @@ class TestToT(TestBase):
         with pytest.raises(AssertionError, match="Invalid operator"):
             self.walk(r""" foo := 2; 3.foo() """)
 
+    def test_method_notation(self):
+        self.walk(r""" obj := {
+            set: func self, val do self.val = val end,
+            add: func self, a do self.val + a end,
+            val: None
+        } """)
+        self.walk(r""" obj.set(2) """)
+        assert self.walk(r""" obj.val """) == 2
+        assert self.walk(r""" obj.add(3) """) == 5
+
+        assert self.walk(r""" {a: 2, b: 3}.keys() """) == ['a', 'b']
+        assert self.walk(r""" { len: func self do "local" end }.len() """) == "local"
+
     def test_quote(self, capsys):
         assert self.walk(r""" quote(hello_world) """) == Ident("hello_world")
         assert self.walk(r""" quote(if 2 == 3 then 4 else 5 end) """) == (
@@ -737,6 +750,41 @@ class TestExamples(TestBase):
 
             sieve(10)
         """) == [2, 3, 5, 7]
+
+    def test_poor_mans_object(self, capsys):
+        self.walk("""
+            deffunc Animal params name do
+                self := {};
+                self._name = name;
+                self.introduce = func self do print("I am", self._name) end;
+                self.make_sound = func self do print("crying") end;
+                self
+            end
+        """)
+        self.walk("""
+            animal1 := Animal("Rocky");
+            animal2 := Animal("Lucy");
+            animal1.introduce();
+            animal1.make_sound();
+            animal2.introduce();
+            animal2.make_sound()
+        """)
+        assert capsys.readouterr().out == "I am Rocky\ncrying\nI am Lucy\ncrying\n"
+
+        self.walk("""
+            deffunc Dog params name do
+                self := Animal(name);
+                self.make_sound = func self do print("woof") end;
+                self
+            end
+        """)
+        self.walk("""
+            dog1 := Dog("Leo");
+            dog1.introduce();
+            dog1.make_sound()
+        """)
+        assert capsys.readouterr().out == "I am Leo\nwoof\n"
+
 
 if __name__ == "__main__":
     pytest.main([__file__])
