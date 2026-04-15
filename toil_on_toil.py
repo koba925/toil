@@ -701,12 +701,13 @@ i.walk(r"""
             self._env.define('items', Expr(Ident('hostfunc'), func args do items(args[0]) end));
 
             self._env.define('type', Expr(Ident('hostfunc'), func args do type(args[0]) end));
-            self._env.define('str', Expr(Ident('hostfunc'), func args do str(args[0]) end));
+            self._env.define('bool', Expr(Ident('hostfunc'), func args do bool(args[0]) end));
             self._env.define('int', Expr(Ident('hostfunc'), func args do int(args[0]) end));
+            self._env.define('str', Expr(Ident('hostfunc'), func args do str(args[0]) end));
             self._env.define('list', Expr(Ident('hostfunc'), func args do list(args[0]) end));
             self._env.define('dict', Expr(Ident('hostfunc'), func args do dict(args[0]) end));
-            self._env.define('Ident', Expr(Ident('hostfunc'), func args do Ident(args[0]) end));
-            self._env.define('Expr', Expr(Ident('hostfunc'), func args do apply(Expr, args) end));
+            # self._env.define('Ident', Expr(Ident('hostfunc'), func args do Ident(args[0]) end));
+            # self._env.define('Expr', Expr(Ident('hostfunc'), func args do apply(Expr, args) end));
 
             self._env.define('print', Expr(Ident('hostfunc'), func args do apply(print, args) end));
 
@@ -803,79 +804,23 @@ if __name__ == "__main__":
 
     # Example
 
-    # Dot notation
-    walk(r""" a := {aaa: 2 , bbb: 3} """)
+    # Type functions
 
-    print(scan(r""" a.aaa """)) # -> [a, ., aaa, $EOF]
-    print(ast(r""" a.aaa """)) # -> (dot, [a, 'aaa'])
-    print(walk(r""" a.aaa """)) # -> 2
+    print(walk(r""" type(None) """)) # -> NoneType
+    print(walk(r""" type(True) """)) # -> bool
+    print(walk(r""" type(5) """)) # -> int
+    print(i.walk(r""" tot.walk(" type('') ") """)) # -> str
+    print(walk(r""" type("") """)) # -> str
+    print(walk(r""" type([]) """)) # -> list
+    print(walk(r""" type({}) """)) # -> dict
 
-    walk(r""" a.bbb = 4 """)
-    print(walk(r""" a """)) # -> {'aaa': 2, 'bbb': 4}
-    walk(r""" a.ccc = 5 """)
-    print(walk(r""" a """)) # -> {'aaa': 2, 'bbb': 4, 'ccc': 5}
-
-    walk(r""" a.ddd = add """)
-    print(walk(r""" a.ddd(2, 3) """)) # -> 5
-
-    # walk(r""" a.not_found """) # -> KeyError
-    # walk(r""" a.1 """) # -> Invalid property
-    # walk(r""" [2, 3].aaa """) # -> TypeError
-    # walk(r""" [2, 3].aaa = 4 """) # -> Invalid indexing
-
-    # UFCS
-    print(walk(r""" 2.add(3) """)) # -> 5
-    print(walk(r""" [2, 3, 4].len().add(5) """)) # -> 8
-
-    walk(r""" deffunc myadd params a, b do a + b end """)
-    print(walk(r""" 2.myadd(3) """))
-
-    # walk(r""" 2.not_found() """) # -> Undefined variable
-    # walk(r""" foo := 2; 3.foo() """) # -> Invalid operator
-
-    # Method notation
-
-    walk(r""" obj := {
-        set: func self, val do self.val = val end,
-        add: func self, a do self.val + a end,
-        val: None
-    } """)
-    walk(r""" obj.set(2) """)
-    print(walk(r""" obj.val """)) # -> 2
-    print(walk(r""" obj.add(3) """)) # -> 5
-
-    print(walk(r""" {a: 2, b: 3}.keys() """)) # -> ['a', 'b']
-    print(walk(r""" { len: func self do "local" end }.len() """)) # -> local
-
-    # Poor man's object
-
-    walk(r"""
-        deffunc Animal params name do
-            self := {};
-            self._name = name;
-            self.introduce = func self do print("I am", self._name) end;
-            self.make_sound = func self do print("crying") end;
-            self
-        end
-    """)
-    walk(r"""
-        animal1 := Animal("Rocky");
-        animal2 := Animal("Lucy");
-        animal1.introduce();
-        animal1.make_sound();
-        animal2.introduce();
-        animal2.make_sound()
-    """)
-
-    walk(r"""
-        deffunc Dog params name do
-            self := Animal(name);
-            self.make_sound = func self do print("woof") end;
-            self
-        end
-    """)
-    walk(r"""
-        dog1 := Dog("Leo");
-        dog1.introduce();
-        dog1.make_sound()
-    """)
+    print(walk(r""" bool(True) """)) # -> True
+    print(walk(r""" bool(1) """)) # -> True
+    print(walk(r""" int(2) """)) # -> 2
+    print(walk(r""" int("2") """)) # -> 2
+    print(walk(r""" str("a") """)) # -> a
+    print(walk(r""" str(2) """)) # -> 2
+    print(walk(r""" list([2, 3]) """)) # -> [2, 3]
+    print(walk(r""" list({a: 2, b: 3}) """)) # -> ['a', 'b']
+    print(walk(r""" dict({a: 2, b: 3}) """)) # -> {'a': 2, 'b': 3}
+    print(walk(r""" dict([["a", 2], ["b", 3]]) """)) # -> {'a': 2, 'b': 3}

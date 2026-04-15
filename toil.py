@@ -744,8 +744,9 @@ class Interpreter:
         self._env.define("items", lambda args: [list(e) for e in args[0].items()])
 
         self._env.define("type", lambda args: self.type(args[0]))
-        self._env.define("str", lambda args: str(args[0]))
+        self._env.define("bool", lambda args: bool(args[0]))
         self._env.define("int", lambda args: int(args[0]))
+        self._env.define("str", lambda args: str(args[0]))
         self._env.define("list", lambda args: list(args[0]))
         self._env.define("dict", lambda args: dict(args[0]))
         self._env.define("Ident", lambda args: Ident(args[0]))

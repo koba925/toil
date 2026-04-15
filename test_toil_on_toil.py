@@ -391,6 +391,26 @@ class TestToT(TestBase):
         assert self.walk(r""" {a: 2, b: 3}.keys() """) == ['a', 'b']
         assert self.walk(r""" { len: func self do "local" end }.len() """) == "local"
 
+    def test_type_functions(self):
+        assert self.walk(r""" type(None) """) == "NoneType"
+        assert self.walk(r""" type(True) """) == "bool"
+        assert self.walk(r""" type(5) """) == "int"
+        assert i.walk(r""" tot.walk(" type('') ") """) == "str"
+        assert self.walk(r""" type("") """) == "str"
+        assert self.walk(r""" type([]) """) == "list"
+        assert self.walk(r""" type({}) """) == "dict"
+
+        assert self.walk(r""" bool(True) """) is True
+        assert self.walk(r""" bool(1) """) is True
+        assert self.walk(r""" int(2) """) == 2
+        assert self.walk(r""" int("2") """) == 2
+        assert self.walk(r""" str("a") """) == "a"
+        assert self.walk(r""" str(2) """) == "2"
+        assert self.walk(r""" list([2, 3]) """) == [2, 3]
+        assert self.walk(r""" list({a: 2, b: 3}) """) == ["a", "b"]
+        assert self.walk(r""" dict({a: 2, b: 3}) """) == {"a": 2, "b": 3}
+        assert self.walk(r""" dict([["a", 2], ["b", 3]]) """) == {"a": 2, "b": 3}
+
     def test_quote(self, capsys):
         assert self.walk(r""" quote(hello_world) """) == Ident("hello_world")
         assert self.walk(r""" quote(if 2 == 3 then 4 else 5 end) """) == (
