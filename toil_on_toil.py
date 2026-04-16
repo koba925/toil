@@ -234,11 +234,11 @@ i.walk(r"""
                     self._consume(Ident(']'))
                 else
                     self._current_and_advance();
-                    prop_name := self._current_and_advance();
-                    if prop_name.type() != 'Ident' then
-                        raise('Invalid property @ _call_index_dot(): ' + str(prop_name))
+                    attr_name := self._current_and_advance();
+                    if attr_name.type() != 'Ident' then
+                        raise('Invalid attribute @ _call_index_dot(): ' + str(attr_name))
                     end;
-                    target = Expr(Ident('dot'), [target, str(prop_name)])
+                    target = Expr(Ident('dot'), [target, str(attr_name)])
                 end
             end;
             target
@@ -514,9 +514,7 @@ i.walk(r"""
                 case 'str' then expr
                 case 'list' then expr.map(func e do self.eval(e, env) end)
                 case 'dict' then
-                    expr.keys().map(func k do
-                        [self.eval(k, env), self.eval(expr[k], env)]
-                    end).dict()
+                    expr.keys().map(func k do [k, self.eval(expr[k], env)] end).dict()
                 case 'Ident' then env.val(str(expr))
                 case 'Expr' then
                     match expr
@@ -525,13 +523,9 @@ i.walk(r"""
                         case Expr(Ident('func'), [params, body_expr]) then
                             Expr(Ident('closure'), [params, body_expr, env])
                         case Expr(Ident('return'), args) then
-                            raise(['ReturnException',
-                                if args.len() == 0 then None else
-                                    self.eval(args[0], env)
-                                end
-                            ])
-                        case Expr(Ident('dot'), [target_expr, prop_expr]) then
-                            self._dot(target_expr, prop_expr, env)
+                            raise(['ReturnException', self._eval_optional_arg(args, env)])
+                        case Expr(Ident('dot'), [target_expr, attr_expr]) then
+                            self._dot(target_expr, attr_expr, env)
                         case Expr(Ident('scope'), [body_expr]) then
                             self.eval(body_expr, Environment(env))
                         case Expr(Ident('define'), [name, val_expr]) then
@@ -547,21 +541,21 @@ i.walk(r"""
                         case Expr(Ident('continue'), []) then
                             raise(['ContinueException'])
                         case Expr(Ident('break'), args) then
-                            raise(['BreakException',
-                                if args.len() == 0 then None else
-                                    self.eval(args[0], env)
-                                end
-                            ])
+                            raise(['BreakException', self._eval_optional_arg(args, env)])
                         case Expr(op_expr, args_expr) then
                             self._op(op_expr, args_expr, env)
                     end
             end
         end;
 
-        defmethod _dot params target_expr, prop_name, env do
+        defmethod _eval_optional_arg params args, env do
+            if args.len() == 0 then None else self.eval(args[0], env) end
+        end;
+
+        defmethod _dot params target_expr, attr_name, env do
             target_val := self.eval(target_expr, env);
-            if target_val.type() == 'dict' and prop_name.in(target_val) then
-                attr_val := target_val[prop_name];
+            if target_val.type() == 'dict' and attr_name.in(target_val) then
+                attr_val := target_val[attr_name];
                 match attr_val
                     case Expr(Ident('closure'), [[Ident('self'), *_], _, _]) then
                         Expr(Ident('hostfunc'), func args do
@@ -571,7 +565,7 @@ i.walk(r"""
                         attr_val
                 end
             else
-                func_val := env.val(prop_name);
+                func_val := env.val(attr_name);
                 Expr(Ident('hostfunc'), func args do
                     self.apply(func_val, [target_val] + args)
                 end)

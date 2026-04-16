@@ -358,7 +358,7 @@ class TestToT(TestBase):
 
         with pytest.raises(AssertionError):
             self.walk(r""" a.not_found """)
-        with pytest.raises(AssertionError, match="Invalid property"):
+        with pytest.raises(AssertionError, match="Invalid attribute"):
             self.walk(r""" a.1 """)
         with pytest.raises(Exception):
             self.walk(r""" [2, 3].aaa """)

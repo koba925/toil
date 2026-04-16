@@ -972,7 +972,7 @@ text
         self.i.walk(""" a.ddd = 6 """)
         assert self.i.walk(""" a """) == {'aaa': 2, 'bbb': 4, 'ddd': 6}
 
-        with pytest.raises(AssertionError, match="Invalid property"):
+        with pytest.raises(AssertionError, match="Invalid attribute"):
             self.i.walk(""" a.1 """)
 
         with pytest.raises(AssertionError):

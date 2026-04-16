@@ -220,7 +220,7 @@ class Parser:
                 case Ident("."):
                     self._advance()
                     assert type(self._current_token()) is Ident, \
-                        f"Invalid property @ _call_index_dot(): {self._current_token()}"
+                        f"Invalid attribute @ _call_index_dot(): {self._current_token()}"
                     attr = self._advance()
                     target = (Ident("dot"), [target, str(attr)])
         return target
@@ -984,5 +984,3 @@ if __name__ == "__main__":
     # Example
     # i.walk(""" return(2) """) # -> Error
     # i.walk(""" break(2) """) # -> Error
-
-
