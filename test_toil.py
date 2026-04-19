@@ -760,8 +760,6 @@ text
         self.i.walk(""" [*a] := [2, 3] """)
         assert self.i.walk(""" a """) == [2, 3]
 
-        with pytest.raises(AssertionError):
-            self.i.walk(""" [*b, a] := [2] """)
 
     def test_argument_destructuring(self, capsys):
         self.i.walk(""" deffunc f params a, [b, c] do [a, b, c] end """)
@@ -777,10 +775,6 @@ text
         assert self.i.walk(""" h(2, 3, 4) """) == [2, [3, 4]]
         with pytest.raises(AssertionError):
             self.i.walk(""" h() """)
-
-        self.i.walk(""" deffunc i params *a, b do [a, b] end """)
-        with pytest.raises(AssertionError):
-            self.i.walk(""" i(2, 3, 4) """)
 
     def test_match(self):
         self.i.walk("""

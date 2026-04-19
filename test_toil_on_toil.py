@@ -151,6 +151,116 @@ class TestToT(TestBase):
         with pytest.raises(AssertionError, match="Unexpected token"):
             self.walk(r""" a := """)
 
+    def test_destructure_variable_and_literal(self):
+        # Variable pattern
+        assert self.walk(r""" a := 2; a """) == 2
+        assert self.walk(r""" _ := 2; _ """) == 2
+
+        # Literal pattern
+        assert self.walk(r""" a := 2; 2 := a """) == 2
+        assert self.walk(r""" None := None """) is None
+        assert self.walk(r""" True := True """) is True
+        assert self.walk(r""" "hello" := "hello" """) == "hello"
+
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" "hello" := "world" """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" a := 3; 2 := a """)
+
+    def test_destructure_list(self):
+        assert self.walk(r""" [a, b] := [3, 4]; [a, b] """) == [3, 4]
+        assert self.walk(r""" [] := [] """) == []
+        assert self.walk(r""" [_, b, _] := [2, 3, 4]; b """) == 3
+
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" [a, b] := [2] """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" [a, b] := [4, 5, 6] """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" [] := [1] """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" [a] := 2 """)
+
+        # Rest parameters
+        assert self.walk(r""" [a, *b] := [2]; [a, b] """) == [2, []]
+        assert self.walk(r""" [a, *b] := [3, 4]; [a, b] """) == [3, [4]]
+        assert self.walk(r""" [a, *b] := [4, 5, 6]; [a, b] """) == [4, [5, 6]]
+        assert self.walk(r""" [*a] := [4, 5, 6]; a """) == [4, 5, 6]
+
+        assert self.walk(r""" [*a, b] := [2]; [a, b] """) == [[], 2]
+        assert self.walk(r""" [*a, b] := [2, 3]; [a, b] """) == [[2], 3]
+        assert self.walk(r""" [*a, b] := [2, 3, 4]; [a, b] """) == [[2, 3], 4]
+
+        assert self.walk(r""" [a, *b, c] := [3, 4]; [a, b, c] """) == [3, [], 4]
+        assert self.walk(r""" [a, *b, c] := [4, 5, 6]; [a, b, c] """) == [4, [5], 6]
+        assert self.walk(r""" [a, *b, c] := [5, 6, 7, 8]; [a, b, c] """) == [5, [6, 7], 8]
+
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" [a, *b] := [] """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" [*a, b] := [] """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" [a, *b, c] := [2] """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" [a, *b, *c, d] := [5, 6, 7, 8] """)
+
+    def test_destructure_dict(self):
+        assert self.walk(r""" {a} := {a: 2, b: 3}; a """) == 2
+        assert self.walk(r""" {a, b} := {a: 2, b: 3}; [a, b] """) == [2, 3]
+        assert self.walk(r""" {a: c, b: d} := {a: 3, b: 4}; [c, d] """) == [3, 4]
+        assert self.walk(r""" {a} := {"a": 5, b: 6}; a """) == 5
+        assert self.walk(r""" {a: _, b} := {a: 2, b: 3}; b """) == 3
+        assert self.walk(r""" {} := {a: 2, b: 3} """) == {'a': 2, 'b': 3}
+
+        assert self.walk(r""" {a, *rest} := {a: 2}; [a, rest] """) == [2, {}]
+        assert self.walk(r""" {a, *rest} := {a: 2, b: 3}; [a, rest] """) == [2, {'b': 3}]
+        assert self.walk(r""" {a, *rest} := {a: 2, b: 3, c: 4}; [a, rest] """) == [2, {'b': 3, 'c': 4}]
+
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" {a} := {b: 2} """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" {a, b, c} := {a: 2, b: 3} """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" {a, *rest} := {b: 2} """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" {a} := 2 """)
+
+    def test_destructure_ident_and_expr(self):
+        assert str(self.walk(r""" Ident("aaa") := Ident("aaa") """)) == "aaa"
+        assert str(self.walk(r""" Ident(a) := Ident("aaa"); a """)) == "aaa"
+
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" Ident("aaa") := Ident("bbb") """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" Ident(a) := "aaa" """)
+
+        assert self.walk(r""" Expr(Ident("add"), [int(a), int(b)]) := quote(2 + 3); [a, b] """) == [2, 3]
+        assert self.walk(r""" Expr(Ident("add"), [Ident(name1), Ident(name2)]) := quote(a + b); [name1, name2] """) == ['a', 'b']
+
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" Expr(Ident("add"), [Ident(name1), Ident(name2)]) := 2 + 3 """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" Expr(Ident("add"), [Ident(name1), Ident(name2)]) := Expr(Ident("add")) """)
+
+    def test_destructure_type(self):
+        assert self.walk(r""" int(a) := 2; a """) == 2
+        assert self.walk(r""" str(a) := "aaa"; a """) == "aaa"
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" int(a) := "2" """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" str(a) := [] """)
+
+    def test_destructure_or(self):
+        assert self.walk(r""" int(a) or str(a) := 2; a """) == 2
+        assert self.walk(r""" int(a) or str(a) := "aaa"; a """) == "aaa"
+        assert self.walk(r""" int(a) or str(a) or list(a):= [2]; a """) == [2]
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" int(a) or str(a) := [2] """)
+
+    def test_destructure_combination(self):
+        assert self.walk(r""" [{a: b}, c] := [{a: 2, b: 3}, 4]; [b, c] """) == [2, 4]
+        assert self.walk(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """) == [5, 6]
+
     def test_list_assign(self):
         self.walk(""" b := [2, 3, [4, 5]] """)
         self.walk(""" b[0] = 6 """)

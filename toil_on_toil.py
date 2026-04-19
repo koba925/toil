@@ -169,25 +169,9 @@ i.walk(r"""
         end;
 
         defmethod _and_or params do
-            left := self._not();
-            while type(op := self._current()) == 'Ident' and str(op).in(['and', 'or']) do
-                self._current_and_advance();
-                right := self._not();
-                if op == Ident('and') then
-                    left := Expr(Ident('scope'), [Expr(Ident('if'), [
-                        Expr(Ident('define'), [Ident('__core_and_left'), left]),
-                        right,
-                        Ident('__core_and_left')
-                    ])])
-                else
-                    left := Expr(Ident('scope'), [Expr(Ident('if'), [
-                        Expr(Ident('define'), [Ident('__core_or_left'), left]),
-                        Ident('__core_or_left'),
-                        right
-                    ])])
-                end
-            end;
-            left
+            self._binary_right({
+                'and': Ident('and'), 'or': Ident('or')
+            }, self._not)
         end;
 
         defmethod _not params do
@@ -288,17 +272,20 @@ i.walk(r"""
 
         defmethod _dict params do
             deffunc _parse_key_value params dic do
-                match self._current().type()
-                    case 'Ident' then
-                        key := str(self._current_and_advance());
+                match self._current()
+                    case Ident('*') then
+                        self._current_and_advance();
+                        dic['*'] = self._current_and_advance()
+                    case Ident(key) then
+                        self._current_and_advance();
                         if self._current() == Ident(':') then
                             self._current_and_advance();
                             dic[key] = self._expression()
                         else
                             dic[key] = Ident(key)
                         end
-                    case 'str' then
-                        key := self._current_and_advance();
+                    case str(key) then
+                        self._current_and_advance();
                         self._consume(Ident(':'));
                         dic[key] = self._expression()
                     case _ then
@@ -528,14 +515,18 @@ i.walk(r"""
                             self._dot(target_expr, attr_expr, env)
                         case Expr(Ident('scope'), [body_expr]) then
                             self.eval(body_expr, Environment(env))
-                        case Expr(Ident('define'), [name, val_expr]) then
-                            self._define(name, val_expr, env)
-                        case Expr(Ident('assign'), [name, val_expr]) then
-                            self._assign(name, val_expr, env)
+                        case Expr(Ident('define'), [left_expr, right_expr]) then
+                            self._define(left_expr, right_expr, env)
+                        case Expr(Ident('assign'), [left_expr, right_expr]) then
+                            self._assign(left_expr, right_expr, env)
                         case Expr(Ident('seq'), exprs) then
                             self._seq(exprs, env)
                         case Expr(Ident('if'), [cond_expr, then_expr, else_expr]) then
                             self._if(cond_expr, then_expr, else_expr, env)
+                        case Expr(Ident('and'), [left_expr, right_expr]) then
+                            self.eval(left_expr, env) and self.eval(right_expr, env)
+                        case Expr(Ident('or'), [left_expr, right_expr]) then
+                            self.eval(left_expr, env) or self.eval(right_expr, env)
                         case Expr(Ident('while'), [cond_expr, body_expr]) then
                             self._while(cond_expr, body_expr, env)
                         case Expr(Ident('continue'), []) then
@@ -572,9 +563,13 @@ i.walk(r"""
             end
         end;
 
-        defmethod _define params name, val_expr, env do
-            val := self.eval(val_expr, env);
-            env.define(str(name), val)
+        defmethod _define params left_expr, right_expr, env do
+            right_val := self.eval(right_expr, env);
+            if self._match_pattern(left_expr, right_val, env) then
+                right_val
+            else
+                raise('Pattern mismatch @ _define(): ' + str(left_expr) + ', ' + str(right_val))
+            end
         end;
 
         defmethod _assign params left_expr, right_expr, env do
@@ -647,6 +642,89 @@ i.walk(r"""
                     end
                 case _ then raise('Invalid operator @ apply: ' + str(op_val))
             end
+        end;
+
+        defmethod _match_pattern params pattern, value, env do
+            deffunc _match_list params do
+                i := 0; lpat := pattern.len(); lval := value.len();
+
+                no_star := True;
+                while i < lpat do
+                    sub_pat := pattern[i];
+                    match sub_pat
+                        case Expr(Ident('*'), [Ident(rest_name)]) then
+                            no_star = False; break()
+                    end;
+                    if i >= lval then return(False) end;
+                    sub_val := value[i];
+                    if not self._match_pattern(sub_pat, sub_val, env) then
+                        return(False)
+                    end;
+                    i = i + 1
+                end;
+                if no_star then return(i == lval) end;
+
+                lrest := lval - lpat + 1;
+                if lrest < 0 then return(False) end;
+                env.define(rest_name, value.slice(i, i + lrest));
+                i = i + 1;
+
+                while i < lpat do
+                    sub_pat := pattern[i];
+                    match sub_pat
+                        case Expr(Ident('*'), [Ident(rest_name)]) then return(False)
+                    end;
+                    sub_val := value[i + lrest - 1];
+                    if not self._match_pattern(sub_pat, sub_val, env) then
+                        return(False)
+                    end;
+                    i = i + 1
+                end;
+
+                True
+            end;
+
+            deffunc _match_dict params do
+                tmp_pat := pattern.copy(); rest_name := None; tmp_val := value.copy();
+                if '*'.in(pattern) then
+                    tmp_pat.pop('*');
+                    rest_name = pattern['*']
+                end;
+
+                for [key, sub_pat] in tmp_pat.items() do
+                    if not key.in(tmp_val) then return(False) end;
+                    if not self._match_pattern(sub_pat, tmp_val[key], env) then
+                        return(False)
+                    end;
+                    tmp_val.pop(key)
+                end;
+
+                if rest_name != None then
+                    env.define(str(rest_name), tmp_val)
+                end;
+                True
+            end;
+
+            match pattern
+                case Ident(name) then env.define(name, value); True
+                case list(_) then value.type() == 'list' and _match_list()
+                case dict(_) then value.type() == 'dict' and _match_dict()
+                case Expr(Ident('or'), [left_pat, right_pat]) then
+                    self._match_pattern(left_pat, value, env) or
+                    self._match_pattern(right_pat, value, env)
+                case Expr(Ident('Ident'), [name_pat]) then
+                    value.type() == 'Ident' and
+                    self._match_pattern(name_pat, str(value), env)
+                case Expr(Ident('Expr'), expr_pats) then
+                    value.type() == 'Expr' and expr_pats.len() == value.len() and
+                    zip(expr_pats, value).all(
+                        func [p, v] do self._match_pattern(p, v, env) end
+                    )
+                case Expr(Ident(typ), [val_pat]) then
+                    value.type() == typ and self._match_pattern(val_pat, value, env)
+                case _ then
+                    pattern.type() == value.type() and pattern == value
+            end
         end
     end
 """)
@@ -700,8 +778,8 @@ i.walk(r"""
             self._env.define('str', Expr(Ident('hostfunc'), func args do str(args[0]) end));
             self._env.define('list', Expr(Ident('hostfunc'), func args do list(args[0]) end));
             self._env.define('dict', Expr(Ident('hostfunc'), func args do dict(args[0]) end));
-            # self._env.define('Ident', Expr(Ident('hostfunc'), func args do Ident(args[0]) end));
-            # self._env.define('Expr', Expr(Ident('hostfunc'), func args do apply(Expr, args) end));
+            self._env.define('Ident', Expr(Ident('hostfunc'), func args do Ident(args[0]) end));
+            self._env.define('Expr', Expr(Ident('hostfunc'), func args do apply(Expr, args) end));
 
             self._env.define('print', Expr(Ident('hostfunc'), func args do apply(print, args) end));
 
@@ -714,55 +792,56 @@ i.walk(r"""
             self.walk('
                 deffunc first params a do a[0] end;
                 deffunc rest params a do slice(a, 1, None) end;
-                deffunc last params a do a[-1] end
-            ');
-            self.walk('
+                deffunc last params a do a[-1] end;
+
                 deffunc range params start, stop, step do
                     b := [];
                     i := start; while i < stop do push(b, i); i = i + step end;
                     b
-                end
-            ');
-            self.walk('
+                end;
+
                 deffunc map params a, f do
                     b := [];
                     for x in a do push(b, f(x)) end;
                     b
-                end
-            ');
-            self.walk('
+                end;
+
                 deffunc filter params a, f do
                     b := [];
                     for x in a do if f(x) then push(b, x) end end;
                     b
-                end
-            ');
-            self.walk('
+                end;
+
                 deffunc zip params a, b do
                     z := []; la := len(a); lb := len(b);
                     i := 0; while i < la and i < lb do
                         push(z, [a[i], b[i]]); i = i + 1
                     end;
                     z
-                end
-            ');
-            self.walk('
+                end;
+
                 deffunc reduce params a, f, init do
                     acc := init;
                     for x in a do acc = f(acc, x) end;
                     acc
-                end
-            ');
-            self.walk('
+                end;
+
                 deffunc reverse params a do
                     b := []; l := len(a);
                     for i in range(1, l + 1, 1) do push(b, a[l - i]) end;
                     b
-                end
-            ');
-            self.walk('
+                end;
+
                 deffunc enumerate params a do
                     zip(range(0, len(a), 1), a)
+                end;
+
+                deffunc all params a, f do
+                    for x in a do if not f(x) then return(False) end end; True
+                end;
+
+                deffunc any params a, f do
+                    for x in a do if f(x) then return(True) end end; False
                 end
             ');
 
@@ -798,23 +877,92 @@ if __name__ == "__main__":
 
     # Example
 
-    # Type functions
+    # Destructure
 
-    print(walk(r""" type(None) """)) # -> NoneType
-    print(walk(r""" type(True) """)) # -> bool
-    print(walk(r""" type(5) """)) # -> int
-    print(i.walk(r""" tot.walk(" type('') ") """)) # -> str
-    print(walk(r""" type("") """)) # -> str
-    print(walk(r""" type([]) """)) # -> list
-    print(walk(r""" type({}) """)) # -> dict
+    # Variable pattern
+    print(walk(r""" a := 2; a """)) # -> 2
+    print(walk(r""" _ := 2; _ """)) # -> 2 (Pseudo wildcard)
 
-    print(walk(r""" bool(True) """)) # -> True
-    print(walk(r""" bool(1) """)) # -> True
-    print(walk(r""" int(2) """)) # -> 2
-    print(walk(r""" int("2") """)) # -> 2
-    print(walk(r""" str("a") """)) # -> a
-    print(walk(r""" str(2) """)) # -> 2
-    print(walk(r""" list([2, 3]) """)) # -> [2, 3]
-    print(walk(r""" list({a: 2, b: 3}) """)) # -> ['a', 'b']
-    print(walk(r""" dict({a: 2, b: 3}) """)) # -> {'a': 2, 'b': 3}
-    print(walk(r""" dict([["a", 2], ["b", 3]]) """)) # -> {'a': 2, 'b': 3}
+    # List pattern
+    # print(walk(r""" [a, b] := [2] """)) # -> Pattern mismatch
+    print(walk(r""" [a, b] := [3, 4]; [a, b] """)) # -> [3, 4]
+    # print(walk(r""" [a, b] := [4, 5, 6] """)) # -> Pattern mismatch
+
+    # print(walk(r""" [a, *b] := [] """)) # -> Pattern mismatch
+    print(walk(r""" [a, *b] := [2]; [a, b] """)) # -> [2, []]
+    print(walk(r""" [a, *b] := [3, 4]; [a, b] """)) # -> [3, [4]]
+    print(walk(r""" [a, *b] := [4, 5, 6]; [a, b] """)) # -> [4, [5, 6]]
+    print(walk(r""" [*a] := [4, 5, 6]; a """)) # -> [4, 5, 6]
+
+    # print(walk(r""" [*a, b] := [] """)) # -> Pattern mismatch
+    print(walk(r""" [*a, b] := [2]; [a, b] """)) # -> [[], 2]
+    print(walk(r""" [*a, b] := [2, 3]; [a, b] """)) # -> [[2], 3]
+    print(walk(r""" [*a, b] := [2, 3, 4]; [a, b] """)) # -> [[2, 3], 4]
+
+    # print(walk(r""" [a, *b, c] := [2] """)) # -> Pattern mismatch
+    print(walk(r""" [a, *b, c] := [3, 4]; [a, b, c] """)) # -> [3, [], 4]
+    print(walk(r""" [a, *b, c] := [4, 5, 6]; [a, b, c] """)) # -> [4, [5], 6]
+    print(walk(r""" [a, *b, c] := [5, 6, 7, 8]; [a, b, c] """)) # -> [5, [6, 7], 8]
+
+    print(walk(r""" [_, b, _] := [2, 3, 4]; b """)) # -> 3 (Pseudo wildcard)
+
+    print(walk(r""" [] := [] """)) # -> []
+    # print(walk(r""" [] := [1] """)) # -> Pattern mismatch
+
+    # print(walk(r""" [a] := 2 """)) # -> Pattern mismatch
+    # print(walk(r""" [a, *b, *c, d] := [5, 6, 7, 8] """)) # -> Pattern mismatch
+
+    # Dict pattern
+    # print(walk(r""" {a} := {b: 2} """)) # -> Pattern mismatch
+    print(walk(r""" {a} := {a: 2, b: 3}; a """)) # -> 2
+    print(walk(r""" {a, b} := {a: 2, b: 3}; [a, b] """)) # -> [2, 3]
+    print(walk(r""" {a: c, b: d} := {a: 3, b: 4}; [c, d] """)) # -> [3, 4]
+    # print(walk(r""" {a, b, c} := {a: 2, b: 3} """)) # -> Pattern mismatch
+    print(walk(r""" {a} := {"a": 5, b: 6}; a """)) # -> 5
+
+    # print(walk(r""" {a, *rest} := {b: 2} """)) # -> Pattern mismatch
+    print(walk(r""" {a, *rest} := {a: 2}; [a, rest] """)) # -> [2, {}]
+    print(walk(r""" {a, *rest} := {a: 2, b: 3}; [a, rest] """)) # -> [2, {'b': 3}]
+    print(walk(r""" {a, *rest} := {a: 2, b: 3, c: 4}; [a, rest] """)) # -> [2, {'b': 3, 'c': 4}]
+
+    print(walk(r""" {a: _, b} := {a: 2, b: 3}; b """)) # -> 3 (Pseudo wildcard)
+
+    print(walk(r""" {} := {a: 2, b: 3} """)) # -> {'a': 2, 'b': 3}
+
+    # print(walk(r""" {a} := 2 """)) # -> Pattern mismatch
+
+    # Ident pattern
+    print(walk(r""" Ident("aaa") := Ident("aaa") """)) # -> aaa
+    # print(walk(r""" Ident("aaa") := Ident("bbb") """)) # -> Pattern mismatch
+    print(walk(r""" Ident(a) := Ident("aaa"); a """)) # -> aaa
+    # print(walk(r""" Ident(a) := "aaa"; a """)) # -> Pattern mismatch
+
+    # Expr pattern
+    print(walk(r""" Expr(Ident("add"), [int(a), int(b)]) := quote(2 + 3); [a, b] """)) # -> [2, 3]
+    print(walk(r""" Expr(Ident("add"), [Ident(name1), Ident(name2)]) := quote(a + b); [name1, name2] """)) # -> ['a', 'b']
+    # print(walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := 2 + 3 """)) # -> Pattern mismatch
+    # print(walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := Expr(Ident('add')) """)) # -> Pattern mismatch
+
+    # Type pattern
+    print(walk(r""" int(a) := 2; a """)) # -> 2
+    # print(walk(r""" int(a) := "2"; a """)) # -> Pattern mismatch
+    print(walk(r""" str(a) := "aaa"; a """)) # -> aaa
+    # print(walk(r""" str(a) := []; a """)) # -> Pattern mismatch
+
+    # Or pattern
+    print(walk(r""" int(a) or str(a) := 2; a """)) # -> 2
+    print(walk(r""" int(a) or str(a) := "aaa"; a """)) # -> aaa
+    # print(walk(r""" int(a) or str(a) := [2]; a """)) # -> Pattern mismatch
+    print(walk(r""" int(a) or str(a) or list(a):= [2]; a """)) # -> [2]
+
+    # Literal pattern
+    print(walk(r""" a := 2; 2 := a """)) # -> 2
+    print(walk(r""" None := None """)) # -> None
+    print(walk(r""" True := True """)) # -> True
+    print(walk(r""" "hello" := "hello" """)) # -> "hello"
+    # print(walk(r""" "hello" := "world" """)) # -> Pattern mismatch
+    # print(walk(r""" a := 3; 2 := a """)) # -> Pattern mismatch
+
+    # Combination
+    print(walk(r""" [{a: b}, c] := [{a: 2, b: 3}, 4]; [b, c] """)) # -> [2, 4]
+    print(walk(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """)) # -> [5, 6]

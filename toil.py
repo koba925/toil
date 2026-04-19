@@ -24,6 +24,7 @@ SymbolTable = dict[str, Value]
 def is_ident_first(c): return c.isalpha() or c == "_"
 def is_ident_rest(c): return c.isalnum() or c == "_"
 def is_ident(s): return is_ident_first(s[0])
+def toil_type(expr): return "Expr" if type(expr) is tuple else type(expr).__name__
 
 
 class RuleCollector:
@@ -529,9 +530,8 @@ class Evaluator:
     def _match(self, val_expr, cases_expr, env):
         val = self.eval(val_expr, env)
         for pattern, body_expr in cases_expr:
-            new_env = Environment(env)
-            if self._match_pattern(pattern, val, new_env):
-                return self.eval(body_expr, new_env)
+            if self._match_pattern(pattern, val, env):
+                return self.eval(body_expr, env)
         return None
 
     def _while(self, cond_expr, body_expr, env):
@@ -611,65 +611,83 @@ class Evaluator:
                 assert False, f"Invalid operator @ apply(): {op_val}"
 
     def _match_pattern(self, pattern, value, env):
-        def match_list():
-            match pattern:
-                case [*prefix, (Ident("*"), [Ident(rest_name)])]:
-                    if len(value) < len(prefix): return False
-                    for sub_pattern, sub_value in zip(prefix, value):
-                        if not self._match_pattern(sub_pattern, sub_value, env):
-                            return False
-                    env.define(rest_name, value[len(prefix):])
-                    return True
-                case _:
-                    if len(pattern) != len(value): return False
-                    for sub_pattern, sub_value in zip(pattern, value):
-                        if not self._match_pattern(sub_pattern, sub_value, env):
-                            return False
-                    return True
+        def _match_list():
+            i = 0; lpat = len(pattern); lval = len(value)
 
-        def match_dict():
+            # Before '*'
+            while i < lpat:
+                sub_pat = pattern[i]
+                match sub_pat:
+                    case (Ident("*"), [Ident(rest_name)]): break
+                if i >= lval: return False
+                sub_val = value[i]
+                if not self._match_pattern(sub_pat, sub_val, env):
+                    return False
+                i += 1
+            else:
+                # No '*'
+                return i == lval
+
+            # At '*'
+            lrest = lval - lpat + 1
+            if lrest < 0: return False
+            env.define(rest_name, value[i:i + lrest])
+            i += 1
+
+            # After '*'
+            while i < lpat:
+                sub_pat = pattern[i]
+                match sub_pat:
+                    case (Ident("*"), [Ident(rest_name)]): return False
+                sub_val = value[i + lrest - 1]
+                if not self._match_pattern(sub_pat, sub_val, env):
+                    return False
+                i += 1
+
+            return True
+
+        def _match_dict():
             rest_name = pattern.get("*")
 
             fixed_patterns = pattern.copy()
             remaining_values = value.copy()
 
             if rest_name is not None:
-                del fixed_patterns["*"]
+                fixed_patterns.pop("*")
 
             for key, sub_pattern in fixed_patterns.items():
                 if key not in remaining_values:
                     return False
                 if not self._match_pattern(sub_pattern, remaining_values[key], env):
                     return False
-                del remaining_values[key]
+                remaining_values.pop(key)
 
             if rest_name is not None:
                 env.define(rest_name.name, remaining_values)
             return True
 
         match pattern:
-            case Ident("_"):
-                return True
             case Ident(name):
                 env.define(name, value)
                 return True
             case list():
-                if not isinstance(value, list): return False
-                return match_list()
+                return toil_type(value) == 'list' and _match_list()
             case dict():
-                if not isinstance(value, dict): return False
-                return match_dict()
-            case (Ident("Ident"), [name_expr]):
-                if not isinstance(name_expr, str): return False
-                if not isinstance(value, Ident): return False
-                return name_expr == value.name
-            case (Ident("Expr"), args):
-                if not isinstance(value, tuple): return False
-                if len(args) != len(value): return False
-                for sub_pattern, sub_value in zip(args, value):
-                    if not self._match_pattern(sub_pattern, sub_value, env):
-                        return False
-                return True
+                return toil_type(value) == 'dict' and _match_dict()
+            case (Ident("or"), [left_pat, right_pat]):
+                return self._match_pattern(left_pat, value, env) or \
+                       self._match_pattern(right_pat, value, env)
+            case (Ident('Ident'), [name_pat]):
+                return toil_type(value) == 'Ident' and \
+                    self._match_pattern(name_pat, value.name, env)
+            case (Ident('Expr'), expr_pats):
+                return (
+                    toil_type(value) == 'Expr' and len(expr_pats) == len(value) and
+                    all(self._match_pattern(p, v, env) for p, v in zip(expr_pats, value))
+                )
+            case (Ident(typ), [val_pat]):
+                if toil_type(value) != typ: return False
+                return self._match_pattern(val_pat, value, env)
             case _:
                 return type(pattern) is type(value) and pattern == value
 
@@ -683,11 +701,6 @@ class Interpreter:
         module_env = Environment(self._env)
         ast = self.parse(self.scan(src))
         return Evaluator().eval(ast, module_env)
-
-    def type(self, expr):
-        return "Expr" if type(expr) is tuple else \
-            "Ident" if type(expr) is Ident else \
-            type(expr).__name__
 
     def init_env(self):
         self._env = Environment()
@@ -732,7 +745,7 @@ class Interpreter:
         self._env.define("index", lambda args: args[0][args[1]])
         self._env.define("slice", lambda args: args[0][args[1]:args[2]])
         self._env.define("push", lambda args: args[0].append(args[1]))
-        self._env.define("pop", lambda args: args[0].pop())
+        self._env.define("pop", lambda args: args[0].pop() if len(args) == 1 else args[0].pop(args[1]))
         self._env.define("in", lambda args: args[0] in args[1])
         self._env.define("copy", lambda args: args[0].copy())
 
@@ -743,7 +756,7 @@ class Interpreter:
         self._env.define("keys", lambda args: list(args[0].keys()))
         self._env.define("items", lambda args: [list(e) for e in args[0].items()])
 
-        self._env.define("type", lambda args: self.type(args[0]))
+        self._env.define("type", lambda args: toil_type(args[0]))
         self._env.define("bool", lambda args: bool(args[0]))
         self._env.define("int", lambda args: int(args[0]))
         self._env.define("str", lambda args: str(args[0]))
@@ -784,9 +797,9 @@ class Interpreter:
 
             __core_if_macro := macro cnd, thn, elifs, els do scope
                 __core_if_expr := pif els == [] then None else els[0] end;
-                i := len(elifs) - 1;
-                while i >= 0 do
-                    [__core_if_elif_cnd, __core_if_elif_thn] := elifs[i];
+                __core_if_i := len(elifs) - 1;
+                while __core_if_i >= 0 do
+                    [__core_if_elif_cnd, __core_if_elif_thn] := elifs[__core_if_i];
                     __core_if_expr = quote
                         pif !__core_if_elif_cnd then
                             !__core_if_elif_thn
@@ -794,7 +807,7 @@ class Interpreter:
                             !__core_if_expr
                         end
                     end;
-                    i = i - 1
+                    __core_if_i = __core_if_i - 1
                 end;
                 quote pif !cnd then !thn else !__core_if_expr end end
             end end;
@@ -921,8 +934,16 @@ class Interpreter:
 
             deffunc enumerate params a do
                 zip(range(0, len(a), 1), a)
+            end;
+
+            deffunc all params a, f do
+                for x in a do if not f(x) then return(False) end end; True
+            end;
+
+            deffunc any params a, f do
+                for x in a do if f(x) then return(True) end end; False
             end
-        """)
+            """)
 
         self._env = Environment(self._env)
         return self
@@ -982,5 +1003,65 @@ if __name__ == "__main__":
             run(sys.argv[1])
 
     # Example
-    # i.walk(""" return(2) """) # -> Error
-    # i.walk(""" break(2) """) # -> Error
+
+    # Variable pattern
+    print(i.walk(r""" a := 2; a """)) # -> 2
+    print(i.walk(r""" _ := 2; _ """)) # -> 2 (Pseudo wildcard)
+
+    # List pattern
+    # print(i.walk(r""" [a, b] := [2]; [a, b] """)) # -> Pattern mismatch
+    print(i.walk(r""" [a, b] := [3, 4]; [a, b] """)) # -> [3, 4]
+    # print(i.walk(r""" [a, b] := [4, 5, 6]; [a, b] """)) # -> Pattern mismatch
+
+    # List pattern with rest parameters
+    # print(i.walk(r""" [a, *b] := []; [a, b] """)) # -> Pattern mismatch
+    print(i.walk(r""" [a, *b] := [2]; [a, b] """)) # -> [2, []]
+    print(i.walk(r""" [a, *b] := [3, 4]; [a, b] """)) # -> [3, [4]]
+    print(i.walk(r""" [a, *b] := [4, 5, 6]; [a, b] """)) # -> [4, [5, 6]]
+
+    # print(i.walk(r""" [*a, b] := []; [a, b] """)) # -> Pattern mismatch
+    print(i.walk(r""" [*a, b] := [2]; [a, b] """)) # -> [[], 2]
+    print(i.walk(r""" [*a, b] := [2, 3]; [a, b] """)) # -> [[2], 3]
+    print(i.walk(r""" [*a, b] := [2, 3, 4]; [a, b] """)) # -> [[2, 3], 4]
+
+    # print(i.walk(r""" [a, *b, c] := [2]; [a, b, c] """)) # -> Pattern mismatch
+    print(i.walk(r""" [a, *b, c] := [3, 4]; [a, b, c] """)) # -> [3, [], 4]
+    print(i.walk(r""" [a, *b, c] := [4, 5, 6]; [a, b, c] """)) # -> [4, [5], 6]
+    print(i.walk(r""" [a, *b, c] := [5, 6, 7, 8]; [a, b, c] """)) # -> [5, [6, 7], 8]
+
+    # print(i.walk(r""" [a, *b, *c, d] := [5, 6, 7, 8]; [a, b, c] """)) # -> Pattern mismatch
+
+    # Dict pattern
+    # print(walk(r""" {a} := {a: 2, b: 3} """)) # -> Pattern mismatch
+    print(i.walk(r""" {a, b} := {a: 2, b: 3}; [a, b] """)) # -> [2, 3]
+    print(i.walk(r""" {a: c, b: d} := {a: 3, b: 4}; [c, d] """)) # -> [3, 4]
+    # print(walk(r""" {a, b, c} := {a: 2, b: 3} """)) # -> Pattern mismatch
+
+    print(i.walk(r""" {a, *rest} := {a: 2, b: 3}; [a, rest] """)) # ->
+
+    exit()
+
+    # Ident pattern
+    print(i.walk(r""" Ident("aaa") := Ident("aaa") """)) # -> aaa
+    # print(i.walk(r""" Ident("aaa") := Ident("bbb") """)) # -> Pattern mismatch
+    print(i.walk(r""" Ident(a) := Ident("aaa"); a """)) # -> aaa
+    # print(i.walk(r""" Ident(a) := "aaa"; a """)) # -> Pattern mismatch
+
+    # Expr pattern
+    print(i.walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := quote a + b end; [name1, name2] """)) # -> ['a', 'b']
+    # print(i.walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := 2 + 3 """)) # -> Pattern mismatch
+    # print(i.walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := Expr(Ident('add')) """)) # -> Pattern mismatch
+
+    # Type pattern
+    print(i.walk(r""" int(a) := 2; a """)) # -> 2
+    # print(i.walk(r""" int(a) := "2"; a """)) # -> Pattern mismatch
+    print(i.walk(r""" str(a) := "aaa"; a """)) # -> aaa
+    # print(i.walk(r""" str(a) := []; a """)) # -> Pattern mismatch
+    print(i.walk(r""" int(a) or str(a) := 2; a """)) # -> 2
+    print(i.walk(r""" int(a) or str(a) := "aaa"; a """)) # -> aaa
+    # print(i.walk(r""" int(a) or str(a) := [2]; a """)) # -> Pattern mismatch
+    print(i.walk(r""" int(a) or str(a) or list(a):= [2]; a """)) # -> [2]
+
+    # Literal pattern
+    print(i.walk(r""" a := 2; 2 := a """)) # -> 2
+    # print(i.walk(r""" a := 3; 2 := a """)) # -> Pattern mismatch
