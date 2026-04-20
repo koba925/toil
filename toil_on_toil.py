@@ -36,22 +36,15 @@ i.walk(r"""
                 end;
 
                 ch := self._current_char();
-                if ch == '$EOF' then
-                    self._tokens.push(Ident('$EOF')); break()
-                elif ch.isdigit() then
-                    self._number()
-                elif ch == "'" then
-                    self._raw_string()
-                elif ch == '"' then
-                    self._string()
-                elif ch.is_ident_first() then
-                    self._ident()
-                elif ch.in('=!<>:') then
-                    self._two_char_operator('=')
+                if ch == '$EOF' then self._tokens.push(Ident('$EOF')); break()
+                elif ch.isdigit() then self._number()
+                elif ch == "'" then self._raw_string()
+                elif ch == '"' then self._string()
+                elif ch.is_ident_first() then self._ident()
+                elif ch.in('=!<>:') then self._two_char_operator('=')
                 elif ch.in('+-*/%()[]{}.,;') then
                     self._tokens.push(Ident(ch)); self._advance()
-                else
-                    raise('Invalid character @ tokenize: ' + ch)
+                else raise('Invalid character @ tokenize: ' + ch)
                 end
             end;
 
@@ -80,18 +73,18 @@ i.walk(r"""
         defmethod _string params do
             self._advance();
             s := [];
-            while (c := self._current_char()) != '"' do
-                if c == '$EOF' then raise('Unterminated string @ _string()') end;
-                if c == '\' then
+            while (ch := self._current_char()) != '"' do
+                if ch == '$EOF' then raise('Unterminated string @ _string()') end;
+                if ch == '\' then
                     self._advance();
-                    c := self._current_char();
-                    if c == '$EOF' then raise('Unterminated string @ _string()') end;
-                    match c
+                    ch := self._current_char();
+                    if ch == '$EOF' then raise('Unterminated string @ _string()') end;
+                    match ch
                         case 'n' then s.push("\n")
-                        case _ then s.push(c)
+                        case _ then s.push(ch)
                     end
                 else
-                    s.push(c)
+                    s.push(ch)
                 end;
                 self._advance()
             end;
@@ -229,28 +222,23 @@ i.walk(r"""
         end;
 
         defmethod _primary params do
-            match self._current().type()
-                case 'NoneType' then self._current_and_advance()
-                case 'bool' then self._current_and_advance()
-                case 'int' then self._current_and_advance()
-                case 'str' then self._current_and_advance()
-                case 'Ident' then
-                    match str(self._current())
-                        case '(' then self._group()
-                        case '[' then self._list()
-                        case '{' then self._dict()
-                        case 'func' then self._func()
-                        case 'deffunc' then self._deffunc()
-                        case 'scope' then self._scope()
-                        case 'if' then self._if()
-                        case 'while' then self._while()
-                        case 'for' then self._for()
-                        case name then
-                            if name.is_ident() then
-                                self._current_and_advance()
-                            else
-                                raise('Unexpected token @ primary(): ' + str(self._current()))
-                            end
+            match self._current()
+                case None then self._current_and_advance()
+                case bool(_) or int(_) or str(_) then self._current_and_advance()
+                case Ident('(') then self._group()
+                case Ident('[') then self._list()
+                case Ident('{') then self._dict()
+                case Ident('func') then self._func()
+                case Ident('deffunc') then self._deffunc()
+                case Ident('scope') then self._scope()
+                case Ident('if') then self._if()
+                case Ident('while') then self._while()
+                case Ident('for') then self._for()
+                case Ident(name) then
+                    if name.is_ident() then
+                        self._current_and_advance()
+                    else
+                        raise('Unexpected token @ primary(): ' + str(self._current()))
                     end
                 case _ then raise('Unexpected token: @ primary(): ' + str(self._current()))
             end
@@ -494,48 +482,43 @@ i.walk(r"""
     defclass Evaluator params do
         defmethod eval params expr, env do
             # print(expr);
-            match expr.type()
-                case 'NoneType' then expr
-                case 'bool' then expr
-                case 'int' then expr
-                case 'str' then expr
-                case 'list' then expr.map(func e do self.eval(e, env) end)
-                case 'dict' then
+            match expr
+                case None then expr
+                case bool(_) or int(_) or str(_) then expr
+                case list(_) then expr.map(func e do self.eval(e, env) end)
+                case dict(_) then
                     expr.keys().map(func k do [k, self.eval(expr[k], env)] end).dict()
-                case 'Ident' then env.val(str(expr))
-                case 'Expr' then
-                    match expr
-                        case Expr(Ident('quote'), [expr]) then
-                            expr
-                        case Expr(Ident('func'), [params, body_expr]) then
-                            Expr(Ident('closure'), [params, body_expr, env])
-                        case Expr(Ident('return'), args) then
-                            raise(['ReturnException', self._eval_optional_arg(args, env)])
-                        case Expr(Ident('dot'), [target_expr, attr_expr]) then
-                            self._dot(target_expr, attr_expr, env)
-                        case Expr(Ident('scope'), [body_expr]) then
-                            self.eval(body_expr, Environment(env))
-                        case Expr(Ident('define'), [left_expr, right_expr]) then
-                            self._define(left_expr, right_expr, env)
-                        case Expr(Ident('assign'), [left_expr, right_expr]) then
-                            self._assign(left_expr, right_expr, env)
-                        case Expr(Ident('seq'), exprs) then
-                            self._seq(exprs, env)
-                        case Expr(Ident('if'), [cond_expr, then_expr, else_expr]) then
-                            self._if(cond_expr, then_expr, else_expr, env)
-                        case Expr(Ident('and'), [left_expr, right_expr]) then
-                            self.eval(left_expr, env) and self.eval(right_expr, env)
-                        case Expr(Ident('or'), [left_expr, right_expr]) then
-                            self.eval(left_expr, env) or self.eval(right_expr, env)
-                        case Expr(Ident('while'), [cond_expr, body_expr]) then
-                            self._while(cond_expr, body_expr, env)
-                        case Expr(Ident('continue'), []) then
-                            raise(['ContinueException'])
-                        case Expr(Ident('break'), args) then
-                            raise(['BreakException', self._eval_optional_arg(args, env)])
-                        case Expr(op_expr, args_expr) then
-                            self._op(op_expr, args_expr, env)
-                    end
+                case Ident(name) then env.val(name)
+                case Expr(Ident('quote'), [expr]) then
+                    expr
+                case Expr(Ident('func'), [params, body_expr]) then
+                    Expr(Ident('closure'), [params, body_expr, env])
+                case Expr(Ident('return'), args) then
+                    raise(['ReturnException', self._eval_optional_arg(args, env)])
+                case Expr(Ident('dot'), [target_expr, attr_expr]) then
+                    self._dot(target_expr, attr_expr, env)
+                case Expr(Ident('scope'), [body_expr]) then
+                    self.eval(body_expr, Environment(env))
+                case Expr(Ident('define'), [left_expr, right_expr]) then
+                    self._define(left_expr, right_expr, env)
+                case Expr(Ident('assign'), [left_expr, right_expr]) then
+                    self._assign(left_expr, right_expr, env)
+                case Expr(Ident('seq'), exprs) then
+                    self._seq(exprs, env)
+                case Expr(Ident('if'), [cond_expr, then_expr, else_expr]) then
+                    self._if(cond_expr, then_expr, else_expr, env)
+                case Expr(Ident('and'), [left_expr, right_expr]) then
+                    self.eval(left_expr, env) and self.eval(right_expr, env)
+                case Expr(Ident('or'), [left_expr, right_expr]) then
+                    self.eval(left_expr, env) or self.eval(right_expr, env)
+                case Expr(Ident('while'), [cond_expr, body_expr]) then
+                    self._while(cond_expr, body_expr, env)
+                case Expr(Ident('continue'), []) then
+                    raise(['ContinueException'])
+                case Expr(Ident('break'), args) then
+                    raise(['BreakException', self._eval_optional_arg(args, env)])
+                case Expr(op_expr, args_expr) then
+                    self._op(op_expr, args_expr, env)
             end
         end;
 
