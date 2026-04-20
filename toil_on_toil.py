@@ -949,3 +949,20 @@ if __name__ == "__main__":
     # Combination
     print(walk(r""" [{a: b}, c] := [{a: 2, b: 3}, 4]; [b, c] """)) # -> [2, 4]
     print(walk(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """)) # -> [5, 6]
+
+    # For
+
+    walk("""
+        keys := ["a", "b", "c"];
+        values := [2, 3, 4];
+        for [k, v] in zip(keys, values) do
+            print(k, v)
+        end
+    """) # -> a 2\nb 3\nc 4\n
+
+    walk("""
+        dic := { "a": 2, "b": 3, "c": 4 };
+        for [k, v] in dic.items() do
+            print(k, v)
+        end
+    """) # -> a 2\nb 3\nc 4\n
