@@ -739,27 +739,112 @@ text
         assert self.i.walk(r""" "Hello,\\world!" """) == "Hello,\\world!"
         assert self.i.walk(r""" "Hello,\"world!" """) == 'Hello,"world!'
 
-    def test_destructuring_assignment(self):
-        self.i.walk(""" [a, b] := [2, 3] """)
-        assert self.i.walk(""" a """) == 2
-        assert self.i.walk(""" b """) == 3
+    def test_destructure_variable_and_literal(self):
+        assert self.i.walk(r""" a := 2; a """) == 2
+        assert self.i.walk(r""" _ := 2; _ """) == 2
 
-        self.i.walk(""" [a, [b, c]] := [2, [3, 4]] """)
-        assert self.i.walk(""" a """) == 2
-        assert self.i.walk(""" b """) == 3
-        assert self.i.walk(""" c """) == 4
+        assert self.i.walk(r""" a := 2; 2 := a """) == 2
+        assert self.i.walk(r""" None := None """) is None
+        assert self.i.walk(r""" True := True """) is True
+        assert self.i.walk(r""" "hello" := "hello" """) == "hello"
 
-        self.i.walk(""" [a, *b] := [2] """)
-        assert self.i.walk(""" a """) == 2
-        assert self.i.walk(""" b """) == []
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" "hello" := "world" """)
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" a := 3; 2 := a """)
 
-        self.i.walk(""" [a, *b] := [2, 3, 4] """)
-        assert self.i.walk(""" a """) == 2
-        assert self.i.walk(""" b """) == [3, 4]
+    def test_destructure_list(self):
+        assert self.i.walk(r""" [a, b] := [3, 4]; [a, b] """) == [3, 4]
+        assert self.i.walk(r""" [] := [] """) == []
+        assert self.i.walk(r""" [_, b, _] := [2, 3, 4]; b """) == 3
 
-        self.i.walk(""" [*a] := [2, 3] """)
-        assert self.i.walk(""" a """) == [2, 3]
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" [a, b] := [2] """)
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" [a, b] := [4, 5, 6] """)
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" [] := [1] """)
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" [a] := 2 """)
 
+        assert self.i.walk(r""" [a, *b] := [2]; [a, b] """) == [2, []]
+        assert self.i.walk(r""" [a, *b] := [3, 4]; [a, b] """) == [3, [4]]
+        assert self.i.walk(r""" [a, *b] := [4, 5, 6]; [a, b] """) == [4, [5, 6]]
+        assert self.i.walk(r""" [*a] := [4, 5, 6]; a """) == [4, 5, 6]
+
+        assert self.i.walk(r""" [*a, b] := [2]; [a, b] """) == [[], 2]
+        assert self.i.walk(r""" [*a, b] := [2, 3]; [a, b] """) == [[2], 3]
+        assert self.i.walk(r""" [*a, b] := [2, 3, 4]; [a, b] """) == [[2, 3], 4]
+
+        assert self.i.walk(r""" [a, *b, c] := [3, 4]; [a, b, c] """) == [3, [], 4]
+        assert self.i.walk(r""" [a, *b, c] := [4, 5, 6]; [a, b, c] """) == [4, [5], 6]
+        assert self.i.walk(r""" [a, *b, c] := [5, 6, 7, 8]; [a, b, c] """) == [5, [6, 7], 8]
+
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" [a, *b] := [] """)
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" [*a, b] := [] """)
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" [a, *b, c] := [2] """)
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" [a, *b, *c, d] := [5, 6, 7, 8] """)
+
+    def test_destructure_dict(self):
+        assert self.i.walk(r""" {a} := {a: 2, b: 3}; a """) == 2
+        assert self.i.walk(r""" {a, b} := {a: 2, b: 3}; [a, b] """) == [2, 3]
+        assert self.i.walk(r""" {a: c, b: d} := {a: 3, b: 4}; [c, d] """) == [3, 4]
+        assert self.i.walk(r""" {a} := {"a": 5, b: 6}; a """) == 5
+        assert self.i.walk(r""" {a: _, b} := {a: 2, b: 3}; b """) == 3
+        assert self.i.walk(r""" {} := {a: 2, b: 3} """) == {'a': 2, 'b': 3}
+
+        assert self.i.walk(r""" {a, *rest} := {a: 2}; [a, rest] """) == [2, {}]
+        assert self.i.walk(r""" {a, *rest} := {a: 2, b: 3}; [a, rest] """) == [2, {'b': 3}]
+        assert self.i.walk(r""" {a, *rest} := {a: 2, b: 3, c: 4}; [a, rest] """) == [2, {'b': 3, 'c': 4}]
+
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" {a} := {b: 2} """)
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" {a, b, c} := {a: 2, b: 3} """)
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" {a, *rest} := {b: 2} """)
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" {a} := 2 """)
+
+    def test_destructure_ident_and_expr(self):
+        assert str(self.i.walk(r""" Ident("aaa") := Ident("aaa") """)) == "aaa"
+        assert str(self.i.walk(r""" Ident(a) := Ident("aaa"); a """)) == "aaa"
+
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" Ident("aaa") := Ident("bbb") """)
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" Ident(a) := "aaa" """)
+
+        assert self.i.walk(r""" Expr(Ident("add"), [int(a), int(b)]) := quote 2 + 3 end; [a, b] """) == [2, 3]
+        assert self.i.walk(r""" Expr(Ident("add"), [Ident(name1), Ident(name2)]) := quote a + b end; [name1, name2] """) == ['a', 'b']
+
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := quote 2 + 3 end """)
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := Expr(Ident('add')) """)
+
+    def test_destructure_type(self):
+        assert self.i.walk(r""" int(a) := 2; a """) == 2
+        assert self.i.walk(r""" str(a) := "aaa"; a """) == "aaa"
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" int(a) := "2" """)
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" str(a) := [] """)
+
+    def test_destructure_or(self):
+        assert self.i.walk(r""" int(a) or str(a) := 2; a """) == 2
+        assert self.i.walk(r""" int(a) or str(a) := "aaa"; a """) == "aaa"
+        assert self.i.walk(r""" int(a) or str(a) or list(a):= [2]; a """) == [2]
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(r""" int(a) or str(a) := [2] """)
+
+    def test_destructure_combination(self):
+        assert self.i.walk(r""" [{a: b}, c] := [{a: 2, b: 3}, 4]; [b, c] """) == [2, 4]
+        assert self.i.walk(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """) == [5, 6]
 
     def test_argument_destructuring(self, capsys):
         self.i.walk(""" deffunc f params a, [b, c] do [a, b, c] end """)
@@ -773,8 +858,24 @@ text
         self.i.walk(""" deffunc h params a, *b do [a, b] end """)
         assert self.i.walk(""" h(2 + 3) """) == [5, []]
         assert self.i.walk(""" h(2, 3, 4) """) == [2, [3, 4]]
-        with pytest.raises(AssertionError):
+        with pytest.raises(AssertionError, match="Argument mismatch"):
             self.i.walk(""" h() """)
+
+        assert self.i.walk(r""" func {a: d, *rest}, e do [d, e, rest] end ({a: 2, b: 3, c: 4}, 5) """) == [2, 5, {'b': 3, 'c': 4}]
+
+        self.i.walk(r""" deffunc foo params int(a), str(b) do [a, b] end """)
+        assert self.i.walk(r""" foo(2, "a") """) == [2, "a"]
+
+        with pytest.raises(AssertionError, match="Argument mismatch"):
+            self.i.walk(r""" foo(2, 3) """)
+        with pytest.raises(AssertionError, match="Argument mismatch"):
+            self.i.walk(r""" func a, b do [a, b] end (2) """)
+        with pytest.raises(AssertionError, match="Argument mismatch"):
+            self.i.walk(r""" func a do a end (2, 3) """)
+        with pytest.raises(AssertionError, match="Argument mismatch"):
+            self.i.walk(r""" func do 2 end (2) """)
+
+        assert self.i.walk(r""" func do "ok" end () """) == "ok"
 
     def test_match(self):
         self.i.walk("""

@@ -552,9 +552,7 @@ class TestToT(TestBase):
            myadd(2, 3)
         """) == 5
 
-        assert self.walk("func a, b do add(a, b) end (2, 3, 4)") == 5
-
-        with pytest.raises(AssertionError, match="Undefined variable @ val: b"):
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
             self.walk("func a, b do add(a, b) end (2)")
 
         with pytest.raises(AssertionError, match="Expected do @ consume: add"):
@@ -562,6 +560,24 @@ class TestToT(TestBase):
 
         with pytest.raises(AssertionError, match="Expected end @ consume: \\$EOF"):
             self.walk("func a do add(a, 2)")
+
+    def test_destructure_function_arguments(self):
+        assert self.walk(r""" func a, *rest do [a, rest] end (2, 3, 4) """) == [2, [3, 4]]
+        assert self.walk(r""" func {a: d, *rest}, e do [d, e, rest] end ({a: 2, b: 3, c: 4}, 5) """) == [2, 5, {'b': 3, 'c': 4}]
+
+        assert self.walk(r""" deffunc foo params int(a), str(b) do [a, b] end; foo(2, "a") """) == [2, "a"]
+
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" deffunc bar params int(a), str(b) do [a, b] end; bar(2, 3) """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" func a, b do [a, b] end (2) """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" func a do a end (2, 3) """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(r""" func do 2 end (2) """)
+
+        assert self.walk(r""" func do "ok" end () """) == "ok"
+
 
     def test_return(self):
         self.walk("""
@@ -684,7 +700,7 @@ class TestToT(TestBase):
         with pytest.raises(Exception, match="Break at top level"):
             self.walk(""" break() """)
 
-    def test_for(self):
+    def test_for(self, capsys):
         assert self.walk("""
             sum := 0;
             for n in [2, 3, 4] do sum = sum + n end;
@@ -705,6 +721,23 @@ class TestToT(TestBase):
             end;
             a
         """) == [2, 4]
+
+        self.walk("""
+            keys := ["a", "b", "c"];
+            values := [2, 3, 4];
+            for [k, v] in zip(keys, values) do
+                print(k, v)
+            end
+        """)
+        assert capsys.readouterr().out == "a 2\nb 3\nc 4\n"
+
+        self.walk("""
+            dic := { "a": 2, "b": 3, "c": 4 };
+            for [k, v] in dic.items() do
+                print(k, v)
+            end
+        """)
+        assert capsys.readouterr().out == "a 2\nb 3\nc 4\n"
 
     def test_stdlib(self):
         assert self.walk(""" a := range(2, 10, 1) """) == [2, 3, 4, 5, 6, 7, 8, 9]

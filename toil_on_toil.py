@@ -613,16 +613,16 @@ i.walk(r"""
         defmethod apply params op_val, args_val do
             match op_val
                 case Expr(Ident('hostfunc'), f) then f(args_val)
-                case Expr(Ident('closure'), [params, body_expr, closure_env]) then
+                case Expr(Ident('closure'), [params_, body_expr, closure_env]) then
                     new_env := Environment(closure_env);
-                    for [param, arg] in zip(params, args_val) do
-                        new_env.define(str(param), arg)
+                    if self._match_pattern(params_, args_val, new_env) then
+                        try
+                            return(self.eval(body_expr, new_env))
+                        except ['ReturnException', val] then
+                            return(val)
+                        end
                     end;
-                    try
-                        self.eval(body_expr, new_env)
-                    except ['ReturnException', val] then
-                        val
-                    end
+                    raise('Pattern mismatch @ apply: ' + str(params_) + ', ' + str(args_val))
                 case _ then raise('Invalid operator @ apply: ' + str(op_val))
             end
         end;
@@ -862,96 +862,95 @@ if __name__ == "__main__":
 
     # Destructure
 
-    # Variable pattern
-    print(walk(r""" a := 2; a """)) # -> 2
-    print(walk(r""" _ := 2; _ """)) # -> 2 (Pseudo wildcard)
+    # # Variable pattern
+    # print(walk(r""" a := 2; a """)) # -> 2
+    # print(walk(r""" _ := 2; _ """)) # -> 2 (Pseudo wildcard)
 
-    # List pattern
-    # print(walk(r""" [a, b] := [2] """)) # -> Pattern mismatch
-    print(walk(r""" [a, b] := [3, 4]; [a, b] """)) # -> [3, 4]
-    # print(walk(r""" [a, b] := [4, 5, 6] """)) # -> Pattern mismatch
+    # # List pattern
+    # # print(walk(r""" [a, b] := [2] """)) # -> Pattern mismatch
+    # print(walk(r""" [a, b] := [3, 4]; [a, b] """)) # -> [3, 4]
+    # # print(walk(r""" [a, b] := [4, 5, 6] """)) # -> Pattern mismatch
 
-    # print(walk(r""" [a, *b] := [] """)) # -> Pattern mismatch
-    print(walk(r""" [a, *b] := [2]; [a, b] """)) # -> [2, []]
-    print(walk(r""" [a, *b] := [3, 4]; [a, b] """)) # -> [3, [4]]
-    print(walk(r""" [a, *b] := [4, 5, 6]; [a, b] """)) # -> [4, [5, 6]]
-    print(walk(r""" [*a] := [4, 5, 6]; a """)) # -> [4, 5, 6]
+    # # print(walk(r""" [a, *b] := [] """)) # -> Pattern mismatch
+    # print(walk(r""" [a, *b] := [2]; [a, b] """)) # -> [2, []]
+    # print(walk(r""" [a, *b] := [3, 4]; [a, b] """)) # -> [3, [4]]
+    # print(walk(r""" [a, *b] := [4, 5, 6]; [a, b] """)) # -> [4, [5, 6]]
+    # print(walk(r""" [*a] := [4, 5, 6]; a """)) # -> [4, 5, 6]
 
-    # print(walk(r""" [*a, b] := [] """)) # -> Pattern mismatch
-    print(walk(r""" [*a, b] := [2]; [a, b] """)) # -> [[], 2]
-    print(walk(r""" [*a, b] := [2, 3]; [a, b] """)) # -> [[2], 3]
-    print(walk(r""" [*a, b] := [2, 3, 4]; [a, b] """)) # -> [[2, 3], 4]
+    # # print(walk(r""" [*a, b] := [] """)) # -> Pattern mismatch
+    # print(walk(r""" [*a, b] := [2]; [a, b] """)) # -> [[], 2]
+    # print(walk(r""" [*a, b] := [2, 3]; [a, b] """)) # -> [[2], 3]
+    # print(walk(r""" [*a, b] := [2, 3, 4]; [a, b] """)) # -> [[2, 3], 4]
 
-    # print(walk(r""" [a, *b, c] := [2] """)) # -> Pattern mismatch
-    print(walk(r""" [a, *b, c] := [3, 4]; [a, b, c] """)) # -> [3, [], 4]
-    print(walk(r""" [a, *b, c] := [4, 5, 6]; [a, b, c] """)) # -> [4, [5], 6]
-    print(walk(r""" [a, *b, c] := [5, 6, 7, 8]; [a, b, c] """)) # -> [5, [6, 7], 8]
+    # # print(walk(r""" [a, *b, c] := [2] """)) # -> Pattern mismatch
+    # print(walk(r""" [a, *b, c] := [3, 4]; [a, b, c] """)) # -> [3, [], 4]
+    # print(walk(r""" [a, *b, c] := [4, 5, 6]; [a, b, c] """)) # -> [4, [5], 6]
+    # print(walk(r""" [a, *b, c] := [5, 6, 7, 8]; [a, b, c] """)) # -> [5, [6, 7], 8]
 
-    print(walk(r""" [_, b, _] := [2, 3, 4]; b """)) # -> 3 (Pseudo wildcard)
+    # print(walk(r""" [_, b, _] := [2, 3, 4]; b """)) # -> 3 (Pseudo wildcard)
 
-    print(walk(r""" [] := [] """)) # -> []
-    # print(walk(r""" [] := [1] """)) # -> Pattern mismatch
+    # print(walk(r""" [] := [] """)) # -> []
+    # # print(walk(r""" [] := [1] """)) # -> Pattern mismatch
 
-    # print(walk(r""" [a] := 2 """)) # -> Pattern mismatch
-    # print(walk(r""" [a, *b, *c, d] := [5, 6, 7, 8] """)) # -> Pattern mismatch
+    # # print(walk(r""" [a] := 2 """)) # -> Pattern mismatch
+    # # print(walk(r""" [a, *b, *c, d] := [5, 6, 7, 8] """)) # -> Pattern mismatch
 
-    # Dict pattern
-    # print(walk(r""" {a} := {b: 2} """)) # -> Pattern mismatch
-    print(walk(r""" {a} := {a: 2, b: 3}; a """)) # -> 2
-    print(walk(r""" {a, b} := {a: 2, b: 3}; [a, b] """)) # -> [2, 3]
-    print(walk(r""" {a: c, b: d} := {a: 3, b: 4}; [c, d] """)) # -> [3, 4]
-    # print(walk(r""" {a, b, c} := {a: 2, b: 3} """)) # -> Pattern mismatch
-    print(walk(r""" {a} := {"a": 5, b: 6}; a """)) # -> 5
+    # # Dict pattern
+    # # print(walk(r""" {a} := {b: 2} """)) # -> Pattern mismatch
+    # print(walk(r""" {a} := {a: 2, b: 3}; a """)) # -> 2
+    # print(walk(r""" {a, b} := {a: 2, b: 3}; [a, b] """)) # -> [2, 3]
+    # print(walk(r""" {a: c, b: d} := {a: 3, b: 4}; [c, d] """)) # -> [3, 4]
+    # # print(walk(r""" {a, b, c} := {a: 2, b: 3} """)) # -> Pattern mismatch
+    # print(walk(r""" {a} := {"a": 5, b: 6}; a """)) # -> 5
 
-    # print(walk(r""" {a, *rest} := {b: 2} """)) # -> Pattern mismatch
-    print(walk(r""" {a, *rest} := {a: 2}; [a, rest] """)) # -> [2, {}]
-    print(walk(r""" {a, *rest} := {a: 2, b: 3}; [a, rest] """)) # -> [2, {'b': 3}]
-    print(walk(r""" {a, *rest} := {a: 2, b: 3, c: 4}; [a, rest] """)) # -> [2, {'b': 3, 'c': 4}]
+    # # print(walk(r""" {a, *rest} := {b: 2} """)) # -> Pattern mismatch
+    # print(walk(r""" {a, *rest} := {a: 2}; [a, rest] """)) # -> [2, {}]
+    # print(walk(r""" {a, *rest} := {a: 2, b: 3}; [a, rest] """)) # -> [2, {'b': 3}]
+    # print(walk(r""" {a, *rest} := {a: 2, b: 3, c: 4}; [a, rest] """)) # -> [2, {'b': 3, 'c': 4}]
 
-    print(walk(r""" {a: _, b} := {a: 2, b: 3}; b """)) # -> 3 (Pseudo wildcard)
+    # print(walk(r""" {a: _, b} := {a: 2, b: 3}; b """)) # -> 3 (Pseudo wildcard)
 
-    print(walk(r""" {} := {a: 2, b: 3} """)) # -> {'a': 2, 'b': 3}
+    # print(walk(r""" {} := {a: 2, b: 3} """)) # -> {'a': 2, 'b': 3}
 
-    # print(walk(r""" {a} := 2 """)) # -> Pattern mismatch
+    # # print(walk(r""" {a} := 2 """)) # -> Pattern mismatch
 
-    # Ident pattern
-    print(walk(r""" Ident("aaa") := Ident("aaa") """)) # -> aaa
-    # print(walk(r""" Ident("aaa") := Ident("bbb") """)) # -> Pattern mismatch
-    print(walk(r""" Ident(a) := Ident("aaa"); a """)) # -> aaa
-    # print(walk(r""" Ident(a) := "aaa"; a """)) # -> Pattern mismatch
+    # # Ident pattern
+    # print(walk(r""" Ident("aaa") := Ident("aaa") """)) # -> aaa
+    # # print(walk(r""" Ident("aaa") := Ident("bbb") """)) # -> Pattern mismatch
+    # print(walk(r""" Ident(a) := Ident("aaa"); a """)) # -> aaa
+    # # print(walk(r""" Ident(a) := "aaa"; a """)) # -> Pattern mismatch
 
-    # Expr pattern
-    print(walk(r""" Expr(Ident("add"), [int(a), int(b)]) := quote(2 + 3); [a, b] """)) # -> [2, 3]
-    print(walk(r""" Expr(Ident("add"), [Ident(name1), Ident(name2)]) := quote(a + b); [name1, name2] """)) # -> ['a', 'b']
-    # print(walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := 2 + 3 """)) # -> Pattern mismatch
-    # print(walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := Expr(Ident('add')) """)) # -> Pattern mismatch
+    # # Expr pattern
+    # print(walk(r""" Expr(Ident("add"), [int(a), int(b)]) := quote(2 + 3); [a, b] """)) # -> [2, 3]
+    # print(walk(r""" Expr(Ident("add"), [Ident(name1), Ident(name2)]) := quote(a + b); [name1, name2] """)) # -> ['a', 'b']
+    # # print(walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := 2 + 3 """)) # -> Pattern mismatch
+    # # print(walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := Expr(Ident('add')) """)) # -> Pattern mismatch
 
-    # Type pattern
-    print(walk(r""" int(a) := 2; a """)) # -> 2
-    # print(walk(r""" int(a) := "2"; a """)) # -> Pattern mismatch
-    print(walk(r""" str(a) := "aaa"; a """)) # -> aaa
-    # print(walk(r""" str(a) := []; a """)) # -> Pattern mismatch
+    # # Type pattern
+    # print(walk(r""" int(a) := 2; a """)) # -> 2
+    # # print(walk(r""" int(a) := "2"; a """)) # -> Pattern mismatch
+    # print(walk(r""" str(a) := "aaa"; a """)) # -> aaa
+    # # print(walk(r""" str(a) := []; a """)) # -> Pattern mismatch
 
-    # Or pattern
-    print(walk(r""" int(a) or str(a) := 2; a """)) # -> 2
-    print(walk(r""" int(a) or str(a) := "aaa"; a """)) # -> aaa
-    # print(walk(r""" int(a) or str(a) := [2]; a """)) # -> Pattern mismatch
-    print(walk(r""" int(a) or str(a) or list(a):= [2]; a """)) # -> [2]
+    # # Or pattern
+    # print(walk(r""" int(a) or str(a) := 2; a """)) # -> 2
+    # print(walk(r""" int(a) or str(a) := "aaa"; a """)) # -> aaa
+    # # print(walk(r""" int(a) or str(a) := [2]; a """)) # -> Pattern mismatch
+    # print(walk(r""" int(a) or str(a) or list(a):= [2]; a """)) # -> [2]
 
-    # Literal pattern
-    print(walk(r""" a := 2; 2 := a """)) # -> 2
-    print(walk(r""" None := None """)) # -> None
-    print(walk(r""" True := True """)) # -> True
-    print(walk(r""" "hello" := "hello" """)) # -> "hello"
-    # print(walk(r""" "hello" := "world" """)) # -> Pattern mismatch
-    # print(walk(r""" a := 3; 2 := a """)) # -> Pattern mismatch
+    # # Literal pattern
+    # print(walk(r""" a := 2; 2 := a """)) # -> 2
+    # print(walk(r""" None := None """)) # -> None
+    # print(walk(r""" True := True """)) # -> True
+    # print(walk(r""" "hello" := "hello" """)) # -> "hello"
+    # # print(walk(r""" "hello" := "world" """)) # -> Pattern mismatch
+    # # print(walk(r""" a := 3; 2 := a """)) # -> Pattern mismatch
 
-    # Combination
-    print(walk(r""" [{a: b}, c] := [{a: 2, b: 3}, 4]; [b, c] """)) # -> [2, 4]
-    print(walk(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """)) # -> [5, 6]
+    # # Combination
+    # print(walk(r""" [{a: b}, c] := [{a: 2, b: 3}, 4]; [b, c] """)) # -> [2, 4]
+    # print(walk(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """)) # -> [5, 6]
 
-    # For
-
+    # For + destructure
     walk("""
         keys := ["a", "b", "c"];
         values := [2, 3, 4];
@@ -966,3 +965,13 @@ if __name__ == "__main__":
             print(k, v)
         end
     """) # -> a 2\nb 3\nc 4\n
+
+    # Function call + destructure
+    print(walk(r""" func a, *rest do [a, rest] end (2, 3, 4) """)) # -> [2, [3, 4]]
+    print(walk(r""" func {a: d, *rest}, e do [d, e, rest] end ({a: 2, b: 3, c: 4}, 5) """)) # -> [2, 5, {'b': 3, 'c': 4}]
+    walk(r""" deffunc foo params int(a), str(b) do [a, b] end; foo(2, "a") """)
+    print(walk(r""" foo(2, "a") """)) # -> [2, "a"]
+    # print(walk(r""" foo(2, 3) """)) # -> Pattern mismatch
+    # print(walk(r""" func a, b do [a, b] end (2) """)) # -> Pattern mismatch
+    # print(walk(r""" func a do a end (2, 3) """)) # -> Pattern mismatch
+    # print(walk(r""" func do 2 end (2) """)) # -> Pattern mismatch
