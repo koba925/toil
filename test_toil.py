@@ -115,9 +115,6 @@ class TestParse(TestBase):
         assert self.i.ast(""" a[1][2] = 3 """) == (Ident("assign"), [(Ident("index"), [(Ident("index"), [Ident("a"), 1]), 2]), 3])
         assert self.i.ast(""" a[0] = b[1] = 2 """) == (Ident("assign"), [(Ident("index"), [Ident("a"), 0]), (Ident("assign"), [(Ident("index"), [Ident("b"), 1]), 2])])
 
-    def test_while(self):
-        assert self.i.ast(""" while i < 10 do i = i + 1 end """) == (Ident('__core_while'), [(Ident('less'), [Ident('i'), 10]), (Ident('assign'), [Ident('i'), (Ident('add'), [Ident('i'), 1])])])
-
     def test_call(self):
         assert self.i.ast(""" print() """) == (Ident("print"), [])
         assert self.i.ast(""" neg(2) """) == (Ident("neg"), [2])
@@ -493,77 +490,196 @@ class TestGo(TestBase):
 
     def test_while(self):
         assert self.i.walk("""
-            sum := i := 0;
-            while i < 10 do
-                sum = sum + i;
+            a := [];
+            i := 0; while i < 3 do push(a, i); i = i + 1 end;
+            a
+        """) == [0, 1, 2]
+
+        assert self.i.walk("""
+            a := [];
+            i := 0; while i < 3 do push(a, i); i = i + 1 then a else 1/0 end
+        """) == [0, 1, 2]
+
+        assert self.i.walk("""
+            a := [];
+            i := 0; while i < 3 do push(a, i); i = i + 1 then a end
+        """) == [0, 1, 2]
+
+        assert self.i.walk(""" while False do 1 / 0 then 3 else 4 end """) == 3
+
+        with pytest.raises(AssertionError, match="Expected do"):
+            self.i.walk(""" while do 2 then 3 else 4 end """)
+        with pytest.raises(AssertionError, match="Expected do"):
+            self.i.walk(""" while True 2 then 3 else 4 end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.i.walk(""" while True do 2 3 else 4 end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.i.walk(""" while True do 2 then 3 4 end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.i.walk(""" while True do 2 then 3 else end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.i.walk(""" while True do 2 then 3 else 4 """)
+
+    def test_continue(self):
+        assert self.i.walk("""
+            a := [];
+            i := 0; while i < 3 do
+                i = i + 1; if i == 2 then continue() end;
+                push(a, i)
+            then a end
+        """) == [1, 3]
+
+        assert self.i.walk("""
+            a := []; i := 0; while i < 2 do
+                j := 0; while j < 3 do
+                    j = j + 1; if j == 2 then continue() end;
+                    push(a, [i, j])
+                end;
                 i = i + 1
-            end;
-            sum
-        """) == 45
-
-        assert self.i.walk(""" while False do 1 end """) is None
-        assert self.i.walk(""" i := 0; while False do i = 1 end; i """) == 0
-
-        with pytest.raises(AssertionError):
-            self.i.walk(""" while do i = i + 1 end """)
-        with pytest.raises(AssertionError):
-            self.i.walk(""" while i < 10 i = i + 1 end """)
-        with pytest.raises(AssertionError):
-            self.i.walk(""" while i < 10 do i = i + 1 """)
-
-    def test_for(self, capsys):
-        assert self.i.walk("""
-            sum := 0;
-            for n in [2, 3, 4] do
-                sum = sum + n
-            end;
-            sum """) == 9
-
-        assert self.i.walk(""" for i in [] do print("never") end; "ok" """) == "ok"
-        assert capsys.readouterr().out == ""
+            then a end
+        """) == [[0, 1], [0, 3], [1, 1], [1, 3]]
 
         assert self.i.walk("""
-            for i in [2, 3, 4] do
-                if i == 3 then break(i * 10) end
-            end
-        """) == 30
+            a := []; for i in [0, 1, 2] do
+                if i == 1 then continue() end;
+                push(a, i)
+            then a end
+        """) == [0, 2]
 
-        self.i.walk("""
-            for i in [2, 3, 4] do
-                if i == 3 then continue() end;
-                print(i)
-            end
-        """)
-        assert capsys.readouterr().out == "2\n4\n"
+        assert self.i.walk("""
+            a := []; for i in [0, 1] do
+                for j in [0, 1, 2] do
+                    if j == 1 then continue() end;
+                    push(a, [i, j])
+                end
+            then a end
+        """) == [[0, 0], [0, 2], [1, 0], [1, 2]]
 
-        self.i.walk("""
-            funcs := [];
-            for i in [2, 3, 4] do
-                funcs.push(func do i end)
-            end;
-            print(funcs[0](), funcs[1](), funcs[2]())
-        """)
-        assert capsys.readouterr().out == "2 3 4\n"
+        with pytest.raises(AssertionError, match="Continue at top level"):
+            self.i.walk(""" continue() """)
 
-        self.i.walk("""
-            keys := ["a", "b", "c"];
-            values := [2, 3, 4];
-            for [k, v] in zip(keys, values) do
-                print(k, v)
-            end
-        """)
-        assert capsys.readouterr().out == "a 2\nb 3\nc 4\n"
+    def test_break(self):
+        assert self.i.walk("""
+            a := [];
+            i := 0; while i < 3 do
+                if i == 1 then break() end;
+                push(a, i); i = i + 1
+            then 1/0 else a end
+        """) == [0]
 
-        self.i.walk("""
-            dic := { "a": 2, "b": 3, "c": 4 };
-            for [k, v] in dic.items() do
-                print(k, v)
-            end
-        """)
-        assert capsys.readouterr().out == "a 2\nb 3\nc 4\n"
+        assert self.i.walk("""
+            a := [];
+            i := 0; while i < 3 do
+                if i == 1 then break() end;
+                push(a, i); i = i + 1
+            else a end
+        """) == [0]
 
-        with pytest.raises(AssertionError, match="Undefined variable"):
-            self.i.walk(""" for i in [2] do 1 end; i """)
+        assert self.i.walk("""
+            a := [];
+            i := 0; while i < 2 do
+                j := 0; while j < 3 do
+                    if i == 0 and j == 1 then break() end;
+                    push(a, [i, j]);
+                    j = j + 1
+                end;
+                i = i + 1
+            then a end
+        """) == [[0, 0], [1, 0], [1, 1], [1, 2]]
+
+        assert self.i.walk("""
+            a := [];
+            i := 0; while i < 2 do
+                j := 0; while j < 3 do
+                    if i == 1 and j == 1 then break() end;
+                    push(a, [i, j]);
+                    j = j + 1
+                else break() end;
+                i = i + 1
+            else a end
+        """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
+
+        assert self.i.walk(""" while True do break() end """) is None
+        assert self.i.walk(""" while True do break() else 2 end """) == 2
+
+        assert self.i.walk("""
+            a := []; for i in [0, 1, 2] do
+                if i == 1 then break() end;
+                push(a, i)
+            then 1/0 else a end
+        """) == [0]
+
+        assert self.i.walk("""
+            a := []; for i in [0, 1, 2] do
+                if i == 1 then break() end;
+                push(a, i)
+            else a end
+        """) == [0]
+
+        assert self.i.walk("""
+            a := [];
+            for i in [0, 1] do
+                for j in [0, 1, 2] do
+                    if i == 0 and j == 1 then break() end;
+                    push(a, [i, j])
+                end
+            then a end
+        """) == [[0, 0], [1, 0], [1, 1], [1, 2]]
+
+        assert self.i.walk("""
+            a := [];
+            for i in [0, 1] do
+                for j in [0, 1, 2] do
+                    if i == 1 and j == 1 then break() end;
+                    push(a, [i, j])
+                else break() end
+            else a end
+        """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
+
+        with pytest.raises(AssertionError, match="Break at top level"):
+            self.i.walk(""" break() """)
+
+    def test_for(self):
+        assert self.i.walk(""" a := []; for i in [0, 1, 2] do push(a, i) end; a """) == [0, 1, 2]
+
+        assert self.i.walk("""
+            a := []; for i in [0, 1, 2] do push(a, i) then [i, a] else 1/0 end
+        """) == [2, [0, 1, 2]]
+
+        assert self.i.walk("""
+            a := []; for i in [0, 1, 2] do push(a, i) then a end
+        """) == [0, 1, 2]
+
+        assert self.i.walk("""
+            a := []; for [i, j] in [[1, 2], [3, 4]] do push(a, [i, j]) then a end
+        """) == [[1, 2], [3, 4]]
+
+        assert self.i.walk("""
+            a := [];
+            for [k, v] in {"a": 2, "b": 3}.items() do push(a, [k, v]) then a end
+        """) == [['a', 2], ['b', 3]]
+
+        assert self.i.walk(""" for i in [] do 1/0 then 2 end """) == 2
+
+        with pytest.raises(AssertionError):
+            self.i.walk(""" for in [] do 2 then 3 else 4 end """)
+        with pytest.raises(AssertionError):
+            self.i.walk(""" for i [] do 2 then 3 else 4 end """)
+        with pytest.raises(AssertionError, match="Expected do"):
+            self.i.walk(""" for i in do 2 then 3 else 4 end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.i.walk(""" for i in [] do then 3 else 4 end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.i.walk(""" for i in [] do 2 3 else 4 end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.i.walk(""" for i in [] do 2 then else 4 end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.i.walk(""" for i in [] do 2 then 3 4 end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.i.walk(""" for i in [] do 2 then 3 else end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.i.walk(""" for i in [] do 2 then 3 else 4 """)
+
 
     def test_call(self, capsys):
         assert self.i.walk(""" add(2, 3) """) == 5
@@ -904,6 +1020,107 @@ text
         with pytest.raises(AssertionError):
             self.i.walk(""" a """)
 
+    def test_match_syntax(self):
+        assert self.i.walk(r""" match 2 end """) is None
+
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.i.walk(r""" match end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.i.walk(r""" match 2 case 2 then 3 """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            self.i.walk(r""" match 2 then 3 end """)
+        with pytest.raises(AssertionError, match="Expected then"):
+            self.i.walk(r""" match 2 case then 3 end """)
+
+    def test_match_variable_and_literal(self):
+        assert self.i.walk(r""" match 2 case a then a + 1 case _ then "no" end """) == 3
+        assert self.i.walk(r""" match 2 case 3 then "yes" end """) is None
+        assert self.i.walk(r""" match 2 case 2 then "yes" case _ then "no" end """) == "yes"
+        assert self.i.walk(r""" match 2 case 3 then "yes" case _ then "no" end """) == "no"
+        assert self.i.walk(r""" match [] case 3 then "yes" case _ then "no" end """) == "no"
+        assert self.i.walk(r""" match None case None then "yes" case _ then "no" end """) == "yes"
+        assert self.i.walk(r""" match 2 case None then "yes" case _ then "no" end """) == "no"
+        assert self.i.walk(r""" match True case True then "yes" case _ then "no" end """) == "yes"
+        assert self.i.walk(r""" match False case True then "yes" case _ then "no" end """) == "no"
+        assert self.i.walk(r""" match False case False then "yes" case _ then "no" end """) == "yes"
+        assert self.i.walk(r""" match True case False then "yes" case _ then "no" end """) == "no"
+        assert self.i.walk(r""" match "hello" case "hello" then "yes" case _ then "no" end """) == "yes"
+        assert self.i.walk(r""" match "world" case "hello" then "yes" case _ then "no" end """) == "no"
+
+    def test_match_list(self):
+        assert self.i.walk(r""" match [] case [] then "yes" case _ then "no" end """) == "yes"
+        assert self.i.walk(r""" match 2 case [] then "yes" case _ then "no" end """) == "no"
+        assert self.i.walk(r""" match [2] case [a] then a + 1 case _ then "no" end """) == 3
+        assert self.i.walk(r""" match [2, 3] case [a] then a + 1 case _ then "no" end """) == "no"
+        assert self.i.walk(r""" match [2, 3] case [a, b] then a * b case _ then "no" end """) == 6
+        assert self.i.walk(r""" match [2] case [a, b] then a * b case _ then "no" end """) == "no"
+        assert self.i.walk(r""" match [] case [a, *b] then [a, b] case _ then "no" end """) == "no"
+        assert self.i.walk(r""" match [2] case [a, *b] then [a, b] case _ then "no" end """) == [2, []]
+        assert self.i.walk(r""" match [3, 4] case [a, *b] then [a, b] case _ then "no" end """) == [3, [4]]
+        assert self.i.walk(r""" match [4, 5, 6] case [a, *b] then [a, b] case _ then "no" end """) == [4, [5, 6]]
+        assert self.i.walk(r""" match [] case [*a, b] then [a, b] case _ then "no" end """) == "no"
+        assert self.i.walk(r""" match [2] case [*a, b] then [a, b] case _ then "no" end """) == [[], 2]
+        assert self.i.walk(r""" match [3, 4] case [*a, b] then [a, b] case _ then "no" end """) == [[3], 4]
+        assert self.i.walk(r""" match [4, 5, 6] case [*a, b] then [a, b] case _ then "no" end """) == [[4, 5], 6]
+        assert self.i.walk(r""" match [2] case [a, *b, c] then [a, b, c] case _ then "no" end """) == "no"
+        assert self.i.walk(r""" match [3, 4] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [3, [], 4]
+        assert self.i.walk(r""" match [4, 5, 6] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [4, [5], 6]
+        assert self.i.walk(r""" match [5, 6, 7, 8] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [5, [6, 7], 8]
+        assert self.i.walk(r""" match [2] case [*a, *b] then [a, b] case _ then "no" end """) == "no"
+
+    def test_match_dict_cases(self):
+        assert self.i.walk(r""" match {} case {} then "yes" case _ then "no" end """) == "yes"
+        assert self.i.walk(r""" match 2 case {} then "yes" case _ then "no" end """) == "no"
+        assert self.i.walk(r""" match {a: 2} case {} then "yes" case _ then "no" end """) == "yes"
+
+        assert self.i.walk(r""" match {a: 2} case {a: 2} then "yes" end """) == "yes"
+        assert self.i.walk(r""" match {a: 2} case {a: 3} then "yes" end """) is None
+        assert self.i.walk(r""" match {a: 2} case {a: a} then a end """) == 2
+        assert self.i.walk(r""" match {a: 3} case {a: b} then b end """) == 3
+        assert self.i.walk(r""" match {a: 4} case {a} then a end """) == 4
+        assert self.i.walk(r""" match {a: 5} case {"a": a} then a end """) == 5
+        assert self.i.walk(r""" match {a: 6, b: 7} case {a} then a end """) == 6
+        assert self.i.walk(r""" match {a: 7, b: 8} case {a, b} then [a, b] end """) == [7, 8]
+        assert self.i.walk(r""" match {a: 8, b: 9} case {a: _, b} then b end """) == 9
+        assert self.i.walk(r""" match {a: 2} case {b} then a end """) is None
+        assert self.i.walk(r""" match {a: 2} case {a, b} then a end """) is None
+
+        assert self.i.walk(r""" match {a: 2} case {*rest} then rest end """) == {'a': 2}
+        assert self.i.walk(r""" match {a: 3} case {a, *rest} then [a, rest] end """) == [3, {}]
+        assert self.i.walk(r""" match {a: 3} case {b, *rest} then [b, rest] end """) is None
+        assert self.i.walk(r""" match {a: 4, b: 5} case {a, *rest} then [a, rest] end """) == [4, {'b': 5}]
+        assert self.i.walk(r""" match {a: 5, b: 6, c: 7} case {a, *rest} then [a, rest] end """) == [5, {'b': 6, 'c': 7}]
+
+    def test_match_ident_and_expr(self):
+        assert self.i.walk(r""" match Ident("aaa") case Ident("aaa") then "yes" end """) == "yes"
+        assert self.i.walk(r""" match Ident("aaa") case "aaa" then "yes" end """) is None
+        assert self.i.walk(r""" match Ident("aaa") case Ident("bbb") then "yes" end """) is None
+        assert self.i.walk(r""" match Ident("aaa") case Ident(a) then [a] end """) == ['aaa']
+
+        assert self.i.walk(r""" match quote a + b end case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) == ["a", "b"]
+        assert self.i.walk(r""" match 2 + 3 case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
+        assert self.i.walk(r""" match Expr(Ident("add")) case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
+
+    def test_match_type_and_or(self):
+        assert self.i.walk(r""" match 2 case int(a) then a end """) == 2
+        assert self.i.walk(r""" match "2" case int(a) then a end """) is None
+        assert self.i.walk(r""" match "aaa" case str(a) then [a] end """) == ['aaa']
+        assert self.i.walk(r""" match [] case str(a) then [a] end """) is None
+
+        assert self.i.walk(r""" match 2 case int(a) or str(a) then [a] end """) == [2]
+        assert self.i.walk(r""" match "aaa" case int(a) or str(a) then [a] end """) == ['aaa']
+        assert self.i.walk(r""" match [2] case int(a) or str(a) then [a] end """) is None
+        assert self.i.walk(r""" match [2] case int(a) or str(a) or list(a) then [a] end """) == [[2]]
+
+    def test_match_combination(self):
+        assert self.i.walk(r""" match [{a: 2, b: 3}, 4] case  [{a: b}, c] then [b, c] end """) == [2, 4]
+        assert self.i.walk(r""" match {a: [5, 6]} case {a: [b, c]} then [b, c] end """) == [5, 6]
+
+    def test_match_control_flow(self):
+        assert self.i.walk(r""" a := 0; match 2 case 2 then a = 1 case _ then a = 2 end; a """) == 1
+        assert self.i.walk(r""" match [2, 3] case [a, b] then "ok" end; a + b """) == 5
+        assert self.i.walk(r""" match [2, 3] case [a, 4] then "no" case _ then a end """) == 2
+
     def test_match_copy(self):
         assert self.i.walk("""
             a := [2, 3, 4];
@@ -920,60 +1137,6 @@ text
             end;
             a
         """) == [2, 3, 4]
-
-    def test_continue(self):
-        assert self.i.walk("""
-            a := [];
-            i := 0; while i < 5 do
-                i = i + 1;
-                if i == 3 then continue() end;
-                push(a, i)
-            end;
-            a
-        """) == [1, 2, 4, 5]
-
-        assert self.i.walk("""
-            a := []; i := 0; while i < 2 do
-                j := 0; while j < 3 do
-                    j = j + 1; if j == 2 then continue() end; push(a, [i, j])
-                end; i = i + 1
-            end;
-            a
-        """) == [[0, 1], [0, 3], [1, 1], [1, 3]]
-
-        with pytest.raises(AssertionError, match="Continue takes no arguments"):
-            self.i.walk(""" while True do continue(2) end """)
-
-        with pytest.raises(AssertionError, match="Continue at top level"):
-            self.i.walk(""" continue() """)
-
-    def test_break(self):
-        assert self.i.walk("""
-            a := [];
-            i := 0; while i < 5 do
-                if i == 3 then break() end;
-                push(a, i);
-                i = i + 1
-            end;
-            a
-        """) == [0, 1, 2]
-
-        assert self.i.walk("""
-            a := []; i := 0; while i < 2 do
-                j := 0; while j < 3 do
-                    if j == 2 then break() end; push(a, [i, j]); j = j + 1
-                end; i = i + 1
-            end; a
-        """) == [[0, 0], [0, 1], [1, 0], [1, 1]]
-
-        assert self.i.walk(""" while True do break() end """) == None
-        assert self.i.walk(""" while True do break(2 + 3) end """) == 5
-
-        with pytest.raises(AssertionError, match="Break takes zero or one argument"):
-            self.i.walk(""" while True do break(2, 3) end """)
-
-        with pytest.raises(AssertionError, match="Break at top level"):
-            self.i.walk(""" break() """)
 
     def test_return(self):
         self.i.walk("""
