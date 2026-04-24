@@ -405,9 +405,7 @@ class ReturnException(Exception):
     def __init__(self, val=None): self.val = val
 
 class ContinueException(Exception): pass
-
-class BreakException(Exception):
-    def __init__(self, val=None): self.val = val
+class BreakException(Exception): pass
 
 class Evaluator:
     def eval(self, expr: Expr, env: Environment) -> Value:
@@ -434,15 +432,12 @@ class Evaluator:
                 return self._if(cond_expr, then_expr, else_expr, env)
             case (Ident("__core_match"), [val_expr, cases_expr]):
                 return self._match(val_expr, cases_expr, env)
-            case (Ident("__core_while"), [cond_expr, body_expr]):
-                return self._while(cond_expr, body_expr, env)
-            case (Ident("break"), args):
-                assert len(args) <= 1, \
-                    f"Break takes zero or one argument @ evaluate(): {args}"
-                raise BreakException(self.eval(args[0], env) if args else None)
-            case (Ident("continue"), args):
-                assert len(args) == 0, f"Continue takes no arguments @ evaluate(): {args}"
+            case (Ident("__core_while"), [cond_expr, body_expr, then_expr, else_expr]):
+                return self._while(cond_expr, body_expr, then_expr, else_expr, env)
+            case (Ident("continue"), []):
                 raise ContinueException()
+            case (Ident("break"), []):
+                raise BreakException()
             case (Ident("__core_func"), [params, body]):
                 return (Ident("closure"), [params, body, env])
             case (Ident("return"), args):
@@ -493,7 +488,7 @@ class Evaluator:
         right_val = self.eval(right_expr, env)
         if self._match_pattern(left_expr, right_val, env):
             return right_val
-        assert False, f"Pattern mismatch @ _evaluate_define(): {left_expr}, {right_val}"
+        assert False, f"Pattern mismatch @ _define(): {left_expr}, {right_val}"
 
     def _assign(self, left_expr, right_expr, env):
         right_val = self.eval(right_expr, env)
@@ -534,14 +529,14 @@ class Evaluator:
                 return self.eval(body_expr, env)
         return None
 
-    def _while(self, cond_expr, body_expr, env):
-        val = None
+    def _while(self, cond_expr, body_expr, then_expr, else_expr, env):
         while self.eval(cond_expr, env):
             try:
-                val = self.eval(body_expr, env)
+                self.eval(body_expr, env)
             except ContinueException: continue
-            except BreakException as e: return e.val
-        return val
+            except BreakException:
+                return None if else_expr == [] else self.eval(else_expr[0], env)
+        return None if then_expr == [] else self.eval(then_expr[0], env)
 
     def _try(self, body_expr, clauses_expr, env):
         try:
@@ -823,20 +818,23 @@ class Interpreter:
             and := macro a, b do quote aif !a then !b else it end end end;
             or := macro a, b do quote aif !a then it else !b end end end;
 
-            #rule {while: [__core_while, EXPR, do, EXPR, end]}
+            #rule {while: [__core_while, EXPR, do, EXPR, +[then, EXPR], +[else, EXPR], end]}
 
-            __core_for := macro var, coll, body do quotes
+            __core_for := macro var, coll, body, thn, els do quote scope
                 __core_for_coll := !coll;
                 __core_for_index := -1;
-                while __core_for_index + 1 < len(__core_for_coll) do
-                    __core_for_index = __core_for_index + 1;
-                    scope
+                !Expr(Ident("__core_while"), [
+                    quote __core_for_index + 1 < len(__core_for_coll) end,
+                    quote
+                        __core_for_index = __core_for_index + 1;
                         !var := __core_for_coll[__core_for_index];
                         !body
-                    end
-                end
-            end end;
-            #rule {for: [__core_for, EXPR, in, EXPR, do, EXPR, end]}
+                    end,
+                    thn,
+                    els
+                ])
+            end end end;
+            #rule {for: [__core_for, EXPR, in, EXPR, do, EXPR, +[then, EXPR], +[else, EXPR], end]}
 
             #rule {try: [__core_try, EXPR, *[except, EXPR, then, EXPR], end]}
 
@@ -967,7 +965,7 @@ class Interpreter:
         except ToilException as e: assert False, f"ToilException @ evaluate(): {e.e}"
         except ReturnException as e: assert False, f"Return from top level @ evaluate(): {e.val}"
         except ContinueException: assert False, "Continue at top level @ evaluate()"
-        except BreakException as e: assert False, f"Break at top level @ evaluate(): {e.val}"
+        except BreakException: assert False, f"Break at top level @ evaluate()"
 
     def walk(self, src: str) -> Value:
         return self.evaluate(self.ast(src))
@@ -1004,64 +1002,185 @@ if __name__ == "__main__":
 
     # Example
 
-    # Variable pattern
-    print(i.walk(r""" a := 2; a """)) # -> 2
-    print(i.walk(r""" _ := 2; _ """)) # -> 2 (Pseudo wildcard)
+    # While
+    print('While')
+    print(i.walk("""
+        a := [];
+        i := 0; while i < 3 do push(a, i); i = i + 1 end
+    """)) # -> None
+    print(i.walk(""" a """)) # -> [0, 1, 2]
 
-    # List pattern
-    # print(i.walk(r""" [a, b] := [2]; [a, b] """)) # -> Pattern mismatch
-    print(i.walk(r""" [a, b] := [3, 4]; [a, b] """)) # -> [3, 4]
-    # print(i.walk(r""" [a, b] := [4, 5, 6]; [a, b] """)) # -> Pattern mismatch
+    print(i.walk("""
+        a := [];
+        i := 0; while i < 3 do push(a, i); i = i + 1 then a else 1/0 end
+    """)) # -> [0, 1, 2]
 
-    # List pattern with rest parameters
-    # print(i.walk(r""" [a, *b] := []; [a, b] """)) # -> Pattern mismatch
-    print(i.walk(r""" [a, *b] := [2]; [a, b] """)) # -> [2, []]
-    print(i.walk(r""" [a, *b] := [3, 4]; [a, b] """)) # -> [3, [4]]
-    print(i.walk(r""" [a, *b] := [4, 5, 6]; [a, b] """)) # -> [4, [5, 6]]
+    print(i.walk("""
+        a := [];
+        i := 0; while i < 3 do push(a, i); i = i + 1 then a end
+    """)) # -> [0, 1, 2]
 
-    # print(i.walk(r""" [*a, b] := []; [a, b] """)) # -> Pattern mismatch
-    print(i.walk(r""" [*a, b] := [2]; [a, b] """)) # -> [[], 2]
-    print(i.walk(r""" [*a, b] := [2, 3]; [a, b] """)) # -> [[2], 3]
-    print(i.walk(r""" [*a, b] := [2, 3, 4]; [a, b] """)) # -> [[2, 3], 4]
+    print(i.walk(""" while False do 1 / 0 then 3 else 4 end """)) # -> 3
 
-    # print(i.walk(r""" [a, *b, c] := [2]; [a, b, c] """)) # -> Pattern mismatch
-    print(i.walk(r""" [a, *b, c] := [3, 4]; [a, b, c] """)) # -> [3, [], 4]
-    print(i.walk(r""" [a, *b, c] := [4, 5, 6]; [a, b, c] """)) # -> [4, [5], 6]
-    print(i.walk(r""" [a, *b, c] := [5, 6, 7, 8]; [a, b, c] """)) # -> [5, [6, 7], 8]
+    # i.walk(""" while do 2 then 3 else 4 end """) # -> Expected do
+    # i.walk(""" while True 2 then 3 else 4 end """) # -> Expected do
+    # i.walk(""" while True do 2 3 else 4 end """) # -> Expected end
+    # i.walk(""" while True do 2 then 3 4 end """) # -> Expected end
+    # i.walk(""" while True do 2 then 3 else end """) # -> Expected end
+    # i.walk(""" while True do 2 then 3 else 4 """) # -> Expected end
 
-    # print(i.walk(r""" [a, *b, *c, d] := [5, 6, 7, 8]; [a, b, c] """)) # -> Pattern mismatch
+    # Continue
+    print('Continue')
+    print(i.walk("""
+        a := [];
+        i := 0; while i < 3 do
+            i = i + 1; if i == 2 then continue() end;
+            push(a, i)
+        then a end
+    """)) # -> [1, 3]
+    print(i.walk("""
+        a := []; i := 0; while i < 2 do
+            j := 0; while j < 3 do
+                j = j + 1; if j == 2 then continue() end;
+                push(a, [i, j])
+            end;
+            i = i + 1
+        then a end
+    """)) # -> [[0, 1], [0, 3], [1, 1], [1, 3]]
 
-    # Dict pattern
-    # print(walk(r""" {a} := {a: 2, b: 3} """)) # -> Pattern mismatch
-    print(i.walk(r""" {a, b} := {a: 2, b: 3}; [a, b] """)) # -> [2, 3]
-    print(i.walk(r""" {a: c, b: d} := {a: 3, b: 4}; [c, d] """)) # -> [3, 4]
-    # print(walk(r""" {a, b, c} := {a: 2, b: 3} """)) # -> Pattern mismatch
+    # i.walk(""" continue() """) # -> Continue at top level
 
-    print(i.walk(r""" {a, *rest} := {a: 2, b: 3}; [a, rest] """)) # ->
+    # Break
+    print('Break')
+    print(i.walk("""
+        a := [];
+        i := 0; while i < 3 do
+            if i == 1 then break() end;
+            push(a, i); i = i + 1
+        then 1/0 else a end
+    """)) # -> [0]
 
-    exit()
+    print(i.walk("""
+        a := [];
+        i := 0; while i < 3 do
+            if i == 1 then break() end;
+            push(a, i); i = i + 1
+        else a end
+    """)) # -> [0]
 
-    # Ident pattern
-    print(i.walk(r""" Ident("aaa") := Ident("aaa") """)) # -> aaa
-    # print(i.walk(r""" Ident("aaa") := Ident("bbb") """)) # -> Pattern mismatch
-    print(i.walk(r""" Ident(a) := Ident("aaa"); a """)) # -> aaa
-    # print(i.walk(r""" Ident(a) := "aaa"; a """)) # -> Pattern mismatch
+    print(i.walk("""
+        a := [];
+        i := 0; while i < 2 do
+            j := 0; while j < 3 do
+                if i == 0 and j == 1 then break() end;
+                push(a, [i, j]);
+                j = j + 1
+            end;
+            i = i + 1
+        then a end
+    """)) # -> [[0, 0], [1, 0], [1, 1], [1, 2]]
+    print(i.walk("""
+        a := [];
+        i := 0; while i < 2 do
+            j := 0; while j < 3 do
+                if i == 1 and j == 1 then break() end;
+                push(a, [i, j]);
+                j = j + 1
+            else break() end;
+            i = i + 1
+        else a end
+    """)) # -> [[0, 0], [0, 1], [0, 2], [1, 0]]
 
-    # Expr pattern
-    print(i.walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := quote a + b end; [name1, name2] """)) # -> ['a', 'b']
-    # print(i.walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := 2 + 3 """)) # -> Pattern mismatch
-    # print(i.walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := Expr(Ident('add')) """)) # -> Pattern mismatch
+    print(i.walk(""" while True do break() end """)) # -> None
+    print(i.walk(""" while True do break() else 2 end """)) # -> 2
+    # i.walk(""" break() """) # -> Break at top level
 
-    # Type pattern
-    print(i.walk(r""" int(a) := 2; a """)) # -> 2
-    # print(i.walk(r""" int(a) := "2"; a """)) # -> Pattern mismatch
-    print(i.walk(r""" str(a) := "aaa"; a """)) # -> aaa
-    # print(i.walk(r""" str(a) := []; a """)) # -> Pattern mismatch
-    print(i.walk(r""" int(a) or str(a) := 2; a """)) # -> 2
-    print(i.walk(r""" int(a) or str(a) := "aaa"; a """)) # -> aaa
-    # print(i.walk(r""" int(a) or str(a) := [2]; a """)) # -> Pattern mismatch
-    print(i.walk(r""" int(a) or str(a) or list(a):= [2]; a """)) # -> [2]
+    # For
+    print('For')
+    print(i.walk(""" a := []; for i in [0, 1, 2] do push(a, i) end """)) # -> None
+    print(i.walk(""" a """)) # -> [0, 1, 2]
 
-    # Literal pattern
-    print(i.walk(r""" a := 2; 2 := a """)) # -> 2
-    # print(i.walk(r""" a := 3; 2 := a """)) # -> Pattern mismatch
+    print(i.walk("""
+        a := []; for i in [0, 1, 2] do push(a, i) then [i, a] else 1/0 end
+    """)) # -> [2, [0, 1, 2]]
+
+    print(i.walk("""
+        a := []; for i in [0, 1, 2] do push(a, i) then a end
+    """)) # -> [0, 1, 2]
+
+    print(i.walk("""
+        a := []; for [i, j] in [[1, 2], [3, 4]] do push(a, [i, j]) then a end
+    """)) # -> [[1, 2], [3, 4]]
+
+    print(i.walk("""
+        a := [];
+        for [k, v] in {"a": 2, "b": 3}.items() do push(a, [k, v]) then a end
+    """)) # -> [['a', 2], ['b', 3]]
+
+    print(i.walk(""" for i in [] do 1/0 then 2 end """)) # -> 2
+
+    # i.walk(""" for in [] do 2 then 3 else 4 end """) # -> Unexpected token
+    # i.walk(""" for i [] do 2 then 3 else 4 end """) # -> Unexpected token
+    # i.walk(""" for i in do 2 then 3 else 4 end """) # -> Expected do
+    # i.walk(""" for i in [] do then 3 else 4 end """) # -> Expected end
+    # i.walk(""" for i in [] do 2 3 else 4 end """) # -> Expected end
+    # i.walk(""" for i in [] do 2 then else 4 end """) # -> Expected end
+    # i.walk(""" for i in [] do 2 then 3 4 end """) # -> Expected end
+    # i.walk(""" for i in [] do 2 then 3 else end """) # -> Expected end
+    # i.walk(""" for i in [] do 2 then 3 else 4 """) # -> Expected end
+
+    # Continue
+    print('Continue')
+    print(i.walk("""
+        a := []; for i in [0, 1, 2] do
+            if i == 1 then continue() end;
+            push(a, i)
+        then a end
+    """)) # -> [0, 2]
+
+    print(i.walk("""
+        a := []; for i in [0, 1] do
+            for j in [0, 1, 2] do
+                if j == 1 then continue() end;
+                push(a, [i, j])
+            end
+        then a end
+    """)) # -> [[0, 0], [0, 2], [1, 0], [1, 2]]
+
+    # Break
+    print('Break')
+    print(i.walk("""
+        a := []; for i in [0, 1, 2] do
+            if i == 1 then break() end;
+            push(a, i)
+        then 1/0 else a end
+    """)) # -> [0]
+
+    print(i.walk("""
+        a := []; for i in [0, 1, 2] do
+            if i == 1 then break() end;
+            push(a, i)
+        else a end
+    """)) # -> [0]
+
+    print(i.walk("""
+        a := [];
+        for i in [0, 1] do
+            for j in [0, 1, 2] do
+                if i == 0 and j == 1 then break() end;
+                push(a, [i, j])
+            end
+        then a end
+    """)) # -> [[0, 0], [1, 0], [1, 1], [1, 2]]
+
+    print(i.walk("""
+        a := [];
+        for i in [0, 1] do
+            for j in [0, 1, 2] do
+                if i == 1 and j == 1 then break() end;
+                push(a, [i, j])
+            else break() end
+        else a end
+    """)) # -> [[0, 0], [0, 1], [0, 2], [1, 0]]
+
+
