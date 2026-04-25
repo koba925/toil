@@ -691,7 +691,7 @@ class Interpreter:
         self._env = Environment()
         self._custom_rules = {}
 
-    def _import(self, path):
+    def _load(self, path):
         with open(path, "r") as f: src = f.read()
         module_env = Environment(self._env)
         ast = self.parse(self.scan(src))
@@ -707,7 +707,7 @@ class Interpreter:
     def _builtins(self):
         self._env.define("__builtins", None)
 
-        self._env.define("import", lambda args: self._import(args[0]))
+        self._env.define("load", lambda args: self._load(args[0]))
 
         self._env.define("eval", lambda args: Evaluator().eval(
             self.ast(args[0]),
@@ -862,8 +862,19 @@ class Interpreter:
                     ]),
                     quote func self, !!params_ do !body end end
                 ])
-            end
+            end;
             #rule {defmethod: [__core_defmethod, EXPR, params, EXPRS, do, EXPR, end]}
+
+            defmacro __core_defmodule params name_expr, export_expr, body_expr do
+                quote deffunc !name_expr params do !body_expr; !export_expr end end
+            end;
+            #rule {defmodule: [__core_defmodule, EXPR, export, EXPR, do, EXPR, end]}
+
+            defmacro __core_import params mod_expr, name_expr do
+                quote !name_expr := (!mod_expr)() end
+            end
+            #rule {import: [__core_import, EXPR, as, EXPR, end]}
+            #rule {from: [__core_import, EXPR, import, EXPR, end]}
         """)
 
         self._env = Environment(self._env)
@@ -1002,185 +1013,57 @@ if __name__ == "__main__":
 
     # Example
 
-    # While
-    print('While')
-    print(i.walk("""
-        a := [];
-        i := 0; while i < 3 do push(a, i); i = i + 1 end
-    """)) # -> None
-    print(i.walk(""" a """)) # -> [0, 1, 2]
+    # Module
+    i.walk("""
+        defmodule Mod1 export {public_val, public_func} do
+            public_val := 2;
+            _private_val := 3;
 
-    print(i.walk("""
-        a := [];
-        i := 0; while i < 3 do push(a, i); i = i + 1 then a else 1/0 end
-    """)) # -> [0, 1, 2]
+            deffunc public_func params a do a + 2 end;
+            deffunc _private_func params a do a end
+        end
+    """)
 
-    print(i.walk("""
-        a := [];
-        i := 0; while i < 3 do push(a, i); i = i + 1 then a end
-    """)) # -> [0, 1, 2]
+    i.walk(""" import Mod1 as mod1 end """)
+    print(i.walk(""" mod1.public_val """)) # -> 2
+    print(i.walk(""" mod1.public_func(3) """)) # -> 5
+    # i.walk(""" mod1._private_val """) # -> Undefined variable
+    # i.walk(""" mod1._private_func() """) # -> Undefined variable
 
-    print(i.walk(""" while False do 1 / 0 then 3 else 4 end """)) # -> 3
+    i.walk(""" from Mod1 import {public_val} end """)
+    print(i.walk(""" public_val """)) # -> 2
 
-    # i.walk(""" while do 2 then 3 else 4 end """) # -> Expected do
-    # i.walk(""" while True 2 then 3 else 4 end """) # -> Expected do
-    # i.walk(""" while True do 2 3 else 4 end """) # -> Expected end
-    # i.walk(""" while True do 2 then 3 4 end """) # -> Expected end
-    # i.walk(""" while True do 2 then 3 else end """) # -> Expected end
-    # i.walk(""" while True do 2 then 3 else 4 """) # -> Expected end
+    i.walk(""" from Mod1 import {public_func: f} end """)
+    print(i.walk(""" f(3) """)) # -> 5
 
-    # Continue
-    print('Continue')
-    print(i.walk("""
-        a := [];
-        i := 0; while i < 3 do
-            i = i + 1; if i == 2 then continue() end;
-            push(a, i)
-        then a end
-    """)) # -> [1, 3]
-    print(i.walk("""
-        a := []; i := 0; while i < 2 do
-            j := 0; while j < 3 do
-                j = j + 1; if j == 2 then continue() end;
-                push(a, [i, j])
+    # i.walk(""" from Mod1 import {not_found} end """) # -> Pattern mismatch
+
+    i.walk("""
+        defmodule Mod2 export {mod1, public_val} do
+            import Mod1 as mod1 end;
+            public_val := mod1.public_func(3)
+        end
+    """)
+
+    i.walk(""" import Mod2 as mod2 end """)
+    print(i.walk(""" mod2.mod1.public_val """)) # -> 2
+    print(i.walk(""" mod2.public_val """)) # -> 5
+
+    # GCD module
+
+    i.walk("""
+        defmodule GCD export {recur, iter} do
+            deffunc recur params a, b do
+                if a == 0 then b else recur(b % a, a) end
             end;
-            i = i + 1
-        then a end
-    """)) # -> [[0, 1], [0, 3], [1, 1], [1, 3]]
 
-    # i.walk(""" continue() """) # -> Continue at top level
-
-    # Break
-    print('Break')
-    print(i.walk("""
-        a := [];
-        i := 0; while i < 3 do
-            if i == 1 then break() end;
-            push(a, i); i = i + 1
-        then 1/0 else a end
-    """)) # -> [0]
-
-    print(i.walk("""
-        a := [];
-        i := 0; while i < 3 do
-            if i == 1 then break() end;
-            push(a, i); i = i + 1
-        else a end
-    """)) # -> [0]
-
-    print(i.walk("""
-        a := [];
-        i := 0; while i < 2 do
-            j := 0; while j < 3 do
-                if i == 0 and j == 1 then break() end;
-                push(a, [i, j]);
-                j = j + 1
-            end;
-            i = i + 1
-        then a end
-    """)) # -> [[0, 0], [1, 0], [1, 1], [1, 2]]
-    print(i.walk("""
-        a := [];
-        i := 0; while i < 2 do
-            j := 0; while j < 3 do
-                if i == 1 and j == 1 then break() end;
-                push(a, [i, j]);
-                j = j + 1
-            else break() end;
-            i = i + 1
-        else a end
-    """)) # -> [[0, 0], [0, 1], [0, 2], [1, 0]]
-
-    print(i.walk(""" while True do break() end """)) # -> None
-    print(i.walk(""" while True do break() else 2 end """)) # -> 2
-    # i.walk(""" break() """) # -> Break at top level
-
-    # For
-    print('For')
-    print(i.walk(""" a := []; for i in [0, 1, 2] do push(a, i) end """)) # -> None
-    print(i.walk(""" a """)) # -> [0, 1, 2]
-
-    print(i.walk("""
-        a := []; for i in [0, 1, 2] do push(a, i) then [i, a] else 1/0 end
-    """)) # -> [2, [0, 1, 2]]
-
-    print(i.walk("""
-        a := []; for i in [0, 1, 2] do push(a, i) then a end
-    """)) # -> [0, 1, 2]
-
-    print(i.walk("""
-        a := []; for [i, j] in [[1, 2], [3, 4]] do push(a, [i, j]) then a end
-    """)) # -> [[1, 2], [3, 4]]
-
-    print(i.walk("""
-        a := [];
-        for [k, v] in {"a": 2, "b": 3}.items() do push(a, [k, v]) then a end
-    """)) # -> [['a', 2], ['b', 3]]
-
-    print(i.walk(""" for i in [] do 1/0 then 2 end """)) # -> 2
-
-    # i.walk(""" for in [] do 2 then 3 else 4 end """) # -> Unexpected token
-    # i.walk(""" for i [] do 2 then 3 else 4 end """) # -> Unexpected token
-    # i.walk(""" for i in do 2 then 3 else 4 end """) # -> Expected do
-    # i.walk(""" for i in [] do then 3 else 4 end """) # -> Expected end
-    # i.walk(""" for i in [] do 2 3 else 4 end """) # -> Expected end
-    # i.walk(""" for i in [] do 2 then else 4 end """) # -> Expected end
-    # i.walk(""" for i in [] do 2 then 3 4 end """) # -> Expected end
-    # i.walk(""" for i in [] do 2 then 3 else end """) # -> Expected end
-    # i.walk(""" for i in [] do 2 then 3 else 4 """) # -> Expected end
-
-    # Continue
-    print('Continue')
-    print(i.walk("""
-        a := []; for i in [0, 1, 2] do
-            if i == 1 then continue() end;
-            push(a, i)
-        then a end
-    """)) # -> [0, 2]
-
-    print(i.walk("""
-        a := []; for i in [0, 1] do
-            for j in [0, 1, 2] do
-                if j == 1 then continue() end;
-                push(a, [i, j])
+            deffunc iter params a, b do
+                while a != 0 do [a, b] := [b % a, a] end;
+                b
             end
-        then a end
-    """)) # -> [[0, 0], [0, 2], [1, 0], [1, 2]]
+        end
+    """)
 
-    # Break
-    print('Break')
-    print(i.walk("""
-        a := []; for i in [0, 1, 2] do
-            if i == 1 then break() end;
-            push(a, i)
-        then 1/0 else a end
-    """)) # -> [0]
-
-    print(i.walk("""
-        a := []; for i in [0, 1, 2] do
-            if i == 1 then break() end;
-            push(a, i)
-        else a end
-    """)) # -> [0]
-
-    print(i.walk("""
-        a := [];
-        for i in [0, 1] do
-            for j in [0, 1, 2] do
-                if i == 0 and j == 1 then break() end;
-                push(a, [i, j])
-            end
-        then a end
-    """)) # -> [[0, 0], [1, 0], [1, 1], [1, 2]]
-
-    print(i.walk("""
-        a := [];
-        for i in [0, 1] do
-            for j in [0, 1, 2] do
-                if i == 1 and j == 1 then break() end;
-                push(a, [i, j])
-            else break() end
-        else a end
-    """)) # -> [[0, 0], [0, 1], [0, 2], [1, 0]]
-
-
+    i.walk(""" import GCD as gcd end """)
+    print(i.walk(""" gcd.recur(18, 24) """)) # -> 6
+    print(i.walk(""" gcd.iter(18, 24) """)) # -> 6

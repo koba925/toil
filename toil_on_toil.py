@@ -648,9 +648,9 @@ i.walk(r"""
                 except ['BreakException'] then break()
                 end
             then
-                if then_expr == [] then None else self.eval(then_expr[0], env) end
+                self._eval_optional_arg(then_expr, env)
             else
-                if else_expr == [] then None else self.eval(else_expr[0], env) end
+                self._eval_optional_arg(else_expr, env)
             end
         end;
 

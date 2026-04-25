@@ -1167,19 +1167,19 @@ text
             self.i.walk(""" return() """)
 
 
-    def test_import(self, tmp_path):
-        self.i.walk(""" fib := import("lib/fib.toil") """)
+    def test_load(self, tmp_path):
+        self.i.walk(""" fib := load("lib/fib.toil") """)
         assert self.i.walk(""" fib(9) """) == 34
 
-        self.i.walk(""" [gcd_recur, gcd_iter] := import("lib/gcd.toil") """)
+        self.i.walk(""" [gcd_recur, gcd_iter] := load("lib/gcd.toil") """)
         assert self.i.walk(""" gcd_recur(24, 36) """) == 12
         assert self.i.walk(""" gcd_iter(24, 36) """) == 12
 
-    def test_import_isolation(self, tmp_path):
+    def test_load_isolation(self, tmp_path):
         mod_a_path = tmp_path / "mod_a.toil"
         mod_a_path.write_text("a_private := 100; func do a_private end")
 
-        self.i.walk(f""" f := import("{mod_a_path}") """)
+        self.i.walk(f""" f := load("{mod_a_path}") """)
         assert self.i.walk("f()") == 100
         with pytest.raises(AssertionError, match="Undefined variable"):
             self.i.walk("a_private")
@@ -1187,7 +1187,7 @@ text
         mod_b_path = tmp_path / "mod_b.toil"
         mod_b_path.write_text("b_private := 200; a_private")
         with pytest.raises(AssertionError, match="Undefined variable"):
-            self.i.walk(f""" import("{mod_b_path}") """)
+            self.i.walk(f""" load("{mod_b_path}") """)
 
     def test_dict(self):
         assert self.i.walk(""" {} """) == {}
@@ -1274,15 +1274,15 @@ text
         assert self.i.walk(""" f([Ident("add"), [2, 3]]) """) == None
 
     def test_dict_module(self):
-        self.i.walk(""" gcd := import("lib/gcd_dict.toil") """)
+        self.i.walk(""" gcd := load("lib/gcd_dict.toil") """)
         assert self.i.walk(""" gcd.recur(24, 36) """) == 12
         assert self.i.walk(""" gcd.iter(24, 36) """) == 12
 
-        self.i.walk(""" {recur, iter} := import("lib/gcd_dict.toil") """)
+        self.i.walk(""" {recur, iter} := load("lib/gcd_dict.toil") """)
         assert self.i.walk(""" recur(24, 36) """) == 12
         assert self.i.walk(""" iter(24, 36) """) == 12
 
-        self.i.walk(""" {recur: gcd_recur, iter: gcd_iter} := import("lib/gcd_dict.toil") """)
+        self.i.walk(""" {recur: gcd_recur, iter: gcd_iter} := load("lib/gcd_dict.toil") """)
         assert self.i.walk(""" gcd_recur(24, 36) """) == 12
         assert self.i.walk(""" gcd_iter(24, 36) """) == 12
 
@@ -2072,6 +2072,61 @@ class TestCustomSyntax(TestBase):
             self.i.ast(""" if 2 == 3 then 4 else end """)
         with pytest.raises(AssertionError, match="Expected end @ consume: else"):
             self.i.ast(""" if 2 == 3 then 4 else 5 else 6 end """)
+
+    def test_module(self):
+        self.i.walk("""
+            defmodule Mod1 export {public_val, public_func} do
+                public_val := 2;
+                _private_val := 3;
+
+                deffunc public_func params a do a + 2 end;
+                deffunc _private_func params a do a end
+            end
+        """)
+
+        self.i.walk(""" import Mod1 as mod1 end """)
+        assert self.i.walk(""" mod1.public_val """) == 2
+        assert self.i.walk(""" mod1.public_func(3) """) == 5
+
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            self.i.walk(""" mod1._private_val """)
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            self.i.walk(""" mod1._private_func() """)
+
+        self.i.walk(""" from Mod1 import {public_val} end """)
+        assert self.i.walk(""" public_val """) == 2
+
+        self.i.walk(""" from Mod1 import {public_func: f} end """)
+        assert self.i.walk(""" f(0) """) == 2
+
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            self.i.walk(""" from Mod1 import {not_found} end """)
+
+        self.i.walk("""
+            defmodule Mod2 export {mod1, public_val} do
+                import Mod1 as mod1 end;
+                public_val := mod1.public_func(3)
+            end
+        """)
+
+        self.i.walk(""" import Mod2 as mod2 end """)
+        assert self.i.walk(""" mod2.mod1.public_val """) == 2
+        assert self.i.walk(""" mod2.public_val """) == 5
+
+        self.i.walk("""
+            defmodule GCD export {recur, iter} do
+                deffunc recur params a, b do
+                    if a == 0 then b else recur(b % a, a) end
+                end;
+                deffunc iter params a, b do
+                    while a != 0 do [a, b] := [b % a, a] end;
+                    b
+                end
+            end
+        """)
+        self.i.walk(""" import GCD as gcd end """)
+        assert self.i.walk(""" gcd.recur(18, 24) """) == 6
+        assert self.i.walk(""" gcd.iter(18, 24) """) == 6
 
 if __name__ == "__main__":
     pytest.main([__file__])
