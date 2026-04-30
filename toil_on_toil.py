@@ -387,7 +387,7 @@ i.walk(r"""
                 clauses.push([cond_expr, except_expr])
             end;
             self._consume(Ident('end'));
-            return(Expr(Ident('try'), [body_expr, clauses]))
+            Expr(Ident('try'), [body_expr, clauses])
         end;
 
         defmethod _for params do
@@ -406,34 +406,7 @@ i.walk(r"""
                 [self._expression()]
             else [] end;
             self._consume(Ident('end'));
-            Expr(Ident('scope'), [Expr(Ident('seq'), [
-                Expr(Ident('define'), [Ident('__for_coll'), coll_expr]),
-                Expr(Ident('define'), [Ident('__for_index'), -1]),
-                Expr(Ident('while'), [
-                    Expr(Ident('less'), [
-                        Expr(Ident('add'), [Ident('__for_index'), 1]),
-                        Expr(Ident('len'), [Ident('__for_coll')])
-                    ]),
-                    Expr(Ident('seq'), [
-                        Expr(Ident('assign'), [
-                            Ident('__for_index'),
-                            Expr(Ident('add'), [Ident('__for_index'), 1])
-                        ]),
-                        Expr(Ident('seq'), [
-                            Expr(Ident('define'), [
-                                var_expr,
-                                Expr(Ident('index'), [
-                                    Ident('__for_coll'),
-                                    Ident('__for_index')
-                                ])
-                            ]),
-                            body_expr
-                        ])
-                    ]),
-                    then_expr,
-                    else_expr
-                ])
-            ])])
+            Expr(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr])
         end;
 
         defmethod _defclass params do
@@ -603,6 +576,8 @@ i.walk(r"""
                     self.eval(left_expr, env) or self.eval(right_expr, env)
                 case Expr(Ident('while'), [cond_expr, body_expr, then_expr, else_expr]) then
                     self._while(cond_expr, body_expr, then_expr, else_expr, env)
+                case Expr(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr]) then
+                    self._for(var_expr, coll_expr, body_expr, then_expr, else_expr, env)
                 case Expr(Ident('try'), [body_expr, clauses]) then
                     self._try(body_expr, clauses, env)
                 case Expr(Ident('raise'), [val]) then
@@ -700,6 +675,26 @@ i.walk(r"""
 
         defmethod _while params cond_expr, body_expr, then_expr, else_expr, env do
             while self.eval(cond_expr, env) do
+                try
+                    self.eval(body_expr, env)
+                except ['ContinueException'] then continue()
+                except ['BreakException'] then break()
+                end
+            then
+                self._eval_optional_arg(then_expr, env)
+            else
+                self._eval_optional_arg(else_expr, env)
+            end
+        end;
+
+        defmethod _for params
+            var_expr, coll_expr, body_expr, then_expr, else_expr, env
+        do
+            coll_val := self.eval(coll_expr, env);
+            for val in coll_val do
+                if not self._match_pattern(var_expr, val, env) then
+                    raise('Pattern mismatch @ _for: ' + str(var_expr) + ', ' + str(val))
+                end;
                 try
                     self.eval(body_expr, env)
                 except ['ContinueException'] then continue()
