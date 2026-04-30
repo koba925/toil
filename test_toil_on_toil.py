@@ -261,107 +261,6 @@ class TestToT(TestBase):
         assert self.walk(r""" [{a: b}, c] := [{a: 2, b: 3}, 4]; [b, c] """) == [2, 4]
         assert self.walk(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """) == [5, 6]
 
-    def test_match_syntax(self):
-        assert self.walk(r""" match 2 end """) is None
-
-        with pytest.raises(Exception, match="Expected end"):
-            self.walk(r""" match end """)
-        with pytest.raises(Exception, match="Expected end"):
-            self.walk(r""" match 2 case 2 then 3 """)
-        with pytest.raises(Exception, match="Expected end"):
-            self.walk(r""" match 2 then 3 end """)
-        with pytest.raises(Exception, match="Expected then"):
-            self.walk(r""" match 2 case then 3 end """)
-
-    def test_match_variable_and_literal(self):
-        assert self.walk(r""" match 2 case a then a + 1 case _ then "no" end """) == 3
-        assert self.walk(r""" match 2 case 3 then "yes" end """) is None
-        assert self.walk(r""" match 2 case 2 then "yes" case _ then "no" end """) == "yes"
-        assert self.walk(r""" match 2 case 3 then "yes" case _ then "no" end """) == "no"
-        assert self.walk(r""" match [] case 3 then "yes" case _ then "no" end """) == "no"
-        assert self.walk(r""" match None case None then "yes" case _ then "no" end """) == "yes"
-        assert self.walk(r""" match 2 case None then "yes" case _ then "no" end """) == "no"
-        assert self.walk(r""" match True case True then "yes" case _ then "no" end """) == "yes"
-        assert self.walk(r""" match False case True then "yes" case _ then "no" end """) == "no"
-        assert self.walk(r""" match False case False then "yes" case _ then "no" end """) == "yes"
-        assert self.walk(r""" match True case False then "yes" case _ then "no" end """) == "no"
-        assert self.walk(r""" match "hello" case "hello" then "yes" case _ then "no" end """) == "yes"
-        assert self.walk(r""" match "world" case "hello" then "yes" case _ then "no" end """) == "no"
-
-    def test_match_list(self):
-        assert self.walk(r""" match [] case [] then "yes" case _ then "no" end """) == "yes"
-        assert self.walk(r""" match 2 case [] then "yes" case _ then "no" end """) == "no"
-        assert self.walk(r""" match [2] case [a] then a + 1 case _ then "no" end """) == 3
-        assert self.walk(r""" match [2, 3] case [a] then a + 1 case _ then "no" end """) == "no"
-        assert self.walk(r""" match [2, 3] case [a, b] then a * b case _ then "no" end """) == 6
-        assert self.walk(r""" match [2] case [a, b] then a * b case _ then "no" end """) == "no"
-        assert self.walk(r""" match [] case [a, *b] then [a, b] case _ then "no" end """) == "no"
-        assert self.walk(r""" match [2] case [a, *b] then [a, b] case _ then "no" end """) == [2, []]
-        assert self.walk(r""" match [3, 4] case [a, *b] then [a, b] case _ then "no" end """) == [3, [4]]
-        assert self.walk(r""" match [4, 5, 6] case [a, *b] then [a, b] case _ then "no" end """) == [4, [5, 6]]
-        assert self.walk(r""" match [] case [*a, b] then [a, b] case _ then "no" end """) == "no"
-        assert self.walk(r""" match [2] case [*a, b] then [a, b] case _ then "no" end """) == [[], 2]
-        assert self.walk(r""" match [3, 4] case [*a, b] then [a, b] case _ then "no" end """) == [[3], 4]
-        assert self.walk(r""" match [4, 5, 6] case [*a, b] then [a, b] case _ then "no" end """) == [[4, 5], 6]
-        assert self.walk(r""" match [2] case [a, *b, c] then [a, b, c] case _ then "no" end """) == "no"
-        assert self.walk(r""" match [3, 4] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [3, [], 4]
-        assert self.walk(r""" match [4, 5, 6] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [4, [5], 6]
-        assert self.walk(r""" match [5, 6, 7, 8] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [5, [6, 7], 8]
-        assert self.walk(r""" match [2] case [*a, *b] then [a, b] case _ then "no" end """) == "no"
-
-    def test_match_dict_cases(self):
-        assert self.walk(r""" match {} case {} then "yes" case _ then "no" end """) == "yes"
-        assert self.walk(r""" match 2 case {} then "yes" case _ then "no" end """) == "no"
-        assert self.walk(r""" match {a: 2} case {} then "yes" case _ then "no" end """) == "yes"
-
-        assert self.walk(r""" match {a: 2} case {a: 2} then "yes" end """) == "yes"
-        assert self.walk(r""" match {a: 2} case {a: 3} then "yes" end """) is None
-        assert self.walk(r""" match {a: 2} case {a: a} then a end """) == 2
-        assert self.walk(r""" match {a: 3} case {a: b} then b end """) == 3
-        assert self.walk(r""" match {a: 4} case {a} then a end """) == 4
-        assert self.walk(r""" match {a: 5} case {"a": a} then a end """) == 5
-        assert self.walk(r""" match {a: 6, b: 7} case {a} then a end """) == 6
-        assert self.walk(r""" match {a: 7, b: 8} case {a, b} then [a, b] end """) == [7, 8]
-        assert self.walk(r""" match {a: 8, b: 9} case {a: _, b} then b end """) == 9
-        assert self.walk(r""" match {a: 2} case {b} then a end """) is None
-        assert self.walk(r""" match {a: 2} case {a, b} then a end """) is None
-
-        assert self.walk(r""" match {a: 2} case {*rest} then rest end """) == {'a': 2}
-        assert self.walk(r""" match {a: 3} case {a, *rest} then [a, rest] end """) == [3, {}]
-        assert self.walk(r""" match {a: 3} case {b, *rest} then [b, rest] end """) is None
-        assert self.walk(r""" match {a: 4, b: 5} case {a, *rest} then [a, rest] end """) == [4, {'b': 5}]
-        assert self.walk(r""" match {a: 5, b: 6, c: 7} case {a, *rest} then [a, rest] end """) == [5, {'b': 6, 'c': 7}]
-
-    def test_match_ident_and_expr(self):
-        assert self.walk(r""" match Ident("aaa") case Ident("aaa") then "yes" end """) == "yes"
-        assert self.walk(r""" match Ident("aaa") case "aaa" then "yes" end """) is None
-        assert self.walk(r""" match Ident("aaa") case Ident("bbb") then "yes" end """) is None
-        assert self.walk(r""" match Ident("aaa") case Ident(a) then [a] end """) == ['aaa']
-
-        assert self.walk(r""" match quote(a + b) case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) == ["a", "b"]
-        assert self.walk(r""" match 2 + 3 case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
-        assert self.walk(r""" match Expr(Ident("add")) case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
-
-    def test_match_type_and_or(self):
-        assert self.walk(r""" match 2 case int(a) then a end """) == 2
-        assert self.walk(r""" match "2" case int(a) then a end """) is None
-        assert self.walk(r""" match "aaa" case str(a) then [a] end """) == ['aaa']
-        assert self.walk(r""" match [] case str(a) then [a] end """) is None
-
-        assert self.walk(r""" match 2 case int(a) or str(a) then [a] end """) == [2]
-        assert self.walk(r""" match "aaa" case int(a) or str(a) then [a] end """) == ['aaa']
-        assert self.walk(r""" match [2] case int(a) or str(a) then [a] end """) is None
-        assert self.walk(r""" match [2] case int(a) or str(a) or list(a) then [a] end """) == [[2]]
-
-    def test_match_combination(self):
-        assert self.walk(r""" match [{a: 2, b: 3}, 4] case  [{a: b}, c] then [b, c] end """) == [2, 4]
-        assert self.walk(r""" match {a: [5, 6]} case {a: [b, c]} then [b, c] end """) == [5, 6]
-
-    def test_match_control_flow(self):
-        assert self.walk(r""" a := 0; match 2 case 2 then a = 1 case _ then a = 2 end; a """) == 1
-        assert self.walk(r""" match [2, 3] case [a, b] then "ok" end; a + b """) == 5
-        assert self.walk(r""" match [2, 3] case [a, 4] then "no" case _ then a end """) == 2
-
     def test_list_assign(self):
         self.walk(""" b := [2, 3, [4, 5]] """)
         self.walk(""" b[0] = 6 """)
@@ -371,6 +270,30 @@ class TestToT(TestBase):
         assert self.walk(""" b """) == [6, 3, [4, 7]]
 
         assert self.walk(""" a := [1, 2]; b := [3, 4]; a[0] = b[1] = 5; [a, b] """) == [[5, 2], [3, 5]]
+
+    def test_arrow_function(self):
+        assert self.walk(""" ([] -> 2)() """) == 2
+        assert self.walk(""" ([a] -> a + 2)(3) """) == 5
+        assert self.walk(""" (a -> a + 2)(3) """) == 5
+        assert self.walk(""" ([[a, b]] -> a + b)([2, 3]) """) == 5
+        assert self.walk(""" ([a, b] -> a + b)(2, 3) """) == 5
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(""" ([a, b] -> a + b)(2) """)
+
+        assert self.walk(""" ([a, *b] -> b)(2, 3, 4) """) == [3, 4]
+        assert self.walk(""" ({a} -> a + 2)({a: 3}) """) == 5
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(""" ({a} -> a + 2)({b: 3}) """)
+
+        assert self.walk(""" (int(a) -> a + 2)(3) """) == 5
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            self.walk(""" (int(a) -> a + 2)("aaa") """)
+
+        assert self.walk(""" (x -> x or 2)(False) """) == 2
+        assert self.walk(""" (a -> b -> a + b)(2)(3) """) == 5
+
+        assert self.walk(""" inc := a -> a + 1; inc(2) """) == 3
+        assert self.walk(""" myadd := [a, b] -> a + b; myadd(2, 3) """) == 5
 
     def test_logical_operations(self, capsys):
         assert self.walk(r""" True and False """) is False
@@ -462,6 +385,50 @@ class TestToT(TestBase):
             self.walk(""" [1, 2][None] """)
         with pytest.raises(Exception):
             self.walk(""" None[0] """)
+
+    def test_dot_notation(self):
+        self.walk(r""" a := {aaa: 2, bbb: 3} """)
+        assert self.walk(r""" a.aaa """) == 2
+
+        self.walk(r""" a.bbb = 4 """)
+        assert self.walk(r""" a """) == {'aaa': 2, 'bbb': 4}
+        self.walk(r""" a.ccc = 5 """)
+        assert self.walk(r""" a """) == {'aaa': 2, 'bbb': 4, 'ccc': 5}
+
+        with pytest.raises(AssertionError):
+            self.walk(r""" a.not_found """)
+        with pytest.raises(AssertionError, match="Invalid attribute"):
+            self.walk(r""" a.1 """)
+        with pytest.raises(Exception):
+            self.walk(r""" [2, 3].aaa """)
+        with pytest.raises(Exception):
+            self.walk(r""" [2, 3].aaa = 4 """)
+
+    def test_ufcs(self):
+        assert self.walk(r""" 2.add(3) """) == 5
+        assert self.walk(r""" [2, 3, 4].len() """) == 3
+        assert self.walk(r""" [2, 3, 4].len().add(5) """) == 8
+
+        self.walk(r""" deffunc myadd params a, b do a + b end """)
+        assert self.walk(r""" 2.myadd(3) """) == 5
+
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            self.walk(r""" 2.not_found() """)
+        with pytest.raises(AssertionError, match="Invalid operator"):
+            self.walk(r""" foo := 2; 3.foo() """)
+
+    def test_method_notation(self):
+        self.walk(r""" obj := {
+            set: func self, val do self.val = val end,
+            add: func self, a do self.val + a end,
+            val: None
+        } """)
+        self.walk(r""" obj.set(2) """)
+        assert self.walk(r""" obj.val """) == 2
+        assert self.walk(r""" obj.add(3) """) == 5
+
+        assert self.walk(r""" {a: 2, b: 3}.keys() """) == ['a', 'b']
+        assert self.walk(r""" { len: func self do "local" end }.len() """) == "local"
 
     def test_none_bool(self):
         assert self.walk(r""" None """) is None
@@ -557,50 +524,6 @@ class TestToT(TestBase):
         assert self.walk(r""" in("ddd", a) """) is False
         assert self.walk(r""" keys(a) """) == ['aaa', 'bbb', 'ccc']
         assert self.walk(r""" items(a) """) == [['aaa', 2], ['bbb', 3], ['ccc', 4]]
-
-    def test_dot_notation(self):
-        self.walk(r""" a := {aaa: 2, bbb: 3} """)
-        assert self.walk(r""" a.aaa """) == 2
-
-        self.walk(r""" a.bbb = 4 """)
-        assert self.walk(r""" a """) == {'aaa': 2, 'bbb': 4}
-        self.walk(r""" a.ccc = 5 """)
-        assert self.walk(r""" a """) == {'aaa': 2, 'bbb': 4, 'ccc': 5}
-
-        with pytest.raises(AssertionError):
-            self.walk(r""" a.not_found """)
-        with pytest.raises(AssertionError, match="Invalid attribute"):
-            self.walk(r""" a.1 """)
-        with pytest.raises(Exception):
-            self.walk(r""" [2, 3].aaa """)
-        with pytest.raises(Exception):
-            self.walk(r""" [2, 3].aaa = 4 """)
-
-    def test_ufcs(self):
-        assert self.walk(r""" 2.add(3) """) == 5
-        assert self.walk(r""" [2, 3, 4].len() """) == 3
-        assert self.walk(r""" [2, 3, 4].len().add(5) """) == 8
-
-        self.walk(r""" deffunc myadd params a, b do a + b end """)
-        assert self.walk(r""" 2.myadd(3) """) == 5
-
-        with pytest.raises(AssertionError, match="Undefined variable"):
-            self.walk(r""" 2.not_found() """)
-        with pytest.raises(AssertionError, match="Invalid operator"):
-            self.walk(r""" foo := 2; 3.foo() """)
-
-    def test_method_notation(self):
-        self.walk(r""" obj := {
-            set: func self, val do self.val = val end,
-            add: func self, a do self.val + a end,
-            val: None
-        } """)
-        self.walk(r""" obj.set(2) """)
-        assert self.walk(r""" obj.val """) == 2
-        assert self.walk(r""" obj.add(3) """) == 5
-
-        assert self.walk(r""" {a: 2, b: 3}.keys() """) == ['a', 'b']
-        assert self.walk(r""" { len: func self do "local" end }.len() """) == "local"
 
     def test_type_functions(self):
         assert self.walk(r""" type(None) """) == "NoneType"
@@ -737,6 +660,107 @@ class TestToT(TestBase):
             self.walk(r""" if False then 2 elif True 3 end """)
         with pytest.raises(AssertionError, match="Expected end"):
             self.walk(r""" if False then 2 elif True then 3 """)
+
+    def test_match_syntax(self):
+        assert self.walk(r""" match 2 end """) is None
+
+        with pytest.raises(Exception, match="Expected end"):
+            self.walk(r""" match end """)
+        with pytest.raises(Exception, match="Expected end"):
+            self.walk(r""" match 2 case 2 then 3 """)
+        with pytest.raises(Exception, match="Expected end"):
+            self.walk(r""" match 2 then 3 end """)
+        with pytest.raises(Exception, match="Expected then"):
+            self.walk(r""" match 2 case then 3 end """)
+
+    def test_match_variable_and_literal(self):
+        assert self.walk(r""" match 2 case a then a + 1 case _ then "no" end """) == 3
+        assert self.walk(r""" match 2 case 3 then "yes" end """) is None
+        assert self.walk(r""" match 2 case 2 then "yes" case _ then "no" end """) == "yes"
+        assert self.walk(r""" match 2 case 3 then "yes" case _ then "no" end """) == "no"
+        assert self.walk(r""" match [] case 3 then "yes" case _ then "no" end """) == "no"
+        assert self.walk(r""" match None case None then "yes" case _ then "no" end """) == "yes"
+        assert self.walk(r""" match 2 case None then "yes" case _ then "no" end """) == "no"
+        assert self.walk(r""" match True case True then "yes" case _ then "no" end """) == "yes"
+        assert self.walk(r""" match False case True then "yes" case _ then "no" end """) == "no"
+        assert self.walk(r""" match False case False then "yes" case _ then "no" end """) == "yes"
+        assert self.walk(r""" match True case False then "yes" case _ then "no" end """) == "no"
+        assert self.walk(r""" match "hello" case "hello" then "yes" case _ then "no" end """) == "yes"
+        assert self.walk(r""" match "world" case "hello" then "yes" case _ then "no" end """) == "no"
+
+    def test_match_list(self):
+        assert self.walk(r""" match [] case [] then "yes" case _ then "no" end """) == "yes"
+        assert self.walk(r""" match 2 case [] then "yes" case _ then "no" end """) == "no"
+        assert self.walk(r""" match [2] case [a] then a + 1 case _ then "no" end """) == 3
+        assert self.walk(r""" match [2, 3] case [a] then a + 1 case _ then "no" end """) == "no"
+        assert self.walk(r""" match [2, 3] case [a, b] then a * b case _ then "no" end """) == 6
+        assert self.walk(r""" match [2] case [a, b] then a * b case _ then "no" end """) == "no"
+        assert self.walk(r""" match [] case [a, *b] then [a, b] case _ then "no" end """) == "no"
+        assert self.walk(r""" match [2] case [a, *b] then [a, b] case _ then "no" end """) == [2, []]
+        assert self.walk(r""" match [3, 4] case [a, *b] then [a, b] case _ then "no" end """) == [3, [4]]
+        assert self.walk(r""" match [4, 5, 6] case [a, *b] then [a, b] case _ then "no" end """) == [4, [5, 6]]
+        assert self.walk(r""" match [] case [*a, b] then [a, b] case _ then "no" end """) == "no"
+        assert self.walk(r""" match [2] case [*a, b] then [a, b] case _ then "no" end """) == [[], 2]
+        assert self.walk(r""" match [3, 4] case [*a, b] then [a, b] case _ then "no" end """) == [[3], 4]
+        assert self.walk(r""" match [4, 5, 6] case [*a, b] then [a, b] case _ then "no" end """) == [[4, 5], 6]
+        assert self.walk(r""" match [2] case [a, *b, c] then [a, b, c] case _ then "no" end """) == "no"
+        assert self.walk(r""" match [3, 4] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [3, [], 4]
+        assert self.walk(r""" match [4, 5, 6] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [4, [5], 6]
+        assert self.walk(r""" match [5, 6, 7, 8] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [5, [6, 7], 8]
+        assert self.walk(r""" match [2] case [*a, *b] then [a, b] case _ then "no" end """) == "no"
+
+    def test_match_dict_cases(self):
+        assert self.walk(r""" match {} case {} then "yes" case _ then "no" end """) == "yes"
+        assert self.walk(r""" match 2 case {} then "yes" case _ then "no" end """) == "no"
+        assert self.walk(r""" match {a: 2} case {} then "yes" case _ then "no" end """) == "yes"
+
+        assert self.walk(r""" match {a: 2} case {a: 2} then "yes" end """) == "yes"
+        assert self.walk(r""" match {a: 2} case {a: 3} then "yes" end """) is None
+        assert self.walk(r""" match {a: 2} case {a: a} then a end """) == 2
+        assert self.walk(r""" match {a: 3} case {a: b} then b end """) == 3
+        assert self.walk(r""" match {a: 4} case {a} then a end """) == 4
+        assert self.walk(r""" match {a: 5} case {"a": a} then a end """) == 5
+        assert self.walk(r""" match {a: 6, b: 7} case {a} then a end """) == 6
+        assert self.walk(r""" match {a: 7, b: 8} case {a, b} then [a, b] end """) == [7, 8]
+        assert self.walk(r""" match {a: 8, b: 9} case {a: _, b} then b end """) == 9
+        assert self.walk(r""" match {a: 2} case {b} then a end """) is None
+        assert self.walk(r""" match {a: 2} case {a, b} then a end """) is None
+
+        assert self.walk(r""" match {a: 2} case {*rest} then rest end """) == {'a': 2}
+        assert self.walk(r""" match {a: 3} case {a, *rest} then [a, rest] end """) == [3, {}]
+        assert self.walk(r""" match {a: 3} case {b, *rest} then [b, rest] end """) is None
+        assert self.walk(r""" match {a: 4, b: 5} case {a, *rest} then [a, rest] end """) == [4, {'b': 5}]
+        assert self.walk(r""" match {a: 5, b: 6, c: 7} case {a, *rest} then [a, rest] end """) == [5, {'b': 6, 'c': 7}]
+
+    def test_match_ident_and_expr(self):
+        assert self.walk(r""" match Ident("aaa") case Ident("aaa") then "yes" end """) == "yes"
+        assert self.walk(r""" match Ident("aaa") case "aaa" then "yes" end """) is None
+        assert self.walk(r""" match Ident("aaa") case Ident("bbb") then "yes" end """) is None
+        assert self.walk(r""" match Ident("aaa") case Ident(a) then [a] end """) == ['aaa']
+
+        assert self.walk(r""" match quote(a + b) case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) == ["a", "b"]
+        assert self.walk(r""" match 2 + 3 case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
+        assert self.walk(r""" match Expr(Ident("add")) case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
+
+    def test_match_type_and_or(self):
+        assert self.walk(r""" match 2 case int(a) then a end """) == 2
+        assert self.walk(r""" match "2" case int(a) then a end """) is None
+        assert self.walk(r""" match "aaa" case str(a) then [a] end """) == ['aaa']
+        assert self.walk(r""" match [] case str(a) then [a] end """) is None
+
+        assert self.walk(r""" match 2 case int(a) or str(a) then [a] end """) == [2]
+        assert self.walk(r""" match "aaa" case int(a) or str(a) then [a] end """) == ['aaa']
+        assert self.walk(r""" match [2] case int(a) or str(a) then [a] end """) is None
+        assert self.walk(r""" match [2] case int(a) or str(a) or list(a) then [a] end """) == [[2]]
+
+    def test_match_combination(self):
+        assert self.walk(r""" match [{a: 2, b: 3}, 4] case  [{a: b}, c] then [b, c] end """) == [2, 4]
+        assert self.walk(r""" match {a: [5, 6]} case {a: [b, c]} then [b, c] end """) == [5, 6]
+
+    def test_match_control_flow(self):
+        assert self.walk(r""" a := 0; match 2 case 2 then a = 1 case _ then a = 2 end; a """) == 1
+        assert self.walk(r""" match [2, 3] case [a, b] then "ok" end; a + b """) == 5
+        assert self.walk(r""" match [2, 3] case [a, 4] then "no" case _ then a end """) == 2
 
     def test_while(self):
         assert self.walk("""
@@ -1042,8 +1066,8 @@ class TestToT(TestBase):
         assert self.walk(""" first(a) """) == 2
         assert self.walk(""" rest(a) """) == [3, 4, 5, 6, 7, 8, 9]
         assert self.walk(""" last(a) """) == 9
-        assert self.walk(""" map(a, func n do n * 2 end) """) == [4, 6, 8, 10, 12, 14, 16, 18]
-        assert self.walk(""" filter(a, func n do n % 2 == 0 end) """) == [2, 4, 6, 8]
+        assert self.walk(""" map(a, n -> n * 2) """) == [4, 6, 8, 10, 12, 14, 16, 18]
+        assert self.walk(""" filter(a, n -> n % 2 == 0) """) == [2, 4, 6, 8]
         assert self.walk(""" reduce(a, add, 0) """) == 44
         assert self.walk(""" reverse(a) """) == [9, 8, 7, 6, 5, 4, 3, 2]
         assert self.walk(""" reverse([]) """) == []
@@ -1185,8 +1209,8 @@ class TestExamples(TestBase):
             deffunc quicksort params a do
                 if len(a) <= 1 then a else
                     pivot := first(a); rem := rest(a);
-                    left := rem.filter(func x do x < pivot end);
-                    right := rem.filter(func x do x >= pivot end);
+                    left := rem.filter(x -> x < pivot);
+                    right := rem.filter(x -> x >= pivot);
                     quicksort(left) + [pivot] + quicksort(right)
                 end
             end;

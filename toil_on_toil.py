@@ -1,5 +1,8 @@
 #! /usr/bin/env python3
 
+import sys
+sys.setrecursionlimit(200000)
+
 from toil import Interpreter
 
 i = Interpreter().init_env().stdlib()
@@ -41,8 +44,9 @@ i.walk(r"""
                 elif ch == "'" then self._raw_string()
                 elif ch == '"' then self._string()
                 elif ch.is_ident_first() then self._ident()
+                elif ch == '-' then self._two_char_operator('>')
                 elif ch.in('=!<>:') then self._two_char_operator('=')
-                elif ch.in('+-*/%()[]{}.,;') then
+                elif ch.in('+*/%()[]{}.,;') then
                     self._tokens.push(Ident(ch)); self._advance()
                 else raise('Invalid character @ tokenize: ' + ch)
                 end
@@ -158,7 +162,19 @@ i.walk(r"""
         defmethod _define_assign params do
             self._binary_right({
                 ':=': Ident('define'), '=': Ident('assign')
-            }, self._and_or)
+            }, self._arrow)
+        end;
+
+        defmethod _arrow params do
+            left := self._and_or();
+            if self._current() == Ident('->') then
+                self._current_and_advance();
+                right := self._arrow();
+                params_ := if left.type() == 'list' then left else [left] end;
+                Expr(Ident('func'), [params_, right])
+            else
+                left
+            end
         end;
 
         defmethod _and_or params do
@@ -546,9 +562,9 @@ i.walk(r"""
             match expr
                 case None then expr
                 case bool(_) or int(_) or str(_) then expr
-                case list(_) then expr.map(func e do self.eval(e, env) end)
+                case list(_) then expr.map(e -> self.eval(e, env))
                 case dict(_) then
-                    expr.keys().map(func k do [k, self.eval(expr[k], env)] end).dict()
+                    expr.keys().map(k -> [k, self.eval(expr[k], env)]).dict()
                 case Ident(name) then env.val(name)
                 case Expr(Ident('quote'), [expr]) then
                     expr
@@ -601,17 +617,17 @@ i.walk(r"""
                 attr_val := target_val[attr_name];
                 match attr_val
                     case Expr(Ident('closure'), [[Ident('self'), *_], _, _]) then
-                        Expr(Ident('hostfunc'), func args do
+                        Expr(Ident('hostfunc'), args ->
                             self.apply(attr_val, [target_val] + args)
-                        end)
+                        )
                     case _ then
                         attr_val
                 end
             else
                 func_val := env.val(attr_name);
-                Expr(Ident('hostfunc'), func args do
+                Expr(Ident('hostfunc'), args ->
                     self.apply(func_val, [target_val] + args)
-                end)
+                )
             end
         end;
 
@@ -728,7 +744,7 @@ i.walk(r"""
 
         defmethod _op params op_expr, args_expr, env do
             op_val := self.eval(op_expr, env);
-            args_val := args_expr.map(func arg do self.eval(arg, env) end);
+            args_val := args_expr.map(arg -> self.eval(arg, env));
             self.apply(op_val, args_val)
         end;
 
@@ -823,7 +839,7 @@ i.walk(r"""
                 case Expr(Ident('Expr'), expr_pats) then
                     value.type() == 'Expr' and expr_pats.len() == value.len() and
                     zip(expr_pats, value).all(
-                        func [p, v] do self._match_pattern(p, v, env) end
+                        [[p, v]] -> self._match_pattern(p, v, env)
                     )
                 case Expr(Ident(typ), [val_pat]) then
                     value.type() == typ and self._match_pattern(val_pat, value, env)
@@ -847,59 +863,59 @@ i.walk(r"""
         defmethod _builtins params do
             self._env.define('__builtins', None);
 
-            self._env.define('add', Expr(Ident('hostfunc'), func args do args[0] + args[1] end));
-            self._env.define('sub', Expr(Ident('hostfunc'), func args do args[0] - args[1] end));
-            self._env.define('mul', Expr(Ident('hostfunc'), func args do args[0] * args[1] end));
-            self._env.define('div', Expr(Ident('hostfunc'), func args do args[0] / args[1] end));
-            self._env.define('mod', Expr(Ident('hostfunc'), func args do args[0] % args[1] end));
-            self._env.define('neg', Expr(Ident('hostfunc'), func args do -args[0] end));
+            self._env.define('add', Expr(Ident('hostfunc'), args -> args[0] + args[1]));
+            self._env.define('sub', Expr(Ident('hostfunc'), args -> args[0] - args[1]));
+            self._env.define('mul', Expr(Ident('hostfunc'), args -> args[0] * args[1]));
+            self._env.define('div', Expr(Ident('hostfunc'), args -> args[0] / args[1]));
+            self._env.define('mod', Expr(Ident('hostfunc'), args -> args[0] % args[1]));
+            self._env.define('neg', Expr(Ident('hostfunc'), args -> -args[0]));
 
-            self._env.define('equal', Expr(Ident('hostfunc'), func args do args[0] == args[1] end));
-            self._env.define('not_equal', Expr(Ident('hostfunc'), func args do args[0] != args[1] end));
-            self._env.define('less', Expr(Ident('hostfunc'), func args do args[0] < args[1] end));
-            self._env.define('greater', Expr(Ident('hostfunc'), func args do args[0] > args[1] end));
-            self._env.define('less_equal', Expr(Ident('hostfunc'), func args do args[0] <= args[1] end));
-            self._env.define('greater_equal', Expr(Ident('hostfunc'), func args do args[0] >= args[1] end));
-            self._env.define('not', Expr(Ident('hostfunc'), func args do not args[0] end));
+            self._env.define('equal', Expr(Ident('hostfunc'), args -> args[0] == args[1]));
+            self._env.define('not_equal', Expr(Ident('hostfunc'), args -> args[0] != args[1]));
+            self._env.define('less', Expr(Ident('hostfunc'), args -> args[0] < args[1]));
+            self._env.define('greater', Expr(Ident('hostfunc'), args -> args[0] > args[1]));
+            self._env.define('less_equal', Expr(Ident('hostfunc'), args -> args[0] <= args[1]));
+            self._env.define('greater_equal', Expr(Ident('hostfunc'), args -> args[0] >= args[1]));
+            self._env.define('not', Expr(Ident('hostfunc'), args -> not args[0]));
 
-            self._env.define('len', Expr(Ident('hostfunc'), func args do len(args[0]) end));
-            self._env.define('index', Expr(Ident('hostfunc'), func args do index(args[0], args[1]) end));
-            self._env.define('slice', Expr(Ident('hostfunc'), func args do slice(args[0], args[1], args[2]) end));
-            self._env.define('push', Expr(Ident('hostfunc'), func args do push(args[0], args[1]) end));
-            self._env.define('pop', Expr(Ident('hostfunc'), func args do pop(args[0]) end));
-            self._env.define('in', Expr(Ident('hostfunc'), func args do in(args[0], args[1]) end));
-            self._env.define('copy', Expr(Ident('hostfunc'), func args do copy(args[0]) end));
+            self._env.define('len', Expr(Ident('hostfunc'), args -> len(args[0])));
+            self._env.define('index', Expr(Ident('hostfunc'), args -> index(args[0], args[1])));
+            self._env.define('slice', Expr(Ident('hostfunc'), args -> slice(args[0], args[1], args[2])));
+            self._env.define('push', Expr(Ident('hostfunc'), args -> push(args[0], args[1])));
+            self._env.define('pop', Expr(Ident('hostfunc'), args -> pop(args[0])));
+            self._env.define('in', Expr(Ident('hostfunc'), args -> in(args[0], args[1])));
+            self._env.define('copy', Expr(Ident('hostfunc'), args -> copy(args[0])));
 
-            self._env.define('chr', Expr(Ident('hostfunc'), func args do chr(args[0]) end));
-            self._env.define('ord', Expr(Ident('hostfunc'), func args do ord(args[0]) end));
-            self._env.define('join', Expr(Ident('hostfunc'), func args do join(args[0], args[1]) end));
+            self._env.define('chr', Expr(Ident('hostfunc'), args -> chr(args[0])));
+            self._env.define('ord', Expr(Ident('hostfunc'), args -> ord(args[0])));
+            self._env.define('join', Expr(Ident('hostfunc'), args -> join(args[0], args[1])));
 
-            self._env.define('keys', Expr(Ident('hostfunc'), func args do keys(args[0]) end));
-            self._env.define('items', Expr(Ident('hostfunc'), func args do items(args[0]) end));
+            self._env.define('keys', Expr(Ident('hostfunc'), args -> keys(args[0])));
+            self._env.define('items', Expr(Ident('hostfunc'), args -> items(args[0])));
 
-            self._env.define('type', Expr(Ident('hostfunc'), func args do type(args[0]) end));
-            self._env.define('bool', Expr(Ident('hostfunc'), func args do bool(args[0]) end));
-            self._env.define('int', Expr(Ident('hostfunc'), func args do int(args[0]) end));
-            self._env.define('str', Expr(Ident('hostfunc'), func args do str(args[0]) end));
-            self._env.define('list', Expr(Ident('hostfunc'), func args do list(args[0]) end));
-            self._env.define('dict', Expr(Ident('hostfunc'), func args do dict(args[0]) end));
-            self._env.define('Ident', Expr(Ident('hostfunc'), func args do Ident(args[0]) end));
-            self._env.define('Expr', Expr(Ident('hostfunc'), func args do apply(Expr, args) end));
+            self._env.define('type', Expr(Ident('hostfunc'), args -> type(args[0])));
+            self._env.define('bool', Expr(Ident('hostfunc'), args -> bool(args[0])));
+            self._env.define('int', Expr(Ident('hostfunc'), args -> int(args[0])));
+            self._env.define('str', Expr(Ident('hostfunc'), args -> str(args[0])));
+            self._env.define('list', Expr(Ident('hostfunc'), args -> list(args[0])));
+            self._env.define('dict', Expr(Ident('hostfunc'), args -> dict(args[0])));
+            self._env.define('Ident', Expr(Ident('hostfunc'), args -> Ident(args[0])));
+            self._env.define('Expr', Expr(Ident('hostfunc'), args -> apply(Expr, args)));
 
-            self._env.define('print', Expr(Ident('hostfunc'), func args do apply(print, args) end));
+            self._env.define('print', Expr(Ident('hostfunc'), args -> apply(print, args)));
 
-            self._env.define('read', Expr(Ident('hostfunc'), func args do read(args[0]) end));
-            self._env.define('load', Expr(Ident('hostfunc'), func args do self._load(args[0]) end));
+            self._env.define('read', Expr(Ident('hostfunc'), args -> read(args[0])));
+            self._env.define('load', Expr(Ident('hostfunc'), args -> self._load(args[0])));
 
-            self._env.define('eval', Expr(Ident('hostfunc'), func args do
+            self._env.define('eval', Expr(Ident('hostfunc'), args ->
                 Evaluator().eval(self.ast(args[0]), self._env)
-            end));
-            self._env.define('eval_expr', Expr(Ident('hostfunc'), func args do
+            ));
+            self._env.define('eval_expr', Expr(Ident('hostfunc'), args ->
                 Evaluator().eval(args[0], self._env)
-            end));
-            self._env.define('apply', Expr(Ident('hostfunc'), func args do
+            ));
+            self._env.define('apply', Expr(Ident('hostfunc'), args ->
                 Evaluator().apply(args[0], args[1])
-            end))
+            ))
         end;
 
         defmethod stdlib params do
@@ -966,8 +982,8 @@ i.walk(r"""
         defmethod _load params path do
             src := read(path);
             module_env := Environment(self._env);
-            ast := self.parse(self.scan(src));
-            Evaluator().eval(ast, module_env)
+            expr := self.ast(src);
+            Evaluator().eval(expr, module_env)
         end;
 
         defmethod scan params src do Scanner(src).tokenize() end;
@@ -998,108 +1014,21 @@ if __name__ == "__main__":
 
     # Example
 
-    # Eval/apply
-    print(walk(""" eval("2 + 3") """)) # -> 5
-    print(walk(""" eval_expr(Expr(Ident("add"), [2, 3])) """)) # -> 5
-    print(walk(""" apply(add, [2, 3]) """)) # -> 5
+    # Arrow function
+    print(walk(""" ([] -> 2)() """)) # -> 2
+    print(walk(""" ([a] -> a + 2)(3) """)) # -> 5
+    print(walk(""" (a -> a + 2)(3) """)) # -> 5 (single-parameter shorthand)
+    print(walk(""" ([[a, b]] -> a + b)([2, 3]) """)) # -> 5 (No shorthand for single list argument)
+    print(walk(""" ([a, b] -> a + b)(2, 3) """)) # -> 5
+    # walk(""" ([a, b] -> a + b)(2) """) # -> Argument mismatch
 
-    # Read and Load
-    print(walk(""" type(read("lib/fib.toil")) """)) # -> str
-    print(walk(""" load("lib/fib.toil")(4) """)) # -> 3
+    print(walk(""" ([a, *b] -> b)(2, 3, 4) """)) # -> [3, 4]
+    print(walk(""" ({a} -> a + 2)({a: 3}) """)) # -> 5
+    # walk(""" ({a} -> a + 2)({b: 3}) """) # -> Argument mismatch
+    print(walk(""" (int(a) -> a + 2)(3) """)) # -> 5
+    # walk(""" (int(a) -> a + 2)("aaa") """) # -> Argument mismatch
 
-    # Object oriented like notation
-    print(walk("""
-        defclass Counter params start do
-            self.count = start;
-            defmethod inc params step do
-                self.count = self.count + step
-            end;
-            defmethod get params do
-                self.count
-            end
-        end;
-        c1 := Counter(10);
-        c2 := Counter(20);
-        c1.inc(2);
-        c2.inc(5);
-        [c1.get(), c2.get()]
-    """)) # -> [12, 25]
+    print(walk(""" (x -> x or 2)(False) """)) # -> 2
+    print(walk(""" (a -> b -> a + b)(2)(3) """)) # -> 5
 
-    # Syntax errors
-    # walk(""" defclass Foo do end """) # -> Expected params
-    # walk(""" defclass Foo params x end """) # -> Expected do
-    # walk(""" defclass Foo params x do defmethod bar do end end """) # -> Expected params
-
-    # Try
-
-    # Try without except
-    print(walk(""" try 2; 3 end """)) # -> 3
-
-    # Try with except, no raise
-    print(walk(""" try 2; 3 except e then e end """)) # -> 3
-
-    # Try with raise and except
-    print(walk(""" try 2; raise(2 + 3); 3 except e then e end """)) # -> 5
-
-    # Pattern match in except
-    print(walk("""
-        try
-            raise(["foo", 3])
-        except ["foo", val] then ["foo", val]
-        except ["bar", val] then ["bar", val]
-        end
-    """)) # -> ['foo', 3]
-
-    print(walk("""
-        try
-            raise(["bar", 3])
-        except ["foo", val] then ["foo", val]
-        except ["bar", val] then ["bar", val]
-        end
-    """)) # -> ['bar', 3]
-
-    # Catch with wildcard
-    print(walk(""" try raise("error") except _ then "caught" end """)) # -> caught
-
-    # Unhandled exception
-    # walk("""
-    #     try
-    #         raise(["baz", 3])
-    #     except ["foo", val] then ["foo", val]
-    #     end
-    # """) # -> ToilException
-
-    # Control exceptions pass through
-    print(walk(""" func do try return(2) except _ then 3 end end () """)) # -> 2
-    print(walk("""
-        a := 0; while a < 3 do
-            try
-                a = a + 1; if a == 2 then break() end
-            except _ then a = 3 end
-        end;
-        a
-    """)) # -> 2
-
-    # Nested try
-    print(walk("""
-        try
-            try
-                raise("outer")
-            except "inner" then "caught inner"
-            end
-        except "outer" then "caught outer"
-        end
-    """)) # -> caught outer
-
-    # Re-raise in except
-    print(walk("""
-        try
-            try
-                raise(2)
-            except e then
-                raise(e + 1)
-            end
-        except e then
-            e
-        end
-    """)) # ->
+    walk(""" for i in [1, 2, 3].filter(x -> x % 2 == 1) do print(i) end """) # -> 1\n3\n

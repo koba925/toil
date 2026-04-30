@@ -165,52 +165,52 @@ class TestParse(TestBase):
 
 class TestEvaluate(TestBase):
     def test_evaluate_value(self):
-        assert self.i.evaluate(None) is None
-        assert self.i.evaluate(5) == 5
-        assert self.i.evaluate(True) is True
-        assert self.i.evaluate(False) is False
+        assert self.i.eval(None) is None
+        assert self.i.eval(5) == 5
+        assert self.i.eval(True) is True
+        assert self.i.eval(False) is False
 
     def test_seq(self, capsys):
-        self.i.evaluate((Ident("seq"), [
+        self.i.eval((Ident("seq"), [
             (Ident("print"), [2]),
             (Ident("print"), [3])
         ]))
         assert capsys.readouterr().out == "2\n3\n"
 
     def test_evaluate_if(self):
-        assert self.i.evaluate((Ident("__core_if"), [True, 2, 3])) == 2
-        assert self.i.evaluate((Ident("__core_if"), [False, 2, 3])) == 3
-        assert self.i.evaluate((Ident("__core_if"), [(Ident("__core_if"), [True, True, False]), 2, 3])) == 2
-        assert self.i.evaluate((Ident("__core_if"), [True, (Ident("__core_if"), [True, 2, 3]), 4])) == 2
-        assert self.i.evaluate((Ident("__core_if"), [False, 2, (Ident("__core_if"), [False, 3, 4])])) == 4
+        assert self.i.eval((Ident("__core_if"), [True, 2, 3])) == 2
+        assert self.i.eval((Ident("__core_if"), [False, 2, 3])) == 3
+        assert self.i.eval((Ident("__core_if"), [(Ident("__core_if"), [True, True, False]), 2, 3])) == 2
+        assert self.i.eval((Ident("__core_if"), [True, (Ident("__core_if"), [True, 2, 3]), 4])) == 2
+        assert self.i.eval((Ident("__core_if"), [False, 2, (Ident("__core_if"), [False, 3, 4])])) == 4
 
     def test_evaluate_variable(self):
-        assert self.i.evaluate((Ident("define"), [Ident("a"), 2])) == 2
-        assert self.i.evaluate(Ident("a")) == 2
+        assert self.i.eval((Ident("define"), [Ident("a"), 2])) == 2
+        assert self.i.eval(Ident("a")) == 2
 
-        assert self.i.evaluate((Ident("define"), [Ident("b"), True])) == True
-        assert self.i.evaluate((Ident("__core_if"), [Ident("b"), 2, 3])) == 2
+        assert self.i.eval((Ident("define"), [Ident("b"), True])) == True
+        assert self.i.eval((Ident("__core_if"), [Ident("b"), 2, 3])) == 2
 
-        assert self.i.evaluate((Ident("define"), [Ident("c"), (Ident("__core_if"), [False, 2, 3])])) == 3
-        assert self.i.evaluate(Ident("c")) == 3
+        assert self.i.eval((Ident("define"), [Ident("c"), (Ident("__core_if"), [False, 2, 3])])) == 3
+        assert self.i.eval(Ident("c")) == 3
 
     def test_evaluate_undefined_variable(self):
         with pytest.raises(AssertionError):
-            self.i.evaluate(Ident("a"))
+            self.i.eval(Ident("a"))
 
     def test_evaluate_assign(self):
-        self.i.evaluate((Ident("define"), [Ident("a"), 1]))
-        assert self.i.evaluate((Ident("assign"), [Ident("a"), 2])) == 2
-        assert self.i.evaluate(Ident("a")) == 2
+        self.i.eval((Ident("define"), [Ident("a"), 1]))
+        assert self.i.eval((Ident("assign"), [Ident("a"), 2])) == 2
+        assert self.i.eval(Ident("a")) == 2
         with pytest.raises(AssertionError):
-            self.i.evaluate((Ident("assign"), [Ident("b"), 2]))
+            self.i.eval((Ident("assign"), [Ident("b"), 2]))
 
     def test_evaluate_scope(self, capsys):
-        self.i.evaluate((Ident("define"), [Ident("a"), 2]))
-        assert self.i.evaluate(Ident("a")) == 2
-        assert self.i.evaluate((Ident("__core_scope"), [Ident("a")])) == 2
+        self.i.eval((Ident("define"), [Ident("a"), 2]))
+        assert self.i.eval(Ident("a")) == 2
+        assert self.i.eval((Ident("__core_scope"), [Ident("a")])) == 2
 
-        assert self.i.evaluate((Ident("__core_scope"), [(Ident("seq"), [
+        assert self.i.eval((Ident("__core_scope"), [(Ident("seq"), [
             (Ident("print"), [Ident("a")]),
             (Ident("define"), [Ident("a"), 3]),
             (Ident("print"), [Ident("a")]),
@@ -220,40 +220,40 @@ class TestEvaluate(TestBase):
         ])])) == 4
         assert capsys.readouterr().out == "2\n3\n4\n"
 
-        assert self.i.evaluate(Ident("a")) == 2
+        assert self.i.eval(Ident("a")) == 2
 
         with pytest.raises(AssertionError):
-            self.i.evaluate(Ident("b"))
+            self.i.eval(Ident("b"))
 
     def test_builtin_functions(self, capsys):
-        assert self.i.evaluate((Ident("add"), [2, 3])) == 5
-        assert self.i.evaluate((Ident("sub"), [5, 3])) == 2
-        assert self.i.evaluate((Ident("mul"), [2, 3])) == 6
+        assert self.i.eval((Ident("add"), [2, 3])) == 5
+        assert self.i.eval((Ident("sub"), [5, 3])) == 2
+        assert self.i.eval((Ident("mul"), [2, 3])) == 6
 
-        assert self.i.evaluate((Ident("equal"), [2, 2])) is True
-        assert self.i.evaluate((Ident("equal"), [2, 3])) is False
+        assert self.i.eval((Ident("equal"), [2, 2])) is True
+        assert self.i.eval((Ident("equal"), [2, 3])) is False
 
-        assert self.i.evaluate((Ident("add"), [2, (Ident("mul"), [3, 4])])) == 14
+        assert self.i.eval((Ident("add"), [2, (Ident("mul"), [3, 4])])) == 14
 
-        self.i.evaluate((Ident("print"), [2, 3]))
+        self.i.eval((Ident("print"), [2, 3]))
         assert capsys.readouterr().out == "2 3\n"
 
-        self.i.evaluate((Ident("print"), [(Ident("add"), [5, 5])]))
+        self.i.eval((Ident("print"), [(Ident("add"), [5, 5])]))
         assert capsys.readouterr().out == "10\n"
 
     def test_user_func(self):
-        self.i.evaluate((Ident("define"), [Ident("add2"), (Ident("__core_func"),
+        self.i.eval((Ident("define"), [Ident("add2"), (Ident("__core_func"),
             [[Ident("a")], (Ident("add"), [Ident("a"), 2])]
         )]))
-        assert self.i.evaluate((Ident("add2"), [3])) == 5
+        assert self.i.eval((Ident("add2"), [3])) == 5
 
-        self.i.evaluate((Ident("define"), [Ident("sum3"), (Ident("__core_func"),
+        self.i.eval((Ident("define"), [Ident("sum3"), (Ident("__core_func"),
             [[Ident("a"), Ident("b"), Ident("c")],(Ident("add"), [Ident("a"), (Ident("add"), [Ident("b"), Ident("c")])])]
         )]))
-        assert self.i.evaluate((Ident("sum3"), [2, 3, 4])) == 9
+        assert self.i.eval((Ident("sum3"), [2, 3, 4])) == 9
 
     def test_recursion(self):
-        self.i.evaluate((Ident("define"), [Ident("fac"), (Ident("__core_func"), [
+        self.i.eval((Ident("define"), [Ident("fac"), (Ident("__core_func"), [
             [Ident("n")],
             (Ident("__core_if"), [
                 (Ident("equal"), [Ident("n"), 1]),
@@ -261,39 +261,39 @@ class TestEvaluate(TestBase):
                 (Ident("mul"), [Ident("n"), (Ident("fac"), [(Ident("sub"), [Ident("n"), 1])])])
         ])
         ])]))
-        assert self.i.evaluate((Ident("fac"), [1])) == 1
-        assert self.i.evaluate((Ident("fac"), [3])) == 6
-        assert self.i.evaluate((Ident("fac"), [5])) == 120
+        assert self.i.eval((Ident("fac"), [1])) == 1
+        assert self.i.eval((Ident("fac"), [3])) == 6
+        assert self.i.eval((Ident("fac"), [5])) == 120
 
     def test_scope_leak(self):
-        self.i.evaluate((Ident("define"), [Ident("x"), 2]))
-        self.i.evaluate((Ident("define"), [Ident("f"), (Ident("__core_func"), [[Ident("x")], 3])]))
-        self.i.evaluate((Ident("f"), [4]))
-        assert self.i.evaluate(Ident("x")) == 2
+        self.i.eval((Ident("define"), [Ident("x"), 2]))
+        self.i.eval((Ident("define"), [Ident("f"), (Ident("__core_func"), [[Ident("x")], 3])]))
+        self.i.eval((Ident("f"), [4]))
+        assert self.i.eval(Ident("x")) == 2
 
     def test_closure(self):
-        self.i.evaluate((Ident("define"), [Ident("x"), 2]))
-        self.i.evaluate((Ident("define"), [Ident("return_x"), (Ident("__core_func"), [[], Ident("x")])]))
-        assert self.i.evaluate((Ident("return_x"), [])) == 2
-        assert self.i.evaluate((Ident("__core_scope"), [(Ident("seq"), [
+        self.i.eval((Ident("define"), [Ident("x"), 2]))
+        self.i.eval((Ident("define"), [Ident("return_x"), (Ident("__core_func"), [[], Ident("x")])]))
+        assert self.i.eval((Ident("return_x"), [])) == 2
+        assert self.i.eval((Ident("__core_scope"), [(Ident("seq"), [
             (Ident("define"), [Ident("x"), 3]),
             (Ident("return_x"), [])
         ])])) == 2
-        assert self.i.evaluate(Ident("x")) == 2
+        assert self.i.eval(Ident("x")) == 2
 
     def test_adder(self):
-        self.i.evaluate((Ident("define"), [Ident("make_adder"), (Ident("__core_func"), [
+        self.i.eval((Ident("define"), [Ident("make_adder"), (Ident("__core_func"), [
             [Ident("n")],
             (Ident("__core_func"), [[Ident("m")], (Ident("add"), [Ident("n"), Ident("m")])])
         ])]))
-        self.i.evaluate((Ident("define"), [Ident("add2"), (Ident("make_adder"), [2])]))
-        self.i.evaluate((Ident("define"), [Ident("add3"), (Ident("make_adder"), [3])]))
+        self.i.eval((Ident("define"), [Ident("add2"), (Ident("make_adder"), [2])]))
+        self.i.eval((Ident("define"), [Ident("add3"), (Ident("make_adder"), [3])]))
 
-        assert self.i.evaluate((Ident("add2"), [3])) == 5
-        assert self.i.evaluate((Ident("add3"), [4])) == 7
+        assert self.i.eval((Ident("add2"), [3])) == 5
+        assert self.i.eval((Ident("add3"), [4])) == 7
 
     def test_shadowing(self):
-        self.i.evaluate((Ident("define"), [Ident("make_shadow"), (Ident("__core_func"), [
+        self.i.eval((Ident("define"), [Ident("make_shadow"), (Ident("__core_func"), [
             [Ident("x")],
             (Ident("__core_func"), [
                 [],
@@ -303,52 +303,52 @@ class TestEvaluate(TestBase):
                 ])
             ])
         ])]))
-        self.i.evaluate((Ident("define"), [Ident("g"), (Ident("make_shadow"), [2])]))
-        assert self.i.evaluate((Ident("g"), [])) == 3
+        self.i.eval((Ident("define"), [Ident("g"), (Ident("make_shadow"), [2])]))
+        assert self.i.eval((Ident("g"), [])) == 3
 
     def test_list(self):
-        self.i.evaluate((Ident("define"), [Ident("a"), [1, 2, 3]]))
-        assert self.i.evaluate(Ident("a")) == [1, 2, 3]
-        assert self.i.evaluate((Ident("index"), [Ident("a"), 0])) == 1
-        assert self.i.evaluate((Ident("index"), [Ident("a"), 2])) == 3
+        self.i.eval((Ident("define"), [Ident("a"), [1, 2, 3]]))
+        assert self.i.eval(Ident("a")) == [1, 2, 3]
+        assert self.i.eval((Ident("index"), [Ident("a"), 0])) == 1
+        assert self.i.eval((Ident("index"), [Ident("a"), 2])) == 3
 
-        self.i.evaluate((Ident("assign"), [(Ident("index"), [Ident("a"), 1]), 4]))
-        assert self.i.evaluate(Ident("a")) == [1, 4, 3]
+        self.i.eval((Ident("assign"), [(Ident("index"), [Ident("a"), 1]), 4]))
+        assert self.i.eval(Ident("a")) == [1, 4, 3]
 
     def test_list_nested(self):
-        self.i.evaluate((Ident("define"), [Ident("a"), [
+        self.i.eval((Ident("define"), [Ident("a"), [
             [1, 2],
             [3, 4]
         ]]))
-        assert self.i.evaluate((Ident("index"), [(Ident("index"), [Ident("a"), 0]), 1])) == 2
-        assert self.i.evaluate((Ident("index"), [(Ident("index"), [Ident("a"), 1]), 0])) == 3
+        assert self.i.eval((Ident("index"), [(Ident("index"), [Ident("a"), 0]), 1])) == 2
+        assert self.i.eval((Ident("index"), [(Ident("index"), [Ident("a"), 1]), 0])) == 3
 
-        self.i.evaluate((Ident("assign"), [(Ident("index"), [(Ident("index"), [Ident("a"), 1]), 0]), 5]))
-        assert self.i.evaluate((Ident("index"), [(Ident("index"), [Ident("a"), 1]), 0])) == 5
+        self.i.eval((Ident("assign"), [(Ident("index"), [(Ident("index"), [Ident("a"), 1]), 0]), 5]))
+        assert self.i.eval((Ident("index"), [(Ident("index"), [Ident("a"), 1]), 0])) == 5
 
     def test_list_push_pop(self):
-        self.i.evaluate((Ident("define"), [Ident("a"), [1, 2]]))
-        self.i.evaluate((Ident("push"), [Ident("a"), 3]))
-        assert self.i.evaluate(Ident("a")) == [1, 2, 3]
-        assert self.i.evaluate((Ident("pop"), [Ident("a")])) == 3
-        assert self.i.evaluate(Ident("a")) == [1, 2]
+        self.i.eval((Ident("define"), [Ident("a"), [1, 2]]))
+        self.i.eval((Ident("push"), [Ident("a"), 3]))
+        assert self.i.eval(Ident("a")) == [1, 2, 3]
+        assert self.i.eval((Ident("pop"), [Ident("a")])) == 3
+        assert self.i.eval(Ident("a")) == [1, 2]
 
     def test_list_funcs(self):
-        self.i.evaluate((Ident("define"), [Ident("a"), [1, 2, 3]]))
-        assert self.i.evaluate((Ident("len"), [Ident("a")])) == 3
-        assert self.i.evaluate((Ident("slice"), [Ident("a"), 1, None])) == [2, 3]
-        assert self.i.evaluate((Ident("slice"), [Ident("a"), 1, 2])) == [2]
-        assert self.i.evaluate((Ident("slice"), [Ident("a"), None, 2])) == [1, 2]
-        assert self.i.evaluate((Ident("slice"), [Ident("a"), None, None])) == [1, 2, 3]
+        self.i.eval((Ident("define"), [Ident("a"), [1, 2, 3]]))
+        assert self.i.eval((Ident("len"), [Ident("a")])) == 3
+        assert self.i.eval((Ident("slice"), [Ident("a"), 1, None])) == [2, 3]
+        assert self.i.eval((Ident("slice"), [Ident("a"), 1, 2])) == [2]
+        assert self.i.eval((Ident("slice"), [Ident("a"), None, 2])) == [1, 2]
+        assert self.i.eval((Ident("slice"), [Ident("a"), None, None])) == [1, 2, 3]
 
     def test_list_error(self):
-        self.i.evaluate((Ident("define"), [Ident("a"), [1, 2]]))
+        self.i.eval((Ident("define"), [Ident("a"), [1, 2]]))
 
         with pytest.raises(AssertionError, match="Invalid indexing"):
-            self.i.evaluate((Ident("assign"), [(Ident("index"), [None, 0]), 1]))
+            self.i.eval((Ident("assign"), [(Ident("index"), [None, 0]), 1]))
 
         with pytest.raises(AssertionError, match="Invalid indexing"):
-            self.i.evaluate((Ident("assign"), [(Ident("index"), [Ident("a"), None]), 1]))
+            self.i.eval((Ident("assign"), [(Ident("index"), [Ident("a"), None]), 1]))
 
 class TestGo(TestBase):
     def test_whitespace(self):
@@ -382,6 +382,30 @@ class TestGo(TestBase):
         assert self.i.walk(""" 2 + 3 """) == 5
         assert self.i.walk(""" 5 - 3 """) == 2
         assert self.i.walk(""" 2 + 3 - 4 + 5 """) == 6
+
+    def test_arrow_function(self):
+        assert self.i.walk(""" ([] -> 2)() """) == 2
+        assert self.i.walk(""" ([a] -> a + 2)(3) """) == 5
+        assert self.i.walk(""" (a -> a + 2)(3) """) == 5
+        assert self.i.walk(""" ([[a, b]] -> a + b)([2, 3]) """) == 5
+        assert self.i.walk(""" ([a, b] -> a + b)(2, 3) """) == 5
+        with pytest.raises(AssertionError, match="Argument mismatch"):
+            self.i.walk(""" ([a, b] -> a + b)(2) """)
+
+        assert self.i.walk(""" ([a, *b] -> b)(2, 3, 4) """) == [3, 4]
+        assert self.i.walk(""" ({a} -> a + 2)({a: 3}) """) == 5
+        with pytest.raises(AssertionError, match="Argument mismatch"):
+            self.i.walk(""" ({a} -> a + 2)({b: 3}) """)
+
+        assert self.i.walk(""" (int(a) -> a + 2)(3) """) == 5
+        with pytest.raises(AssertionError, match="Argument mismatch"):
+            self.i.walk(""" (int(a) -> a + 2)("aaa") """)
+
+        assert self.i.walk(""" (x -> x or 2)(False) """) == 2
+        assert self.i.walk(""" (a -> b -> a + b)(2)(3) """) == 5
+
+        assert self.i.walk(""" inc := a -> a + 1; inc(2) """) == 3
+        assert self.i.walk(""" myadd := [a, b] -> a + b; myadd(2, 3) """) == 5
 
     def test_mul_div_mod(self):
         assert self.i.walk(""" 2 * 3 """) == 6
@@ -807,8 +831,8 @@ class TestGo(TestBase):
         assert self.i.walk(""" first(a) """) == 2
         assert self.i.walk(""" rest(a) """) == [3, 4, 5, 6, 7, 8, 9]
         assert self.i.walk(""" last(a) """) == 9
-        assert self.i.walk(""" map(a, func n do n * 2 end) """) == [4, 6, 8, 10, 12, 14, 16, 18]
-        assert self.i.walk(""" filter(a, func n do n % 2 == 0 end) """) == [2, 4, 6, 8]
+        assert self.i.walk(""" map(a, n -> n * 2) """) == [4, 6, 8, 10, 12, 14, 16, 18]
+        assert self.i.walk(""" filter(a, n -> n % 2 == 0) """) == [2, 4, 6, 8]
         assert self.i.walk(""" reduce(a, add, 0) """) == 44
         assert self.i.walk(""" reverse(a) """) == [9, 8, 7, 6, 5, 4, 3, 2]
         assert self.i.walk(""" zip(a, [4, 5, 6]) """) == [[2, 4], [3, 5], [4, 6]]
@@ -1165,7 +1189,6 @@ text
 
         with pytest.raises(AssertionError, match="Return from top level"):
             self.i.walk(""" return() """)
-
 
     def test_load(self, tmp_path):
         self.i.walk(""" fib := load("lib/fib.toil") """)
@@ -1977,17 +2000,15 @@ class TestCustomSyntax(TestBase):
         # Setup for let_func and let_scope
         self.i.walk("""
             _let_func := macro bindings, body do quote
-                func !!map(bindings, func pair do pair[0] end) do
+                func !!map(bindings, pair -> pair[0]) do
                     !body
-                end (!!map(bindings, func pair do pair[1] end))
+                end (!!map(bindings, pair -> pair[1]))
             end end;
             #rule {let_func: [_let_func, *[var, EXPR, be, EXPR], do, EXPR, end]}
 
             _let_scope := macro bindings, body do quote
                 scope
-                    !!map(bindings, func binding do
-                        quote !binding[0] := !binding[1] end
-                    end);
+                    !!map(bindings, binding -> quote !binding[0] := !binding[1] end);
                     !body
                 end
             end end

@@ -75,7 +75,9 @@ class Scanner:
                     self._two_char_operator("=!")
                 case ch if ch in "=!<>:":
                     self._two_char_operator("=")
-                case ch if ch in "+-*/%()[]{}.;,":
+                case "-":
+                    self._two_char_operator(">")
+                case ch if ch in "+*/%()[]{}.;,":
                     self._tokens.append(Ident(ch))
                     self._advance()
                 case invalid:
@@ -170,7 +172,16 @@ class Parser:
     def _define_assign(self):
         return self._binary_right({
             Ident(":="): Ident("define"), Ident("="): Ident("assign")
-        }, self._and_or)
+        }, self._arrow)
+
+    def _arrow(self):
+        left = self._and_or()
+        if self._current_token() == Ident("->"):
+            self._advance()
+            right = self._arrow()
+            params = left if isinstance(left, list) else [left]
+            return (Ident("__core_func"), [params, right])
+        return left
 
     def _and_or(self):
         return self._binary_left({
@@ -694,8 +705,8 @@ class Interpreter:
     def _load(self, path):
         with open(path, "r") as f: src = f.read()
         module_env = Environment(self._env)
-        ast = self.parse(self.scan(src))
-        return Evaluator().eval(ast, module_env)
+        expr = self.ast(src)
+        return Evaluator().eval(expr, module_env)
 
     def init_env(self):
         self._env = Environment()
@@ -971,7 +982,7 @@ class Interpreter:
         self.collect_rules(src)
         return self.parse(self.scan(src))
 
-    def evaluate(self, ast: Expr) -> Value:
+    def eval(self, ast: Expr) -> Value:
         try:
             return Evaluator().eval(ast, self._env)
         except ToilException as e: assert False, f"ToilException @ evaluate(): {e.e}"
@@ -980,12 +991,16 @@ class Interpreter:
         except BreakException: assert False, f"Break at top level @ evaluate()"
 
     def walk(self, src: str) -> Value:
-        return self.evaluate(self.ast(src))
+        return self.eval(self.ast(src))
 
 if __name__ == "__main__":
     import sys
 
     i = Interpreter().init_env().stdlib()
+    def scan(src): return i.scan(src)
+    def ast(src): return i.ast(src)
+    def eval(expr): return i.eval(expr)
+    def walk(src): return i.walk(src)
 
     def repl():
         while True:
@@ -993,17 +1008,17 @@ if __name__ == "__main__":
             if (src := sys.stdin.read()) == "":
                 exit(0)
             try:
-                ast = i.ast(src)
-                print("AST:", ast, sep="\n")
+                expr = ast(src)
+                print("AST:", expr, sep="\n")
                 print("Output:")
-                result = i.evaluate(ast)
+                result = eval(expr)
                 print("Result:", result, sep="\n")
             except AssertionError as e:
                 print("Error:", e, sep="\n")
 
     def run(filename):
         with open(filename, "r") as f:
-            result = i.walk(f.read())
+            result = walk(f.read())
         exit(result if isinstance(result, int) else 0)
 
     if len(sys.argv) > 1:
@@ -1014,57 +1029,21 @@ if __name__ == "__main__":
 
     # Example
 
-    # Module
-    i.walk("""
-        defmodule Mod1 export {public_val, public_func} do
-            public_val := 2;
-            _private_val := 3;
+    # Arrow function
+    print(walk(""" ([] -> 2)() """)) # -> 2
+    print(walk(""" ([a] -> a + 2)(3) """)) # -> 5
+    print(walk(""" (a -> a + 2)(3) """)) # -> 5 (single-parameter shorthand)
+    print(walk(""" ([[a, b]] -> a + b)([2, 3]) """)) # -> 5 (No shorthand for single list argument)
+    print(walk(""" ([a, b] -> a + b)(2, 3) """)) # -> 5
+    # walk(""" ([a, b] -> a + b)(2) """) # -> Argument mismatch
 
-            deffunc public_func params a do a + 2 end;
-            deffunc _private_func params a do a end
-        end
-    """)
+    print(walk(""" ([a, *b] -> b)(2, 3, 4) """)) # -> [3, 4]
+    print(walk(""" ({a} -> a + 2)({a: 3}) """)) # -> 5
+    # walk(""" ({a} -> a + 2)({b: 3}) """) # -> Argument mismatch
+    print(walk(""" (int(a) -> a + 2)(3) """)) # -> 5
+    # walk(""" (int(a) -> a + 2)("aaa") """) # -> Argument mismatch
 
-    i.walk(""" import Mod1 as mod1 end """)
-    print(i.walk(""" mod1.public_val """)) # -> 2
-    print(i.walk(""" mod1.public_func(3) """)) # -> 5
-    # i.walk(""" mod1._private_val """) # -> Undefined variable
-    # i.walk(""" mod1._private_func() """) # -> Undefined variable
+    print(walk(""" (x -> x or 2)(False) """)) # -> 2
+    print(walk(""" (a -> b -> a + b)(2)(3) """)) # -> 5
 
-    i.walk(""" from Mod1 import {public_val} end """)
-    print(i.walk(""" public_val """)) # -> 2
-
-    i.walk(""" from Mod1 import {public_func: f} end """)
-    print(i.walk(""" f(3) """)) # -> 5
-
-    # i.walk(""" from Mod1 import {not_found} end """) # -> Pattern mismatch
-
-    i.walk("""
-        defmodule Mod2 export {mod1, public_val} do
-            import Mod1 as mod1 end;
-            public_val := mod1.public_func(3)
-        end
-    """)
-
-    i.walk(""" import Mod2 as mod2 end """)
-    print(i.walk(""" mod2.mod1.public_val """)) # -> 2
-    print(i.walk(""" mod2.public_val """)) # -> 5
-
-    # GCD module
-
-    i.walk("""
-        defmodule GCD export {recur, iter} do
-            deffunc recur params a, b do
-                if a == 0 then b else recur(b % a, a) end
-            end;
-
-            deffunc iter params a, b do
-                while a != 0 do [a, b] := [b % a, a] end;
-                b
-            end
-        end
-    """)
-
-    i.walk(""" import GCD as gcd end """)
-    print(i.walk(""" gcd.recur(18, 24) """)) # -> 6
-    print(i.walk(""" gcd.iter(18, 24) """)) # -> 6
+    walk(""" for i in [1, 2, 3].filter(x -> x % 2 == 1) do print(i) end """) # -> 1\n3\n
