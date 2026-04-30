@@ -193,8 +193,7 @@ i.walk(r"""
 
         defmethod _unaries params do
             self._unary({
-                '-': Ident('neg'), '+': Ident('+'), '*': Ident('*'),
-                '!': Ident('!'), '!!': Ident('!!')
+                '-': Ident('neg'), '+': Ident('+'), '*': Ident('*')
             }, self._call_index_dot)
         end;
 
@@ -235,6 +234,9 @@ i.walk(r"""
                 case Ident('match') then self._match()
                 case Ident('while') then self._while()
                 case Ident('for') then self._for()
+                case Ident('try') then self._try()
+                case Ident('defclass') then self._defclass()
+                case Ident('defmethod') then self._defmethod()
                 case Ident(name) then
                     if name.is_ident() then
                         self._current_and_advance()
@@ -373,6 +375,21 @@ i.walk(r"""
             Expr(Ident('while'), [cond_expr, body_expr, then_expr, else_expr])
         end;
 
+        defmethod _try params do
+            self._current_and_advance();
+            body_expr := self._expression();
+            clauses := [];
+            while self._current() == Ident('except') do
+                self._current_and_advance();
+                cond_expr := self._expression();
+                self._consume(Ident('then'));
+                except_expr := self._expression();
+                clauses.push([cond_expr, except_expr])
+            end;
+            self._consume(Ident('end'));
+            return(Expr(Ident('try'), [body_expr, clauses]))
+        end;
+
         defmethod _for params do
             self._current_and_advance();
             var_expr := self._expression();
@@ -417,6 +434,43 @@ i.walk(r"""
                     else_expr
                 ])
             ])])
+        end;
+
+        defmethod _defclass params do
+            self._current_and_advance();
+            name := self._current_and_advance();
+            self._consume(Ident('params'));
+            params_ := self._comma_separated_exprs(Ident('do'));
+            self._consume(Ident('do'));
+            body_expr := self._expression();
+            self._consume(Ident('end'));
+
+            Expr(Ident('define'), [
+                name,
+                Expr(Ident('func'), [
+                    params_,
+                    Expr(Ident('seq'), [
+                        Expr(Ident('define'), [Ident('self'), {}]),
+                        body_expr,
+                        Ident('self')
+                    ])
+                ])
+            ])
+        end;
+
+        defmethod _defmethod params do
+            self._current_and_advance();
+            name := self._current_and_advance();
+            self._consume(Ident('params'));
+            params_ := self._comma_separated_exprs(Ident('do'));
+            self._consume(Ident('do'));
+            body_expr := self._expression();
+            self._consume(Ident('end'));
+
+            Expr(Ident('assign'), [
+                Expr(Ident('dot'), [Ident('self'), str(name)]),
+                Expr(Ident('func'), [[Ident('self')] + params_, body_expr])
+            ])
         end;
 
         defmethod _binary_left params ops, sub_elem do
@@ -549,6 +603,10 @@ i.walk(r"""
                     self.eval(left_expr, env) or self.eval(right_expr, env)
                 case Expr(Ident('while'), [cond_expr, body_expr, then_expr, else_expr]) then
                     self._while(cond_expr, body_expr, then_expr, else_expr, env)
+                case Expr(Ident('try'), [body_expr, clauses]) then
+                    self._try(body_expr, clauses, env)
+                case Expr(Ident('raise'), [val]) then
+                    raise(self.eval(val, env))
                 case Expr(Ident('continue'), []) then
                     raise(['ContinueException'])
                 case Expr(Ident('break'), []) then
@@ -651,6 +709,25 @@ i.walk(r"""
                 self._eval_optional_arg(then_expr, env)
             else
                 self._eval_optional_arg(else_expr, env)
+            end
+        end;
+
+        defmethod _try params body_expr, clauses, env do
+            try
+                self.eval(body_expr, env)
+            except e then
+                match e
+                    case ['ReturnException', _] then raise(e)
+                    case ['ContinueException'] then raise(e)
+                    case ['BreakException'] then raise(e)
+                    case _ then None
+                end;
+                for [cond_expr, except_expr] in clauses do
+                    if self._match_pattern(cond_expr, e, env) then
+                        return(self.eval(except_expr, env))
+                    end
+                end;
+                raise(e)
             end
         end;
 
@@ -816,8 +893,17 @@ i.walk(r"""
 
             self._env.define('print', Expr(Ident('hostfunc'), func args do apply(print, args) end));
 
+            self._env.define('read', Expr(Ident('hostfunc'), func args do read(args[0]) end));
+            self._env.define('load', Expr(Ident('hostfunc'), func args do self._load(args[0]) end));
+
+            self._env.define('eval', Expr(Ident('hostfunc'), func args do
+                Evaluator().eval(self.ast(args[0]), self._env)
+            end));
             self._env.define('eval_expr', Expr(Ident('hostfunc'), func args do
                 Evaluator().eval(args[0], self._env)
+            end));
+            self._env.define('apply', Expr(Ident('hostfunc'), func args do
+                Evaluator().apply(args[0], args[1])
             end))
         end;
 
@@ -882,6 +968,13 @@ i.walk(r"""
             self
         end;
 
+        defmethod _load params path do
+            src := read(path);
+            module_env := Environment(self._env);
+            ast := self.parse(self.scan(src));
+            Evaluator().eval(ast, module_env)
+        end;
+
         defmethod scan params src do Scanner(src).tokenize() end;
         defmethod parse params tokens do Parser(tokens).parse() end;
         defmethod ast params src do Parser(self.scan(src)).parse() end;
@@ -890,11 +983,11 @@ i.walk(r"""
             try
                 self.eval(self.ast(src))
             except ['ReturnException', val] then
-                raise('Return from top level @ evaluate(): ' + str(val))
+                raise('Return from top level @ walk(): ' + str(val))
             except ['ContinueException'] then
-                raise('Continue at top level @ evaluate()')
+                raise('Continue at top level @ walk()')
             except ['BreakException'] then
-                raise('Break at top level @ evaluate()')
+                raise('Break at top level @ walk()')
             end
         end
     end
@@ -910,299 +1003,108 @@ if __name__ == "__main__":
 
     # Example
 
-    # While
-    print('While')
-    print(walk("""
-        a := [];
-        i := 0; while i < 3 do push(a, i); i = i + 1 end
-    """)) # -> None
-    print(walk(""" a """)) # -> [0, 1, 2]
+    # Eval/apply
+    print(walk(""" eval("2 + 3") """)) # -> 5
+    print(walk(""" eval_expr(Expr(Ident("add"), [2, 3])) """)) # -> 5
+    print(walk(""" apply(add, [2, 3]) """)) # -> 5
 
-    print(walk("""
-        a := [];
-        i := 0; while i < 3 do push(a, i); i = i + 1 then a else 1/0 end
-    """)) # -> [0, 1, 2]
+    # Read and Load
+    print(walk(""" type(read("lib/fib.toil")) """)) # -> str
+    print(walk(""" load("lib/fib.toil")(4) """)) # -> 3
 
+    # Object oriented like notation
     print(walk("""
-        a := [];
-        i := 0; while i < 3 do push(a, i); i = i + 1 then a end
-    """)) # -> [0, 1, 2]
-
-    print(walk(""" while False do 1 / 0 then 3 else 4 end """)) # -> 3
-
-    # walk(""" while do 2 then 3 else 4 end """) # -> Expected do
-    # walk(""" while True 2 then 3 else 4 end """) # -> Expected do
-    # walk(""" while True do 2 3 else 4 end """) # -> Expected end
-    # walk(""" while True do 2 then 3 4 end """) # -> Expected end
-    # walk(""" while True do 2 then 3 else end """) # -> Expected end
-    # walk(""" while True do 2 then 3 else 4 """) # -> Expected end
-
-    # Continue
-    print('Continue')
-    print(walk("""
-        a := [];
-        i := 0; while i < 3 do
-            i = i + 1; if i == 2 then continue() end;
-            push(a, i)
-        then a end
-    """)) # -> [1, 3]
-    print(walk("""
-        a := []; i := 0; while i < 2 do
-            j := 0; while j < 3 do
-                j = j + 1; if j == 2 then continue() end;
-                push(a, [i, j])
+        defclass Counter params start do
+            self.count = start;
+            defmethod inc params step do
+                self.count = self.count + step
             end;
-            i = i + 1
-        then a end
-    """)) # -> [[0, 1], [0, 3], [1, 1], [1, 3]]
-
-    # walk(""" continue() """) # -> Continue at top level
-
-    # Break
-    print('Break')
-    print(walk("""
-        a := [];
-        i := 0; while i < 3 do
-            if i == 1 then break() end;
-            push(a, i); i = i + 1
-        then 1/0 else a end
-    """)) # -> [0]
-
-    print(walk("""
-        a := [];
-        i := 0; while i < 3 do
-            if i == 1 then break() end;
-            push(a, i); i = i + 1
-        else a end
-    """)) # -> [0]
-
-    print(walk("""
-        a := [];
-        i := 0; while i < 2 do
-            j := 0; while j < 3 do
-                if i == 0 and j == 1 then break() end;
-                push(a, [i, j]);
-                j = j + 1
-            end;
-            i = i + 1
-        then a end
-    """)) # -> [[0, 0], [1, 0], [1, 1], [1, 2]]
-    print(walk("""
-        a := [];
-        i := 0; while i < 2 do
-            j := 0; while j < 3 do
-                if i == 1 and j == 1 then break() end;
-                push(a, [i, j]);
-                j = j + 1
-            else break() end;
-            i = i + 1
-        else a end
-    """)) # -> [[0, 0], [0, 1], [0, 2], [1, 0]]
-
-    print(walk(""" while True do break() end """)) # -> None
-    print(walk(""" while True do break() else 2 end """)) # -> 2
-    # walk(""" break() """) # -> Break at top level
-
-    # For
-    print('For')
-    print(walk(""" a := []; for i in [0, 1, 2] do push(a, i) end """)) # -> None
-    print(walk(""" a """)) # -> [0, 1, 2]
-
-    print(walk("""
-        a := []; for i in [0, 1, 2] do push(a, i) then [i, a] else 1/0 end
-    """)) # -> [2, [0, 1, 2]]
-
-    print(walk("""
-        a := []; for i in [0, 1, 2] do push(a, i) then a end
-    """)) # -> [0, 1, 2]
-
-    print(walk("""
-        a := []; for [i, j] in [[1, 2], [3, 4]] do push(a, [i, j]) then a end
-    """)) # -> [[1, 2], [3, 4]]
-
-    print(walk("""
-        a := [];
-        for [k, v] in {"a": 2, "b": 3}.items() do push(a, [k, v]) then a end
-    """)) # -> [['a', 2], ['b', 3]]
-
-    print(walk(""" for i in [] do 1/0 then 2 end """)) # -> 2
-
-    # walk(""" for in [] do 2 then 3 else 4 end """) # -> Unexpected token
-    # walk(""" for i [] do 2 then 3 else 4 end """) # -> Unexpected token
-    # walk(""" for i in do 2 then 3 else 4 end """) # -> Expected do
-    # walk(""" for i in [] do then 3 else 4 end """) # -> Expected end
-    # walk(""" for i in [] do 2 3 else 4 end """) # -> Expected end
-    # walk(""" for i in [] do 2 then else 4 end """) # -> Expected end
-    # walk(""" for i in [] do 2 then 3 4 end """) # -> Expected end
-    # walk(""" for i in [] do 2 then 3 else end """) # -> Expected end
-    # walk(""" for i in [] do 2 then 3 else 4 """) # -> Expected end
-
-    # Continue
-    print('Continue')
-    print(walk("""
-        a := []; for i in [0, 1, 2] do
-            if i == 1 then continue() end;
-            push(a, i)
-        then a end
-    """)) # -> [0, 2]
-
-    print(walk("""
-        a := []; for i in [0, 1] do
-            for j in [0, 1, 2] do
-                if j == 1 then continue() end;
-                push(a, [i, j])
+            defmethod get params do
+                self.count
             end
-        then a end
-    """)) # -> [[0, 0], [0, 2], [1, 0], [1, 2]]
+        end;
+        c1 := Counter(10);
+        c2 := Counter(20);
+        c1.inc(2);
+        c2.inc(5);
+        [c1.get(), c2.get()]
+    """)) # -> [12, 25]
 
-    # Break
-    print('Break')
+    # Syntax errors
+    # walk(""" defclass Foo do end """) # -> Expected params
+    # walk(""" defclass Foo params x end """) # -> Expected do
+    # walk(""" defclass Foo params x do defmethod bar do end end """) # -> Expected params
+
+    # Try
+
+    # Try without except
+    print(walk(""" try 2; 3 end """)) # -> 3
+
+    # Try with except, no raise
+    print(walk(""" try 2; 3 except e then e end """)) # -> 3
+
+    # Try with raise and except
+    print(walk(""" try 2; raise(2 + 3); 3 except e then e end """)) # -> 5
+
+    # Pattern match in except
     print(walk("""
-        a := []; for i in [0, 1, 2] do
-            if i == 1 then break() end;
-            push(a, i)
-        then 1/0 else a end
-    """)) # -> [0]
+        try
+            raise(["foo", 3])
+        except ["foo", val] then ["foo", val]
+        except ["bar", val] then ["bar", val]
+        end
+    """)) # -> ['foo', 3]
 
     print(walk("""
-        a := []; for i in [0, 1, 2] do
-            if i == 1 then break() end;
-            push(a, i)
-        else a end
-    """)) # -> [0]
+        try
+            raise(["bar", 3])
+        except ["foo", val] then ["foo", val]
+        except ["bar", val] then ["bar", val]
+        end
+    """)) # -> ['bar', 3]
 
+    # Catch with wildcard
+    print(walk(""" try raise("error") except _ then "caught" end """)) # -> caught
+
+    # Unhandled exception
+    # walk("""
+    #     try
+    #         raise(["baz", 3])
+    #     except ["foo", val] then ["foo", val]
+    #     end
+    # """) # -> ToilException
+
+    # Control exceptions pass through
+    print(walk(""" func do try return(2) except _ then 3 end end () """)) # -> 2
     print(walk("""
-        a := [];
-        for i in [0, 1] do
-            for j in [0, 1, 2] do
-                if i == 0 and j == 1 then break() end;
-                push(a, [i, j])
+        a := 0; while a < 3 do
+            try
+                a = a + 1; if a == 2 then break() end
+            except _ then a = 3 end
+        end;
+        a
+    """)) # -> 2
+
+    # Nested try
+    print(walk("""
+        try
+            try
+                raise("outer")
+            except "inner" then "caught inner"
             end
-        then a end
-    """)) # -> [[0, 0], [1, 0], [1, 1], [1, 2]]
+        except "outer" then "caught outer"
+        end
+    """)) # -> caught outer
 
+    # Re-raise in except
     print(walk("""
-        a := [];
-        for i in [0, 1] do
-            for j in [0, 1, 2] do
-                if i == 1 and j == 1 then break() end;
-                push(a, [i, j])
-            else break() end
-        else a end
-    """)) # -> [[0, 0], [0, 1], [0, 2], [1, 0]]
-
-    # Destructure
-
-    # Variable pattern
-    print(walk(r""" a := 2; a """)) # -> 2
-    print(walk(r""" _ := 2; _ """)) # -> 2 (Pseudo wildcard)
-
-    # List pattern
-    # print(walk(r""" [a, b] := [2] """)) # -> Pattern mismatch
-    print(walk(r""" [a, b] := [3, 4]; [a, b] """)) # -> [3, 4]
-    # print(walk(r""" [a, b] := [4, 5, 6] """)) # -> Pattern mismatch
-
-    # print(walk(r""" [a, *b] := [] """)) # -> Pattern mismatch
-    print(walk(r""" [a, *b] := [2]; [a, b] """)) # -> [2, []]
-    print(walk(r""" [a, *b] := [3, 4]; [a, b] """)) # -> [3, [4]]
-    print(walk(r""" [a, *b] := [4, 5, 6]; [a, b] """)) # -> [4, [5, 6]]
-    print(walk(r""" [*a] := [4, 5, 6]; a """)) # -> [4, 5, 6]
-
-    # print(walk(r""" [*a, b] := [] """)) # -> Pattern mismatch
-    print(walk(r""" [*a, b] := [2]; [a, b] """)) # -> [[], 2]
-    print(walk(r""" [*a, b] := [2, 3]; [a, b] """)) # -> [[2], 3]
-    print(walk(r""" [*a, b] := [2, 3, 4]; [a, b] """)) # -> [[2, 3], 4]
-
-    # print(walk(r""" [a, *b, c] := [2] """)) # -> Pattern mismatch
-    print(walk(r""" [a, *b, c] := [3, 4]; [a, b, c] """)) # -> [3, [], 4]
-    print(walk(r""" [a, *b, c] := [4, 5, 6]; [a, b, c] """)) # -> [4, [5], 6]
-    print(walk(r""" [a, *b, c] := [5, 6, 7, 8]; [a, b, c] """)) # -> [5, [6, 7], 8]
-
-    print(walk(r""" [_, b, _] := [2, 3, 4]; b """)) # -> 3 (Pseudo wildcard)
-
-    print(walk(r""" [] := [] """)) # -> []
-    # print(walk(r""" [] := [1] """)) # -> Pattern mismatch
-
-    # print(walk(r""" [a] := 2 """)) # -> Pattern mismatch
-    # print(walk(r""" [a, *b, *c, d] := [5, 6, 7, 8] """)) # -> Pattern mismatch
-
-    # Dict pattern
-    # print(walk(r""" {a} := {b: 2} """)) # -> Pattern mismatch
-    print(walk(r""" {a} := {a: 2, b: 3}; a """)) # -> 2
-    print(walk(r""" {a, b} := {a: 2, b: 3}; [a, b] """)) # -> [2, 3]
-    print(walk(r""" {a: c, b: d} := {a: 3, b: 4}; [c, d] """)) # -> [3, 4]
-    # print(walk(r""" {a, b, c} := {a: 2, b: 3} """)) # -> Pattern mismatch
-    print(walk(r""" {a} := {"a": 5, b: 6}; a """)) # -> 5
-
-    # print(walk(r""" {a, *rest} := {b: 2} """)) # -> Pattern mismatch
-    print(walk(r""" {a, *rest} := {a: 2}; [a, rest] """)) # -> [2, {}]
-    print(walk(r""" {a, *rest} := {a: 2, b: 3}; [a, rest] """)) # -> [2, {'b': 3}]
-    print(walk(r""" {a, *rest} := {a: 2, b: 3, c: 4}; [a, rest] """)) # -> [2, {'b': 3, 'c': 4}]
-
-    print(walk(r""" {a: _, b} := {a: 2, b: 3}; b """)) # -> 3 (Pseudo wildcard)
-
-    print(walk(r""" {} := {a: 2, b: 3} """)) # -> {'a': 2, 'b': 3}
-
-    # print(walk(r""" {a} := 2 """)) # -> Pattern mismatch
-
-    # Ident pattern
-    print(walk(r""" Ident("aaa") := Ident("aaa") """)) # -> aaa
-    # print(walk(r""" Ident("aaa") := Ident("bbb") """)) # -> Pattern mismatch
-    print(walk(r""" Ident(a) := Ident("aaa"); a """)) # -> aaa
-    # print(walk(r""" Ident(a) := "aaa"; a """)) # -> Pattern mismatch
-
-    # Expr pattern
-    print(walk(r""" Expr(Ident("add"), [int(a), int(b)]) := quote(2 + 3); [a, b] """)) # -> [2, 3]
-    print(walk(r""" Expr(Ident("add"), [Ident(name1), Ident(name2)]) := quote(a + b); [name1, name2] """)) # -> ['a', 'b']
-    # print(walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := 2 + 3 """)) # -> Pattern mismatch
-    # print(walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := Expr(Ident('add')) """)) # -> Pattern mismatch
-
-    # Type pattern
-    print(walk(r""" int(a) := 2; a """)) # -> 2
-    # print(walk(r""" int(a) := "2"; a """)) # -> Pattern mismatch
-    print(walk(r""" str(a) := "aaa"; a """)) # -> aaa
-    # print(walk(r""" str(a) := []; a """)) # -> Pattern mismatch
-
-    # Or pattern
-    print(walk(r""" int(a) or str(a) := 2; a """)) # -> 2
-    print(walk(r""" int(a) or str(a) := "aaa"; a """)) # -> aaa
-    # print(walk(r""" int(a) or str(a) := [2]; a """)) # -> Pattern mismatch
-    print(walk(r""" int(a) or str(a) or list(a):= [2]; a """)) # -> [2]
-
-    # Literal pattern
-    print(walk(r""" a := 2; 2 := a """)) # -> 2
-    print(walk(r""" None := None """)) # -> None
-    print(walk(r""" True := True """)) # -> True
-    print(walk(r""" "hello" := "hello" """)) # -> "hello"
-    # print(walk(r""" "hello" := "world" """)) # -> Pattern mismatch
-    # print(walk(r""" a := 3; 2 := a """)) # -> Pattern mismatch
-
-    # Combination
-    print(walk(r""" [{a: b}, c] := [{a: 2, b: 3}, 4]; [b, c] """)) # -> [2, 4]
-    print(walk(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """)) # -> [5, 6]
-
-    # For + destructure
-    walk("""
-        keys := ["a", "b", "c"];
-        values := [2, 3, 4];
-        for [k, v] in zip(keys, values) do
-            print(k, v)
+        try
+            try
+                raise(2)
+            except e then
+                raise(e + 1)
+            end
+        except e then
+            e
         end
-    """) # -> a 2\nb 3\nc 4\n
-
-    walk("""
-        dic := { "a": 2, "b": 3, "c": 4 };
-        for [k, v] in dic.items() do
-            print(k, v)
-        end
-    """) # -> a 2\nb 3\nc 4\n
-
-    # Function call + destructure
-    print(walk(r""" func a, *rest do [a, rest] end (2, 3, 4) """)) # -> [2, [3, 4]]
-    print(walk(r""" func {a: d, *rest}, e do [d, e, rest] end ({a: 2, b: 3, c: 4}, 5) """)) # -> [2, 5, {'b': 3, 'c': 4}]
-    walk(r""" deffunc foo params int(a), str(b) do [a, b] end; foo(2, "a") """)
-    print(walk(r""" foo(2, "a") """)) # -> [2, "a"]
-    # print(walk(r""" foo(2, 3) """)) # -> Pattern mismatch
-    # print(walk(r""" func a, b do [a, b] end (2) """)) # -> Pattern mismatch
-    # print(walk(r""" func a do a end (2, 3) """)) # -> Pattern mismatch
-    # print(walk(r""" func do 2 end (2) """)) # -> Pattern mismatch
+    """)) # ->

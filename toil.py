@@ -708,6 +708,7 @@ class Interpreter:
         self._env.define("__builtins", None)
 
         self._env.define("load", lambda args: self._load(args[0]))
+        self._env.define("read", lambda args: open(args[0], "r").read())
 
         self._env.define("eval", lambda args: Evaluator().eval(
             self.ast(args[0]),

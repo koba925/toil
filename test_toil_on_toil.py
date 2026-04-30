@@ -939,6 +939,103 @@ class TestToT(TestBase):
             else a end
         """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
 
+    def test_try_except(self):
+        assert self.walk(""" try 2; 3 end """) == 3
+        assert self.walk(""" try 2; 3 except e then e end """) == 3
+        assert self.walk(""" try 2; raise(2 + 3); 3 except e then e end """) == 5
+
+        assert self.walk("""
+            try
+                raise(["foo", 3])
+            except ["foo", val] then ["foo", val]
+            except ["bar", val] then ["bar", val]
+            end
+        """) == ['foo', 3]
+
+        assert self.walk("""
+            try
+                raise(["bar", 3])
+            except ["foo", val] then ["foo", val]
+            except ["bar", val] then ["bar", val]
+            end
+        """) == ['bar', 3]
+
+        with pytest.raises(Exception):
+            self.walk("""
+                try
+                    raise(["baz", 3])
+                except ["foo", val] then ["foo", val]
+                end
+            """)
+
+        assert self.walk(""" try raise(2) except _ then 3 end """) == 3
+
+        assert self.walk(""" func do try return(2) except _ then 3 end end () """) == 2
+
+        assert self.walk("""
+            a := 0; while a < 5 do
+                try a = a + 1; if a == 3 then break() end
+                except _ then a = 10 end
+            end; a
+        """) == 3
+
+        assert self.walk("""
+            try
+                try
+                    raise(2)
+                except e then
+                    raise(e + 1)
+                end
+            except e then
+                e
+            end
+        """) == 3
+
+        assert self.walk("""
+            try
+                try
+                    raise("outer")
+                except "inner" then "caught inner"
+                end
+            except "outer" then "caught outer"
+            end
+        """) == "caught outer"
+
+    def test_defclass(self):
+        assert self.walk(r"""
+            defclass Counter params start do
+                self.count = start;
+                defmethod inc params step do
+                    self.count = self.count + step
+                end;
+                defmethod get params do
+                    self.count
+                end
+            end;
+            c1 := Counter(10);
+            c2 := Counter(20);
+            c1.inc(2);
+            c2.inc(5);
+            [c1.get(), c2.get()]
+        """) == [12, 25]
+
+        with pytest.raises(Exception, match="Expected params"):
+            self.walk(""" defclass Foo do end """)
+        with pytest.raises(Exception, match="Expected do"):
+            self.walk(""" defclass Foo params x end """)
+        with pytest.raises(Exception, match="Expected params"):
+            self.walk(""" defclass Foo params x do defmethod bar do end end """)
+
+    def test_read_load(self, tmp_path):
+        assert self.walk(""" type(read("lib/fib.toil")) """) == "str"
+        assert self.walk(""" load("lib/fib.toil")(4) """) == 3
+
+    def test_eval_apply(self):
+        assert self.walk(""" eval("2 + 3") """) == 5
+        assert self.walk(""" eval_expr(Expr(Ident("add"), [2, 3])) """) == 5
+        assert self.walk(""" apply(add, [2, 3]) """) == 5
+        assert self.walk(""" apply(func a, b do a + b end, [2, 3]) """) == 5
+
     def test_stdlib(self):
         assert self.walk(""" a := range(2, 10, 1) """) == [2, 3, 4, 5, 6, 7, 8, 9]
         assert self.walk(""" b := range(2, 10, 3) """) == [2, 5, 8]
@@ -1147,7 +1244,6 @@ class TestExamples(TestBase):
             dog1.make_sound()
         """)
         assert capsys.readouterr().out == "I am Leo\nwoof\n"
-
 
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -1853,7 +1853,7 @@ class TestCustomSyntax(TestBase):
 
     def test_mfor(self):
         self.i.walk("""
-            _mfor := macro var, coll, body do quotes
+            _mfor := macro var, coll, body do quote scope
                 __for_coll := !coll;
                 __for_index := -1;
                 while __for_index + 1 < len(__for_coll) do
@@ -1863,7 +1863,7 @@ class TestCustomSyntax(TestBase):
                         !body
                     end
                 end
-            end end
+            end end end
             #rule {mfor: [_mfor, EXPR, in, EXPR, do, EXPR, end]}
         """)
         assert self.i.walk("""
@@ -1874,7 +1874,7 @@ class TestCustomSyntax(TestBase):
 
     def test_aif_and_or(self):
         self.i.walk("""
-            _aif := macro cnd, thn, els do quotes if it := !cnd then !thn else !els end end end
+            _aif := macro cnd, thn, els do quote if it := !cnd then !thn else !els end end end
             #rule {aif: [_aif, EXPR, then, EXPR, else, EXPR, end]}
         """)
         assert self.i.walk(""" aif 2 then [True, it] else [False, it] end """) == [True, 2]
