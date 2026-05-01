@@ -904,6 +904,36 @@ class Interpreter:
             end;
             #rule {defmethod: [__core_defmethod, EXPR, params, EXPRS, do, EXPR, end]}
 
+            defmacro __core_defcls(call_expr, body) do
+                match call_expr
+                    case Expr(name, args) then
+                        quote def (!name)(!!args) do self := {}; !body; self end end
+                    case Ident(name) then
+                        quote def (!call_expr)() do self := {}; !body; self end end
+                    case _ then
+                        raise("Invalid defcls syntax")
+                end
+            end;
+            #rule {defcls: [__core_defcls, EXPR, do, EXPR, end]}
+
+            defmacro __core_defmeth(call_expr, body) do
+                match call_expr
+                    case Expr(name, args) then
+                        Expr(Ident("assign"), [
+                            Expr(Ident("dot"), [Ident("self"), str(name)]),
+                            quote func self, !!args do !body end end
+                        ])
+                    case Ident(name) then
+                        Expr(Ident("assign"), [
+                            Expr(Ident("dot"), [Ident("self"), name]),
+                            quote func self do !body end end
+                        ])
+                    case _ then
+                        raise("Invalid defmeth syntax")
+                end
+            end;
+            #rule {defmeth: [__core_defmeth, EXPR, do, EXPR, end]}
+
             defmacro __core_defmodule(name_expr, export_expr, body_expr) do
                 quote def !name_expr do !body_expr; !export_expr end end
             end;
@@ -931,8 +961,7 @@ class Interpreter:
                 i := 0; while i < l do
                     push(b, f(a[i]));
                     i = i + 1
-                end;
-                b
+                then b end
             end;
 
             def filter(a, f) do
@@ -940,8 +969,7 @@ class Interpreter:
                 i := 0; while i < l do
                     if f(a[i]) then push(b, a[i]) end;
                     i = i + 1
-                end;
-                b
+                then b end
             end;
 
             def zip(a, b) do
@@ -949,8 +977,7 @@ class Interpreter:
                 i := 0; while i < la and i < lb do
                     push(z, [a[i], b[i]]);
                     i = i + 1
-                end;
-                z
+                then z end
             end;
 
             def reduce(a, f, init) do
@@ -958,8 +985,7 @@ class Interpreter:
                 i := 0; while i < l do
                     acc = f(acc, a[i]);
                     i = i + 1
-                end;
-                acc
+                then acc end
             end;
 
             def reverse(a) do
@@ -967,8 +993,7 @@ class Interpreter:
                 while i >= 0 do
                     push(b, a[i]);
                     i = i - 1
-                end;
-                b
+                then b end
             end;
 
             def range(start, stop, step) do
@@ -976,8 +1001,7 @@ class Interpreter:
                 i := start; while i < stop do
                     push(b, i);
                     i = i + step
-                end;
-                b
+                then b end
             end;
 
             def enumerate(a) do
@@ -985,13 +1009,13 @@ class Interpreter:
             end;
 
             def all(a, f) do
-                for x in a do if not f(x) then return(False) end end; True
+                for x in a do if not f(x) then return(False) end then True end
             end;
 
             def any(a, f) do
-                for x in a do if f(x) then return(True) end end; False
+                for x in a do if f(x) then return(True) end then False end
             end
-            """)
+        """)
 
         self._env = Environment(self._env)
         return self
@@ -1088,3 +1112,24 @@ if __name__ == "__main__":
 
     # walk(""" mwhen(2 == 2) """) # -> Argument mismatch
     # walk(""" defmacro 2 do 3 end """) # -> Invalid defmacro syntax
+
+    # defcls / defmeth 正常系の実行例
+    print("\ndefcls / defmeth")
+    walk("""
+        defcls Counter(start) do
+            self.count = start;
+            defmeth inc(step) do
+                self.count = self.count + step
+            end;
+            defmeth get do
+                self.count
+            end
+        end
+    """)
+    walk(""" c := Counter(2) """)
+    walk(""" c.inc(3) """)
+    print(walk(""" c.get() """)) # -> 5
+
+    # defcls / defmeth エラー系の実行例（確認後にコメントアウトしてください）
+    # walk(""" defcls 2 do 3 end """) # -> Invalid defcls syntax
+    # walk(""" defcls ErrCounter() do defmeth 2 do 3 end end; ErrCounter() """) # -> Invalid defmeth syntax

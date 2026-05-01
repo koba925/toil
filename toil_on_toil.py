@@ -253,6 +253,8 @@ i.walk(r"""
                 case Ident('try') then self._try()
                 case Ident('defclass') then self._defclass()
                 case Ident('defmethod') then self._defmethod()
+                case Ident('defcls') then self._defcls()
+                case Ident('defmeth') then self._defmeth()
                 case Ident(name) then
                     if name.is_ident() then
                         self._current_and_advance()
@@ -465,6 +467,66 @@ i.walk(r"""
                 Expr(Ident('dot'), [Ident('self'), str(name)]),
                 Expr(Ident('func'), [[Ident('self')] + params_, body_expr])
             ])
+        end;
+
+        defmethod _defcls params do
+            self._current_and_advance();
+            call_expr := self._expression();
+            self._consume(Ident('do'));
+            body_expr := self._expression();
+            self._consume(Ident('end'));
+
+            match call_expr
+                case Expr(name, args) then
+                    Expr(Ident('define'), [
+                        name,
+                        Expr(Ident('func'), [
+                            args,
+                            Expr(Ident('seq'), [
+                                Expr(Ident('define'), [Ident('self'), {}]),
+                                body_expr,
+                                Ident('self')
+                            ])
+                        ])
+                    ])
+                case Ident(name) then
+                    Expr(Ident('define'), [
+                        call_expr,
+                        Expr(Ident('func'), [
+                            [],
+                            Expr(Ident('seq'), [
+                                Expr(Ident('define'), [Ident('self'), {}]),
+                                body_expr,
+                                Ident('self')
+                            ])
+                        ])
+                    ])
+                case _ then
+                    raise('Invalid defcls syntax @ _defcls(): ' + str(call_expr))
+            end
+        end;
+
+        defmethod _defmeth params do
+            self._current_and_advance();
+            call_expr := self._expression();
+            self._consume(Ident('do'));
+            body_expr := self._expression();
+            self._consume(Ident('end'));
+
+            match call_expr
+                case Expr(name, args) then
+                    Expr(Ident('assign'), [
+                        Expr(Ident('dot'), [Ident('self'), str(name)]),
+                        Expr(Ident('func'), [[Ident('self')] + args, body_expr])
+                    ])
+                case Ident(name) then
+                    Expr(Ident('assign'), [
+                        Expr(Ident('dot'), [Ident('self'), str(name)]),
+                        Expr(Ident('func'), [[Ident('self')], body_expr])
+                    ])
+                case _ then
+                    raise('Invalid defmeth syntax @ _defmeth(): ' + str(call_expr))
+            end
         end;
 
         defmethod _binary_left params ops, sub_elem do
@@ -1070,3 +1132,22 @@ if __name__ == "__main__":
     """)
     print(walk(""" fact(0) """)) # -> 1
     print(walk(""" fact(3) """)) # -> 6
+
+    print("\ndefcls / defmeth")
+    walk("""
+        defcls Counter(start) do
+            self.count = start;
+            defmeth inc(step) do
+                self.count = self.count + step
+            end;
+            defmeth get do
+                self.count
+            end
+        end
+    """)
+    walk(""" c := Counter(2) """)
+    walk(""" c.inc(3) """)
+    print(walk(""" c.get() """)) # -> 5
+
+    # walk(""" defcls 2 do 3 end """) # -> Invalid defcls syntax
+    # walk(""" defcls ErrCounter() do defmeth 2 do 3 end end; ErrCounter() """) # -> Invalid defmeth syntax

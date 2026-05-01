@@ -242,6 +242,8 @@ defclass Parser params tokens do
             case Ident('try') then self._try()
             case Ident('defclass') then self._defclass()
             case Ident('defmethod') then self._defmethod()
+            case Ident('defcls') then self._defcls()
+            case Ident('defmeth') then self._defmeth()
             case Ident(name) then
                 if name.is_ident() then
                     self._current_and_advance()
@@ -454,6 +456,63 @@ defclass Parser params tokens do
             Expr(Ident('dot'), [Ident('self'), str(name)]),
             Expr(Ident('func'), [[Ident('self')] + params_, body_expr])
         ])
+    end;
+
+    defmethod _defcls params do
+        self._current_and_advance();
+        call_expr := self._expression();
+        self._consume(Ident('do'));
+        body_expr := self._expression();
+        self._consume(Ident('end'));
+
+        match call_expr
+            case Expr(name, args) then
+                Expr(Ident('define'), [name,
+                    Expr(Ident('func'), [
+                        args,
+                        Expr(Ident('seq'), [
+                            Expr(Ident('define'), [Ident('self'), {}]),
+                            body_expr,
+                            Ident('self')
+                        ])
+                    ])
+                ])
+            case Ident(name) then
+                Expr(Ident('define'), [call_expr,
+                    Expr(Ident('func'), [[],
+                        Expr(Ident('seq'), [
+                            Expr(Ident('define'), [Ident('self'), {}]),
+                            body_expr,
+                            Ident('self')
+                        ])
+                    ])
+                ])
+            case _ then
+                raise('Invalid defcls syntax @ _defcls(): ' + str(call_expr))
+        end
+    end;
+
+    defmethod _defmeth params do
+        self._current_and_advance();
+        call_expr := self._expression();
+        self._consume(Ident('do'));
+        body_expr := self._expression();
+        self._consume(Ident('end'));
+
+        match call_expr
+            case Expr(name, args) then
+                Expr(Ident('assign'), [
+                    Expr(Ident('dot'), [Ident('self'), str(name)]),
+                    Expr(Ident('func'), [[Ident('self')] + args, body_expr])
+                ])
+            case Ident(name) then
+                Expr(Ident('assign'), [
+                    Expr(Ident('dot'), [Ident('self'), str(name)]),
+                    Expr(Ident('func'), [[Ident('self')], body_expr])
+                ])
+            case _ then
+                raise('Invalid defmeth syntax @ _defmeth(): ' + str(call_expr))
+        end
     end;
 
     defmethod _binary_left params ops, sub_elem do

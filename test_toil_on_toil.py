@@ -1064,14 +1064,14 @@ class TestToT(TestBase):
             end
         """) == "caught outer"
 
-    def test_defclass(self):
+    def test_defcls(self):
         assert self.walk(r"""
-            defclass Counter params start do
+            defcls Counter(start) do
                 self.count = start;
-                defmethod inc params step do
+                defmeth inc(step) do
                     self.count = self.count + step
                 end;
-                defmethod get params do
+                defmeth get do
                     self.count
                 end
             end;
@@ -1082,22 +1082,22 @@ class TestToT(TestBase):
             [c1.get(), c2.get()]
         """) == [12, 25]
 
-        with pytest.raises(Exception, match="Expected params"):
-            self.walk(""" defclass Foo do end """)
+        with pytest.raises(Exception, match="Invalid defcls syntax"):
+            self.walk(""" defcls 2 do 2 end """)
         with pytest.raises(Exception, match="Expected do"):
-            self.walk(""" defclass Foo params x end """)
-        with pytest.raises(Exception, match="Expected params"):
-            self.walk(""" defclass Foo params x do defmethod bar do end end """)
+            self.walk(""" defcls Foo(x) end """)
+        with pytest.raises(Exception, match="Invalid defmeth syntax"):
+            self.walk(""" defcls Foo do defmeth 2 do end end """)
 
-    def test_defmethod_overloading(self):
+    def test_defmeth_overloading(self):
         self.walk("""
-            defclass Accumulator params do
+            defcls Accumulator do
                 self.total = 0;
-                defmethod add params int(n) do self.total = self.total + n end;
-                defmethod add params list(arr) do
+                defmeth add(int(n)) do self.total = self.total + n end;
+                defmeth add(list(arr)) do
                     for n in arr do self.add(n) end
                 end;
-                defmethod add params str(s) do self.add(int(s)) end
+                defmeth add(str(s)) do self.add(int(s)) end
             end;
             acc := Accumulator();
             acc.add(10); acc.add([20, 30]); acc.add("40")
@@ -1181,8 +1181,7 @@ class TestExamples(TestBase):
                 result := 1;
                 for n in range(1, n + 1, 1) do
                     result = result * n
-                end;
-                result
+                then result end
             end
         """)
         assert self.walk("fac(0)") == 1
@@ -1208,8 +1207,7 @@ class TestExamples(TestBase):
                 a := 0; b := 1;
                 for n in range(0, n, 1) do
                     tmp := b; b = a + b; a = tmp
-                end;
-                a
+                then a end
             end
         """)
         assert self.walk("fib(0)") == 0
@@ -1228,7 +1226,7 @@ class TestExamples(TestBase):
 
     def test_closure_counter(self):
         self.walk("""
-            make_counter := func do
+            def make_counter do
                 count := 0;
                 func do count = count + 1 end
             end;
@@ -1251,8 +1249,7 @@ class TestExamples(TestBase):
                             tmp := a[j]; a[j] = a[j + 1]; a[j + 1] = tmp
                         end
                     end
-                end;
-                a
+                then a end
             end;
 
             bubblesort([5, 3, 8, 4, 2])

@@ -1349,39 +1349,13 @@ text
         """)
         assert capsys.readouterr().out == "I'm Leo\nwoof\n"
 
-    def test_oo_style_with_macro(self, capsys):
-        self.i.walk(r"""
-            defmacro _defclass(name, params_, body) do
-                quote
-                    def (!name)(!!params_) do
-                        self := {};
-                        !body;
-                        self
-                    end
-                end
-            end;
-            #rule {defclass: [_defclass, EXPR, params, EXPRS, do, EXPR, end]}
-
-            defmacro inherits(super) do
-                quote self = !super end
-            end;
-
-            defmacro _defmethod(name, params_, body) do
-                Expr(Ident("assign"), [
-                        Expr(Ident("dot"),
-                        [Ident("self"), str(name)
-                    ]),
-                    quote func self, !!params_ do !body end end
-                ])
-            end
-            #rule {defmethod: [_defmethod, EXPR, params, EXPRS, do, EXPR, end]}
-        """)
+    def test_oo_style_with_defcls(self, capsys):
         self.i.walk("""
-            defclass Animal params name do
+            defcls Animal(name) do
                 self._name = name;
-                defmethod introduce params do print("I'm", self._name) end;
-                defmethod new_name params name do self._name = name end;
-                defmethod make_sound params do print("crying") end
+                defmeth introduce do print("I'm", self._name) end;
+                defmeth new_name(name) do self._name = name end;
+                defmeth make_sound do print("crying") end
             end
         """)
         self.i.walk("""
@@ -1397,9 +1371,9 @@ text
         assert capsys.readouterr().out == "I'm Rocky\ncrying\nI'm Lucy\nI'm Bella\ncrying\n"
 
         self.i.walk("""
-            defclass Dog params name do
+            defcls Dog(name) do
                 inherits(Animal(name));
-                defmethod make_sound params do print("woof") end
+                defmeth make_sound do print("woof") end
             end
         """)
         self.i.walk("""
@@ -1435,15 +1409,15 @@ text
         assert self.i.walk(""" fib(1) """) == 1
         assert self.i.walk(""" fib(4) """) == 3
 
-    def test_defmethod_overloading(self):
+    def test_defmeth_overloading(self):
         self.i.walk("""
-            defclass Accumulator params do
+            defcls Accumulator do
                 self.total = 0;
-                defmethod add params int(n) do self.total = self.total + n end;
-                defmethod add params list(arr) do
+                defmeth add(int(n)) do self.total = self.total + n end;
+                defmeth add(list(arr)) do
                     for n in arr do self.add(n) end
                 end;
-                defmethod add params str(s) do self.add(int(s)) end
+                defmeth add(str(s)) do self.add(int(s)) end
             end;
             acc := Accumulator();
             acc.add(10); acc.add([20, 30]); acc.add("40")
@@ -1953,6 +1927,25 @@ class TestCustomSyntax(TestBase):
             self.i.walk(""" mwhen(2 == 2) """)
         with pytest.raises(AssertionError, match="Invalid defmacro syntax"):
             self.i.walk(r""" defmacro 2 do 3 end """)
+
+    def test_defcls_defmeth(self):
+        self.i.walk(r"""
+            defcls Counter(start) do
+                self.count = start;
+                defmeth inc(step) do
+                    self.count = self.count + step
+                end;
+                defmeth get do
+                    self.count
+                end
+            end
+        """)
+        assert self.i.walk(""" c := Counter(10); c.inc(2); c.get() """) == 12
+
+        with pytest.raises(AssertionError, match="Invalid defcls syntax"):
+            self.i.walk(r""" defcls 2 do 3 end """)
+        with pytest.raises(AssertionError, match="Invalid defmeth syntax"):
+            self.i.walk(r""" defcls ErrCounter() do defmeth 2 do 3 end end; ErrCounter() """)
 
     def test_let_custom_rule(self):
         # Setup for let_func and let_scope
