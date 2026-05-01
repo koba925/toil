@@ -495,18 +495,23 @@ class Evaluator:
             case _:
                 return expr
 
+    def _overload_closure(self, right_val, old_val):
+        match right_val, old_val:
+            case (
+                (Ident("closure"), [params, body, closure_env, _]),
+                (Ident("closure"), _)
+            ):
+                return (Ident("closure"), [params, body, closure_env, old_val])
+            case _:
+                return right_val
+
     def _define(self, left_expr, right_expr, env):
         right_val = self.eval(right_expr, env)
         match left_expr:
             case Ident(name):
-                match right_val:
-                    case (Ident("closure"), [params, body, closure_env, fallback]):
-                        old_val_dict = env.lookup(name)
-                        if old_val_dict is not None and name in old_val_dict:
-                            old_val = old_val_dict[name]
-                            match old_val:
-                                case (Ident("closure"), _):
-                                    right_val = (Ident("closure"), [params, body, closure_env, old_val])
+                old_val_dict = env.lookup(name)
+                if old_val_dict is not None and name in old_val_dict:
+                    right_val = self._overload_closure(right_val, old_val_dict[name])
         if self._match_pattern(left_expr, right_val, env):
             return right_val
         assert False, f"Pattern mismatch @ _define(): {left_expr}, {right_val}"
@@ -524,13 +529,8 @@ class Evaluator:
                     case list(), int():
                         coll_val[index_val] = right_val
                     case dict(), str():
-                        match right_val:
-                            case (Ident("closure"), [params, body, closure_env, fallback]):
-                                if index_val in coll_val:
-                                    old_val = coll_val[index_val]
-                                    match old_val:
-                                        case (Ident("closure"), _):
-                                            right_val = (Ident("closure"), [params, body, closure_env, old_val])
+                        if index_val in coll_val:
+                            right_val = self._overload_closure(right_val, coll_val[index_val])
                         coll_val[index_val] = right_val
                     case _:
                         assert False, f"Invalid indexing @ _assign(): {coll_val}, {index_val}"
@@ -904,15 +904,9 @@ class Interpreter:
             defmacro __core_defmethod(call_expr, body) do
                 match call_expr
                     case Expr(name, args) then
-                        Expr(Ident("assign"), [
-                            Expr(Ident("dot"), [Ident("self"), str(name)]),
-                            quote func self, !!args do !body end end
-                        ])
+                        quote self[!str(name)] = func self, !!args do !body end end
                     case Ident(name) then
-                        Expr(Ident("assign"), [
-                            Expr(Ident("dot"), [Ident("self"), name]),
-                            quote func self do !body end end
-                        ])
+                        quote self[!str(name)] = func self do !body end end
                     case _ then
                         raise("Invalid defmethod syntax")
                 end
@@ -1115,6 +1109,5 @@ if __name__ == "__main__":
     walk(""" c.inc(3) """)
     print(walk(""" c.get() """)) # -> 5
 
-    # defclass / defmethod エラー系の実行例（確認後にコメントアウトしてください）
     # walk(""" defclass 2 do 3 end """) # -> Invalid defclass syntax
     # walk(""" defclass ErrCounter() do defmethod 2 do 3 end end; ErrCounter() """) # -> Invalid defmethod syntax

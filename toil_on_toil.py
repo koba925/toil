@@ -590,7 +590,7 @@ i.walk(r"""
                 case bool(_) or int(_) or str(_) then expr
                 case list(_) then expr.map(e -> self.eval(e, env))
                 case dict(_) then
-                    expr.keys().map(k -> [k, self.eval(expr[k], env)]).dict()
+                    expr.items().map([[k, v]] -> [k, self.eval(v, env)]).dict()
                 case Ident(name) then env.val(name)
                 case Expr(Ident('quote'), [expr]) then
                     expr
@@ -633,10 +633,6 @@ i.walk(r"""
             end
         end;
 
-        defmethod _eval_optional_arg(args, env) do
-            if args.len() == 0 then None else self.eval(args[0], env) end
-        end;
-
         defmethod _dot(target_expr, attr_name, env) do
             target_val := self.eval(target_expr, env);
             if target_val.type() == 'dict' and attr_name.in(target_val) then
@@ -661,21 +657,10 @@ i.walk(r"""
             right_val := self.eval(right_expr, env);
             match left_expr
                 case Ident(name) then
-                    match right_val
-                        case Expr(Ident('closure'), [
-                            params_, body_expr, closure_env, fallback
-                        ]) then
-                            old_val_dict := env.lookup(name);
-                            if old_val_dict != None and name.in(old_val_dict) then
-                                old_val := old_val_dict[name];
-                                match old_val
-                                    case Expr(Ident('closure'), _) then
-                                        right_val = Expr(
-                                            Ident('closure'),
-                                            [params_, body_expr, closure_env, old_val]
-                                        )
-                                end
-                            end
+                    old_val_dict := env.lookup(name);
+                    if old_val_dict != None and name.in(old_val_dict) then
+                        old_val := old_val_dict[name];
+                        right_val = self._overload_closure(right_val, old_val)
                     end
             end;
             if self._match_pattern(left_expr, right_val, env) then
@@ -690,20 +675,9 @@ i.walk(r"""
                 coll_val := self.eval(coll_expr, env);
                 index_val := self.eval(index_expr, env);
                 if type(coll_val) == 'dict' and type(index_val) == 'str' then
-                    match right_val
-                        case Expr(Ident('closure'), [
-                            params_, body_expr, closure_env, fallback
-                        ]) then
-                            if index_val.in(coll_val) then
-                                old_val := coll_val[index_val];
-                                match old_val
-                                    case Expr(Ident('closure'), _) then
-                                        right_val = Expr(
-                                            Ident('closure'),
-                                            [params_, body_expr, closure_env, old_val]
-                                        )
-                                end
-                            end
+                    if index_val.in(coll_val) then
+                        old_val := coll_val[index_val];
+                        right_val = self._overload_closure(right_val, old_val)
                     end
                 end;
                 coll_val[index_val] = right_val
@@ -724,6 +698,17 @@ i.walk(r"""
                     end
                 case _ then
                     raise('Invalid assign target @ _assign: ' + str(left_expr))
+            end
+        end;
+
+        defmethod _overload_closure(right_val, old_val) do
+            match [right_val, old_val]
+                case [
+                    Expr(Ident('closure'), [pat, body, env_, _]),
+                    Expr(Ident('closure'), _)
+                ] then
+                    Expr(Ident('closure'), [pat, body, env_, old_val])
+                case _ then right_val
             end
         end;
 
@@ -783,6 +768,10 @@ i.walk(r"""
             else
                 self._eval_optional_arg(else_expr, env)
             end
+        end;
+
+        defmethod _eval_optional_arg(args, env) do
+            if args.len() == 0 then None else self.eval(args[0], env) end
         end;
 
         defmethod _try(body_expr, clauses, env) do
@@ -926,6 +915,8 @@ i.walk(r"""
         end;
 
         defmethod _builtins do
+            def make_hostfunc(f) do Expr(Ident('hostfunc'), args -> f(args)) end;
+
             self._env.define('__builtins', None);
 
             self._env.define('add', Expr(Ident('hostfunc'), args -> args[0] + args[1]));
@@ -991,40 +982,34 @@ i.walk(r"""
 
                 def range(start, stop, step) do
                     b := [];
-                    i := start; while i < stop do push(b, i); i = i + step end;
-                    b
+                    i := start; while i < stop do push(b, i); i = i + step then b end
                 end;
 
                 def map(a, f) do
                     b := [];
-                    for x in a do push(b, f(x)) end;
-                    b
+                    for x in a do push(b, f(x)) then b end
                 end;
 
                 def filter(a, f) do
                     b := [];
-                    for x in a do if f(x) then push(b, x) end end;
-                    b
+                    for x in a do if f(x) then push(b, x) end then b end
                 end;
 
                 def zip(a, b) do
                     z := []; la := len(a); lb := len(b);
                     i := 0; while i < la and i < lb do
                         push(z, [a[i], b[i]]); i = i + 1
-                    end;
-                    z
+                    then z end
                 end;
 
                 def reduce(a, f, init) do
                     acc := init;
-                    for x in a do acc = f(acc, x) end;
-                    acc
+                    for x in a do acc = f(acc, x) then acc end
                 end;
 
                 def reverse(a) do
                     b := []; l := len(a);
-                    for i in range(1, l + 1, 1) do push(b, a[l - i]) end;
-                    b
+                    for i in range(1, l + 1, 1) do push(b, a[l - i]) then b end
                 end;
 
                 def enumerate(a) do
@@ -1032,11 +1017,11 @@ i.walk(r"""
                 end;
 
                 def all(a, f) do
-                    for x in a do if not f(x) then return(False) end end; True
+                    for x in a do if not f(x) then return(False) end then True end
                 end;
 
                 def any(a, f) do
-                    for x in a do if f(x) then return(True) end end; False
+                    for x in a do if f(x) then return(True) end then False end
                 end
             ');
 
