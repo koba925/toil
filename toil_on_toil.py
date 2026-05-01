@@ -21,12 +21,12 @@ i.walk(r"""
 """)
 
 i.walk(r"""
-    defcls Scanner(src) do
+    defclass Scanner(src) do
         self._src = src;
         self._pos = 0;
         self._tokens = [];
 
-        defmeth tokenize do
+        defmethod tokenize do
             # print(src)
             while True do
                 while self._current_char().isspace() do self._advance() end;
@@ -50,12 +50,10 @@ i.walk(r"""
                     self._tokens.push(Ident(ch)); self._advance()
                 else raise('Invalid character @ tokenize: ' + ch)
                 end
-            end;
-
-            self._tokens
+            else self._tokens end
         end;
 
-        defmeth _number do
+        defmethod _number do
             start := self._pos;
             while self._current_char().isdigit() do
                 self._advance()
@@ -63,7 +61,7 @@ i.walk(r"""
             self._tokens.push(int(self._src.slice(start, self._pos)))
         end;
 
-        defmeth _raw_string do
+        defmethod _raw_string do
             self._advance();
             start := self._pos;
             while (c := self._current_char()) != "'" do
@@ -74,7 +72,7 @@ i.walk(r"""
             self._advance()
         end;
 
-        defmeth _string do
+        defmethod _string do
             self._advance();
             s := [];
             while (ch := self._current_char()) != '"' do
@@ -96,7 +94,7 @@ i.walk(r"""
             self._tokens.push(s.join(''))
         end;
 
-        defmeth _ident do
+        defmethod _ident do
             start := self._pos;
             self._advance();
             while self._current_char().is_ident_rest() do
@@ -111,7 +109,7 @@ i.walk(r"""
             end
         end;
 
-        defmeth _two_char_operator(successors) do
+        defmethod _two_char_operator(successors) do
             start := self._pos;
             self._advance();
             if self._current_char().in(successors) then
@@ -120,9 +118,9 @@ i.walk(r"""
             self._tokens.push(Ident(self._src.slice(start, self._pos)))
         end;
 
-        defmeth _advance do self._pos = self._pos + 1 end;
+        defmethod _advance do self._pos = self._pos + 1 end;
 
-        defmeth _current_char do
+        defmethod _current_char do
             if self._pos < self._src.len() then
                 self._src[self._pos]
             else
@@ -133,11 +131,11 @@ i.walk(r"""
 """)
 
 i.walk(r"""
-    defcls Parser(tokens) do
+    defclass Parser(tokens) do
         self._tokens = tokens;
         self._pos = 0;
 
-        defmeth parse do
+        defmethod parse do
             # print(self._tokens);
             expr := self._expression();
             if self._current() != Ident('$EOF') then
@@ -146,11 +144,11 @@ i.walk(r"""
             expr
         end;
 
-        defmeth _expression do
+        defmethod _expression do
             self._sequence()
         end;
 
-        defmeth _sequence do
+        defmethod _sequence do
             exprs := [self._define_assign()];
             while self._current() == Ident(';') do
                 self._current_and_advance();
@@ -159,13 +157,13 @@ i.walk(r"""
             if exprs.len() == 1 then exprs[0] else Expr(Ident('seq'), exprs) end
         end;
 
-        defmeth _define_assign do
+        defmethod _define_assign do
             self._binary_right({
                 ':=': Ident('define'), '=': Ident('assign')
             }, self._arrow)
         end;
 
-        defmeth _arrow do
+        defmethod _arrow do
             left := self._and_or();
             if self._current() == Ident('->') then
                 self._current_and_advance();
@@ -177,17 +175,17 @@ i.walk(r"""
             end
         end;
 
-        defmeth _and_or do
+        defmethod _and_or do
             self._binary_right({
                 'and': Ident('and'), 'or': Ident('or')
             }, self._not)
         end;
 
-        defmeth _not do
+        defmethod _not do
             self._unary({'not': Ident('not')}, self._comparison)
         end;
 
-        defmeth _comparison do
+        defmethod _comparison do
             self._binary_left({
                 '==': Ident('equal'), '!=': Ident('not_equal'),
                 '<': Ident('less'), '>': Ident('greater'),
@@ -195,25 +193,25 @@ i.walk(r"""
             }, self._add_sub)
         end;
 
-        defmeth _add_sub do
+        defmethod _add_sub do
             self._binary_left({
                 '+': Ident('add'), '-': Ident('sub')
             }, self._mul_div_mod)
         end;
 
-        defmeth _mul_div_mod do
+        defmethod _mul_div_mod do
             self._binary_left({
                 '*': Ident('mul'), '/': Ident('div'), '%': Ident('mod')
             }, self._unaries)
         end;
 
-        defmeth _unaries do
+        defmethod _unaries do
             self._unary({
                 '-': Ident('neg'), '+': Ident('+'), '*': Ident('*')
             }, self._call_index_dot)
         end;
 
-        defmeth _call_index_dot do
+        defmethod _call_index_dot do
             target := self._primary();
             while (op := self._current()).in([Ident('('), Ident('['), Ident('.')]) do
                 if op == Ident('(') then
@@ -236,7 +234,7 @@ i.walk(r"""
             target
         end;
 
-        defmeth _primary do
+        defmethod _primary do
             match self._current()
                 case None then self._current_and_advance()
                 case bool(_) or int(_) or str(_) then self._current_and_advance()
@@ -251,8 +249,8 @@ i.walk(r"""
                 case Ident('while') then self._while()
                 case Ident('for') then self._for()
                 case Ident('try') then self._try()
-                case Ident('defcls') then self._defcls()
-                case Ident('defmeth') then self._defmeth()
+                case Ident('defclass') then self._defclass()
+                case Ident('defmethod') then self._defmethod()
                 case Ident(name) then
                     if name.is_ident() then
                         self._current_and_advance()
@@ -263,21 +261,21 @@ i.walk(r"""
             end
         end;
 
-        defmeth _group do
+        defmethod _group do
             self._current_and_advance();
             expr := self._expression();
             self._consume(Ident(')'));
             expr
         end;
 
-        defmeth _list do
+        defmethod _list do
             self._current_and_advance();
             exprs := self._comma_separated_exprs(Ident(']'));
             self._consume(Ident(']'));
             exprs
         end;
 
-        defmeth _dict do
+        defmethod _dict do
             def _parse_key_value(dic) do
                 match self._current()
                     case Ident('*') then
@@ -313,7 +311,7 @@ i.walk(r"""
             dic
         end;
 
-        defmeth _func do
+        defmethod _func do
             self._current_and_advance();
             params := self._comma_separated_exprs(Ident('do'));
             self._consume(Ident('do'));
@@ -322,7 +320,7 @@ i.walk(r"""
             Expr(Ident('func'), [params, body_expr])
         end;
 
-        defmeth _def do
+        defmethod _def do
             self._current_and_advance();
             call_expr := self._expression();
             self._consume(Ident('do'));
@@ -338,14 +336,14 @@ i.walk(r"""
             end
         end;
 
-        defmeth _scope do
+        defmethod _scope do
             self._current_and_advance();
             body_expr := self._expression();
             self._consume(Ident('end'));
             Expr(Ident('scope'), [body_expr])
         end;
 
-        defmeth _if do
+        defmethod _if do
             self._current_and_advance();
             cond_expr := self._expression();
             self._consume(Ident('then'));
@@ -364,7 +362,7 @@ i.walk(r"""
             Expr(Ident('if'), [cond_expr, then_expr, else_expr])
         end;
 
-        defmeth _match do
+        defmethod _match do
             self._current_and_advance();
             val_expr := self._expression();
             cases := [];
@@ -379,7 +377,7 @@ i.walk(r"""
             Expr(Ident('match'), [val_expr, cases])
         end;
 
-        defmeth _while do
+        defmethod _while do
             self._current_and_advance();
             cond_expr := self._expression();
             self._consume(Ident('do'));
@@ -396,7 +394,7 @@ i.walk(r"""
             Expr(Ident('while'), [cond_expr, body_expr, then_expr, else_expr])
         end;
 
-        defmeth _try do
+        defmethod _try do
             self._current_and_advance();
             body_expr := self._expression();
             clauses := [];
@@ -411,7 +409,7 @@ i.walk(r"""
             Expr(Ident('try'), [body_expr, clauses])
         end;
 
-        defmeth _for do
+        defmethod _for do
             self._current_and_advance();
             var_expr := self._expression();
             self._consume(Ident('in'));
@@ -430,7 +428,7 @@ i.walk(r"""
             Expr(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr])
         end;
 
-        defmeth _defcls do
+        defmethod _defclass do
             self._current_and_advance();
             call_expr := self._expression();
             self._consume(Ident('do'));
@@ -463,11 +461,11 @@ i.walk(r"""
                         ])
                     ])
                 case _ then
-                    raise('Invalid defcls syntax @ _defcls(): ' + str(call_expr))
+                    raise('Invalid defclass syntax @ _defclass(): ' + str(call_expr))
             end
         end;
 
-        defmeth _defmeth do
+        defmethod _defmethod do
             self._current_and_advance();
             call_expr := self._expression();
             self._consume(Ident('do'));
@@ -486,11 +484,11 @@ i.walk(r"""
                         Expr(Ident('func'), [[Ident('self')], body_expr])
                     ])
                 case _ then
-                    raise('Invalid defmeth syntax @ _defmeth(): ' + str(call_expr))
+                    raise('Invalid defmethod syntax @ _defmethod(): ' + str(call_expr))
             end
         end;
 
-        defmeth _binary_left(ops, sub_elem) do
+        defmethod _binary_left(ops, sub_elem) do
             left := sub_elem();
             while type(op := self._current()) == 'Ident' and str(op).in(ops) do
                 self._current_and_advance();
@@ -500,7 +498,7 @@ i.walk(r"""
             left
         end;
 
-        defmeth _binary_right(ops, sub_elem) do
+        defmethod _binary_right(ops, sub_elem) do
             left := sub_elem();
             if type(op := self._current()) == 'Ident' and str(op).in(ops) then
                 self._current_and_advance();
@@ -511,7 +509,7 @@ i.walk(r"""
             end
         end;
 
-        defmeth _unary(ops, sub_elem) do
+        defmethod _unary(ops, sub_elem) do
             if type(op := self._current()) == 'Ident' and str(op).in(ops) then
                 self._current_and_advance();
                 Expr(ops[str(op)], [self._unary(ops, sub_elem)])
@@ -520,7 +518,7 @@ i.walk(r"""
             end
         end;
 
-        defmeth _comma_separated_exprs(terminator) do
+        defmethod _comma_separated_exprs(terminator) do
             cse := [];
             if self._current() != terminator then
                 cse.push(self._expression());
@@ -532,7 +530,7 @@ i.walk(r"""
             cse
         end;
 
-        defmeth _consume(expected) do
+        defmethod _consume(expected) do
             if self._current() == expected then
                 self._current_and_advance()
             else
@@ -541,9 +539,9 @@ i.walk(r"""
             end
         end;
 
-        defmeth _current do self._tokens[self._pos] end;
+        defmethod _current do self._tokens[self._pos] end;
 
-        defmeth _current_and_advance do
+        defmethod _current_and_advance do
             self._pos = self._pos + 1;
             self._tokens[self._pos - 1]
         end
@@ -551,15 +549,15 @@ i.walk(r"""
 """)
 
 i.walk(r"""
-    defcls Environment(parent) do
+    defclass Environment(parent) do
         self._parent = parent;
         self._vars = {};
 
-        defmeth define(name, val) do
+        defmethod define(name, val) do
             self._vars[name] = val
         end;
 
-        defmeth lookup(name) do
+        defmethod lookup(name) do
             if name.in(self._vars) then
                 self._vars
             elif self._parent != None then
@@ -569,13 +567,13 @@ i.walk(r"""
             end
         end;
 
-        defmeth val(name) do
+        defmethod val(name) do
             vars := self.lookup(name);
             if vars == None then raise('Undefined variable @ val: ' + name) end;
             vars[name]
         end;
 
-        defmeth assign(name, val) do
+        defmethod assign(name, val) do
             vars := self.lookup(name);
             if vars == None then raise('Undefined variable @ assign: ' + name) end;
             vars[name] = val
@@ -584,8 +582,8 @@ i.walk(r"""
 """)
 
 i.walk(r"""
-    defcls Evaluator do
-        defmeth eval(expr, env) do
+    defclass Evaluator do
+        defmethod eval(expr, env) do
             # print(expr);
             match expr
                 case None then expr
@@ -635,11 +633,11 @@ i.walk(r"""
             end
         end;
 
-        defmeth _eval_optional_arg(args, env) do
+        defmethod _eval_optional_arg(args, env) do
             if args.len() == 0 then None else self.eval(args[0], env) end
         end;
 
-        defmeth _dot(target_expr, attr_name, env) do
+        defmethod _dot(target_expr, attr_name, env) do
             target_val := self.eval(target_expr, env);
             if target_val.type() == 'dict' and attr_name.in(target_val) then
                 attr_val := target_val[attr_name];
@@ -659,7 +657,7 @@ i.walk(r"""
             end
         end;
 
-        defmeth _define(left_expr, right_expr, env) do
+        defmethod _define(left_expr, right_expr, env) do
             right_val := self.eval(right_expr, env);
             match left_expr
                 case Ident(name) then
@@ -687,7 +685,7 @@ i.walk(r"""
             end
         end;
 
-        defmeth _assign(left_expr, right_expr, env) do
+        defmethod _assign(left_expr, right_expr, env) do
             def _set_val(coll_expr, index_expr, right_val) do
                 coll_val := self.eval(coll_expr, env);
                 index_val := self.eval(index_expr, env);
@@ -729,13 +727,13 @@ i.walk(r"""
             end
         end;
 
-        defmeth _seq(exprs, env) do
+        defmethod _seq(exprs, env) do
             for expr in exprs do
                 val := self.eval(expr, env)
             then val end
         end;
 
-        defmeth _if(cond_expr, then_expr, else_expr, env) do
+        defmethod _if(cond_expr, then_expr, else_expr, env) do
             if self.eval(cond_expr, env) then
                 self.eval(then_expr, env)
             else
@@ -743,7 +741,7 @@ i.walk(r"""
             end
         end;
 
-        defmeth _match(val_expr, cases, env) do
+        defmethod _match(val_expr, cases, env) do
             val := self.eval(val_expr, env);
             for Expr(pattern, body_expr) in cases do
                 if self._match_pattern(pattern, val, env) then
@@ -753,7 +751,7 @@ i.walk(r"""
             None
         end;
 
-        defmeth _while(cond_expr, body_expr, then_expr, else_expr, env) do
+        defmethod _while(cond_expr, body_expr, then_expr, else_expr, env) do
             while self.eval(cond_expr, env) do
                 try
                     self.eval(body_expr, env)
@@ -767,7 +765,7 @@ i.walk(r"""
             end
         end;
 
-        defmeth _for(
+        defmethod _for(
             var_expr, coll_expr, body_expr, then_expr, else_expr, env)
         do
             coll_val := self.eval(coll_expr, env);
@@ -787,7 +785,7 @@ i.walk(r"""
             end
         end;
 
-        defmeth _try(body_expr, clauses, env) do
+        defmethod _try(body_expr, clauses, env) do
             try
                 self.eval(body_expr, env)
             except e then
@@ -806,13 +804,13 @@ i.walk(r"""
             end
         end;
 
-        defmeth _op(op_expr, args_expr, env) do
+        defmethod _op(op_expr, args_expr, env) do
             op_val := self.eval(op_expr, env);
             args_val := args_expr.map(arg -> self.eval(arg, env));
             self.apply(op_val, args_val)
         end;
 
-        defmeth apply(op_val, args_val) do
+        defmethod apply(op_val, args_val) do
             match op_val
                 case Expr(Ident('hostfunc'), f) then f(args_val)
                 case Expr(Ident('closure'), [params_, body_expr, closure_env, fallback]) then
@@ -832,7 +830,7 @@ i.walk(r"""
             end
         end;
 
-        defmeth _match_pattern(pattern, value, env) do
+        defmethod _match_pattern(pattern, value, env) do
             def _match_list do
                 i := 0; lpat := pattern.len(); lval := value.len();
 
@@ -918,16 +916,16 @@ i.walk(r"""
 """)
 
 i.walk(r"""
-    defcls Interpreter do
+    defclass Interpreter do
         self._env = Environment(None);
 
-        defmeth init_env do
+        defmethod init_env do
             self._env = Environment(None);
             self._builtins();
             self
         end;
 
-        defmeth _builtins do
+        defmethod _builtins do
             self._env.define('__builtins', None);
 
             self._env.define('add', Expr(Ident('hostfunc'), args -> args[0] + args[1]));
@@ -985,7 +983,7 @@ i.walk(r"""
             ))
         end;
 
-        defmeth stdlib do
+        defmethod stdlib do
             self.walk('
                 def first(a) do a[0] end;
                 def rest(a) do slice(a, 1, None) end;
@@ -1046,18 +1044,18 @@ i.walk(r"""
             self
         end;
 
-        defmeth _load(path) do
+        defmethod _load(path) do
             src := read(path);
             module_env := Environment(self._env);
             expr := self.ast(src);
             Evaluator().eval(expr, module_env)
         end;
 
-        defmeth scan(src) do Scanner(src).tokenize() end;
-        defmeth parse(tokens) do Parser(tokens).parse() end;
-        defmeth ast(src) do Parser(self.scan(src)).parse() end;
-        defmeth eval(ast) do Evaluator().eval(ast, self._env) end;
-        defmeth walk(src) do
+        defmethod scan(src) do Scanner(src).tokenize() end;
+        defmethod parse(tokens) do Parser(tokens).parse() end;
+        defmethod ast(src) do Parser(self.scan(src)).parse() end;
+        defmethod eval(ast) do Evaluator().eval(ast, self._env) end;
+        defmethod walk(src) do
             try
                 self.eval(self.ast(src))
             except ['ReturnException', val] then
@@ -1094,14 +1092,14 @@ if __name__ == "__main__":
     print(walk(""" fact(0) """)) # -> 1
     print(walk(""" fact(3) """)) # -> 6
 
-    print("\ndefcls / defmeth")
+    print("\ndefclass / defmethod")
     walk("""
-        defcls Counter(start) do
+        defclass Counter(start) do
             self.count = start;
-            defmeth inc(step) do
+            defmethod inc(step) do
                 self.count = self.count + step
             end;
-            defmeth get do
+            defmethod get do
                 self.count
             end
         end
@@ -1110,5 +1108,5 @@ if __name__ == "__main__":
     walk(""" c.inc(3) """)
     print(walk(""" c.get() """)) # -> 5
 
-    # walk(""" defcls 2 do 3 end """) # -> Invalid defcls syntax
-    # walk(""" defcls ErrCounter() do defmeth 2 do 3 end end; ErrCounter() """) # -> Invalid defmeth syntax
+    # walk(""" defclass 2 do 3 end """) # -> Invalid defclass syntax
+    # walk(""" defclass ErrCounter() do defmethod 2 do 3 end end; ErrCounter() """) # -> Invalid defmethod syntax

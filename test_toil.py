@@ -1349,13 +1349,13 @@ text
         """)
         assert capsys.readouterr().out == "I'm Leo\nwoof\n"
 
-    def test_oo_style_with_defcls(self, capsys):
+    def test_oo_style_with_defclass(self, capsys):
         self.i.walk("""
-            defcls Animal(name) do
+            defclass Animal(name) do
                 self._name = name;
-                defmeth introduce do print("I'm", self._name) end;
-                defmeth new_name(name) do self._name = name end;
-                defmeth make_sound do print("crying") end
+                defmethod introduce do print("I'm", self._name) end;
+                defmethod new_name(name) do self._name = name end;
+                defmethod make_sound do print("crying") end
             end
         """)
         self.i.walk("""
@@ -1371,9 +1371,9 @@ text
         assert capsys.readouterr().out == "I'm Rocky\ncrying\nI'm Lucy\nI'm Bella\ncrying\n"
 
         self.i.walk("""
-            defcls Dog(name) do
+            defclass Dog(name) do
                 inherits(Animal(name));
-                defmeth make_sound do print("woof") end
+                defmethod make_sound do print("woof") end
             end
         """)
         self.i.walk("""
@@ -1409,15 +1409,15 @@ text
         assert self.i.walk(""" fib(1) """) == 1
         assert self.i.walk(""" fib(4) """) == 3
 
-    def test_defmeth_overloading(self):
+    def test_defmethod_overloading(self):
         self.i.walk("""
-            defcls Accumulator do
+            defclass Accumulator do
                 self.total = 0;
-                defmeth add(int(n)) do self.total = self.total + n end;
-                defmeth add(list(arr)) do
+                defmethod add(int(n)) do self.total = self.total + n end;
+                defmethod add(list(arr)) do
                     for n in arr do self.add(n) end
                 end;
-                defmeth add(str(s)) do self.add(int(s)) end
+                defmethod add(str(s)) do self.add(int(s)) end
             end;
             acc := Accumulator();
             acc.add(10); acc.add([20, 30]); acc.add("40")
@@ -1928,24 +1928,24 @@ class TestCustomSyntax(TestBase):
         with pytest.raises(AssertionError, match="Invalid defmacro syntax"):
             self.i.walk(r""" defmacro 2 do 3 end """)
 
-    def test_defcls_defmeth(self):
+    def test_defclass_defmethod(self):
         self.i.walk(r"""
-            defcls Counter(start) do
+            defclass Counter(start) do
                 self.count = start;
-                defmeth inc(step) do
+                defmethod inc(step) do
                     self.count = self.count + step
                 end;
-                defmeth get do
+                defmethod get do
                     self.count
                 end
             end
         """)
         assert self.i.walk(""" c := Counter(10); c.inc(2); c.get() """) == 12
 
-        with pytest.raises(AssertionError, match="Invalid defcls syntax"):
-            self.i.walk(r""" defcls 2 do 3 end """)
-        with pytest.raises(AssertionError, match="Invalid defmeth syntax"):
-            self.i.walk(r""" defcls ErrCounter() do defmeth 2 do 3 end end; ErrCounter() """)
+        with pytest.raises(AssertionError, match="Invalid defclass syntax"):
+            self.i.walk(r""" defclass 2 do 3 end """)
+        with pytest.raises(AssertionError, match="Invalid defmethod syntax"):
+            self.i.walk(r""" defclass ErrCounter() do defmethod 2 do 3 end end; ErrCounter() """)
 
     def test_let_custom_rule(self):
         # Setup for let_func and let_scope

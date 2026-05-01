@@ -1064,14 +1064,14 @@ class TestToT(TestBase):
             end
         """) == "caught outer"
 
-    def test_defcls(self):
+    def test_defclass(self):
         assert self.walk(r"""
-            defcls Counter(start) do
+            defclass Counter(start) do
                 self.count = start;
-                defmeth inc(step) do
+                defmethod inc(step) do
                     self.count = self.count + step
                 end;
-                defmeth get do
+                defmethod get do
                     self.count
                 end
             end;
@@ -1082,22 +1082,22 @@ class TestToT(TestBase):
             [c1.get(), c2.get()]
         """) == [12, 25]
 
-        with pytest.raises(Exception, match="Invalid defcls syntax"):
-            self.walk(""" defcls 2 do 2 end """)
+        with pytest.raises(Exception, match="Invalid defclass syntax"):
+            self.walk(""" defclass 2 do 2 end """)
         with pytest.raises(Exception, match="Expected do"):
-            self.walk(""" defcls Foo(x) end """)
-        with pytest.raises(Exception, match="Invalid defmeth syntax"):
-            self.walk(""" defcls Foo do defmeth 2 do end end """)
+            self.walk(""" defclass Foo(x) end """)
+        with pytest.raises(Exception, match="Invalid defmethod syntax"):
+            self.walk(""" defclass Foo do defmethod 2 do end end """)
 
-    def test_defmeth_overloading(self):
+    def test_defmethod_overloading(self):
         self.walk("""
-            defcls Accumulator do
+            defclass Accumulator do
                 self.total = 0;
-                defmeth add(int(n)) do self.total = self.total + n end;
-                defmeth add(list(arr)) do
+                defmethod add(int(n)) do self.total = self.total + n end;
+                defmethod add(list(arr)) do
                     for n in arr do self.add(n) end
                 end;
-                defmeth add(str(s)) do self.add(int(s)) end
+                defmethod add(str(s)) do self.add(int(s)) end
             end;
             acc := Accumulator();
             acc.add(10); acc.add([20, 30]); acc.add("40")

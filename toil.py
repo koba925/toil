@@ -889,19 +889,19 @@ class Interpreter:
                 quote self = !super end
             end;
 
-            defmacro __core_defcls(call_expr, body) do
+            defmacro __core_defclass(call_expr, body) do
                 match call_expr
                     case Expr(name, args) then
                         quote def (!name)(!!args) do self := {}; !body; self end end
                     case Ident(name) then
                         quote def (!call_expr)() do self := {}; !body; self end end
                     case _ then
-                        raise("Invalid defcls syntax")
+                        raise("Invalid defclass syntax")
                 end
             end;
-            #rule {defcls: [__core_defcls, EXPR, do, EXPR, end]}
+            #rule {defclass: [__core_defclass, EXPR, do, EXPR, end]}
 
-            defmacro __core_defmeth(call_expr, body) do
+            defmacro __core_defmethod(call_expr, body) do
                 match call_expr
                     case Expr(name, args) then
                         Expr(Ident("assign"), [
@@ -914,10 +914,10 @@ class Interpreter:
                             quote func self do !body end end
                         ])
                     case _ then
-                        raise("Invalid defmeth syntax")
+                        raise("Invalid defmethod syntax")
                 end
             end;
-            #rule {defmeth: [__core_defmeth, EXPR, do, EXPR, end]}
+            #rule {defmethod: [__core_defmethod, EXPR, do, EXPR, end]}
 
             defmacro __core_defmodule(name_expr, export_expr, body_expr) do
                 quote def !name_expr do !body_expr; !export_expr end end
@@ -1098,15 +1098,15 @@ if __name__ == "__main__":
     # walk(""" mwhen(2 == 2) """) # -> Argument mismatch
     # walk(""" defmacro 2 do 3 end """) # -> Invalid defmacro syntax
 
-    # defcls / defmeth 正常系の実行例
-    print("\ndefcls / defmeth")
+    # defclass / defmethod 正常系の実行例
+    print("\ndefclass / defmethod")
     walk("""
-        defcls Counter(start) do
+        defclass Counter(start) do
             self.count = start;
-            defmeth inc(step) do
+            defmethod inc(step) do
                 self.count = self.count + step
             end;
-            defmeth get do
+            defmethod get do
                 self.count
             end
         end
@@ -1115,6 +1115,6 @@ if __name__ == "__main__":
     walk(""" c.inc(3) """)
     print(walk(""" c.get() """)) # -> 5
 
-    # defcls / defmeth エラー系の実行例（確認後にコメントアウトしてください）
-    # walk(""" defcls 2 do 3 end """) # -> Invalid defcls syntax
-    # walk(""" defcls ErrCounter() do defmeth 2 do 3 end end; ErrCounter() """) # -> Invalid defmeth syntax
+    # defclass / defmethod エラー系の実行例（確認後にコメントアウトしてください）
+    # walk(""" defclass 2 do 3 end """) # -> Invalid defclass syntax
+    # walk(""" defclass ErrCounter() do defmethod 2 do 3 end end; ErrCounter() """) # -> Invalid defmethod syntax
