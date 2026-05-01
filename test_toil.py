@@ -1564,6 +1564,13 @@ text
         assert self.i.walk(""" type(quote 2 + 3 end) """) == "tuple"
         assert self.i.walk(""" type(quote a end) """) == "Ident"
 
+    def test_gensym(self):
+        g1 = self.i.walk(""" gensym("foo") """)
+        g2 = self.i.walk(""" gensym("foo") """)
+        assert type(g1) is Ident
+        assert g1.name.startswith("__foo_")
+        assert g1 != g2
+
     def test_env_exposure(self):
         self.i.walk(""" a := 2 """)
         assert self.i.walk(""" __env.vars.keys() """) == ["a"]

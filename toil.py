@@ -730,6 +730,7 @@ class Interpreter:
         return Evaluator().eval(expr, module_env)
 
     def init_env(self):
+        self._gensym_counter = 0
         self._env = Environment()
         self._builtins()
         self._corelib()
@@ -793,9 +794,16 @@ class Interpreter:
         self._env.define("Ident", lambda args: Ident(args[0]))
         self._env.define("tuple", lambda args: tuple(args))
 
+        self._env.define("gensym", lambda args: self._gensym(args))
+
         self._env.define("print", lambda args: print(*args))
 
         self._env = Environment(self._env)
+
+    def _gensym(self, args):
+        self._gensym_counter += 1
+        name = args[0] if args else "gensym"
+        return Ident(f"__{name}_{self._gensym_counter}")
 
     def _corelib(self):
         self.walk("""
@@ -837,50 +845,46 @@ class Interpreter:
 
             #rule {pif: [__core_if, EXPR, then, EXPR, else, EXPR, end]}
 
-            defmacro __core_if_macro(cnd, thn, elifs, els) do scope
-                __core_if_expr := pif els == [] then None else els[0] end;
-                __core_if_i := len(elifs) - 1;
-                while __core_if_i >= 0 do
-                    [__core_if_elif_cnd, __core_if_elif_thn] := elifs[__core_if_i];
-                    __core_if_expr = quote
-                        pif !__core_if_elif_cnd then
-                            !__core_if_elif_thn
-                        else
-                            !__core_if_expr
-                        end
-                    end;
-                    __core_if_i = __core_if_i - 1
+            defmacro __core_if_macro(cnd, thn, elifs, els) do
+                expr := pif els == [] then None else els[0] end;
+                i := len(elifs) - 1;
+                while i >= 0 do
+                    [elif_cnd, elif_thn] := elifs[i];
+                    expr = quote pif !elif_cnd then !elif_thn else !expr end end;
+                    i = i - 1
                 end;
-                quote pif !cnd then !thn else !__core_if_expr end end
-            end end;
+                quote pif !cnd then !thn else !expr end end
+            end;
             #rule {if: [__core_if_macro, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], +[else, EXPR], end]}
 
             #rule {match: [__core_match, EXPR, *[case, EXPR, then, EXPR], end]}
 
-            defmacro _aif(cnd, thn, els) do quote
-                pif it := !cnd then !thn else !els end
-            end end;
-            #rule {aif: [_aif, EXPR, then, EXPR, else, EXPR, end]}
-
-            defmacro and(a, b) do quote aif !a then !b else it end end end;
-            defmacro or(a, b) do quote aif !a then it else !b end end end;
+            defmacro and(a, b) do
+                g := gensym('it'); quote pif !g := !a then !b else !g end end
+            end;
+            defmacro or(a, b) do
+                g := gensym('it'); quote pif !g := !a then !g else !b end end
+            end;
 
             #rule {while: [__core_while, EXPR, do, EXPR, +[then, EXPR], +[else, EXPR], end]}
 
-            defmacro __core_for(var, coll, body, thn, els) do quote scope
-                __core_for_coll := !coll;
-                __core_for_index := -1;
-                !tuple(Ident("__core_while"), [
-                    quote __core_for_index + 1 < len(__core_for_coll) end,
-                    quote
-                        __core_for_index = __core_for_index + 1;
-                        !var := __core_for_coll[__core_for_index];
-                        !body
-                    end,
-                    thn,
-                    els
-                ])
-            end end end;
+            defmacro __core_for(var, coll, body, thn, els) do
+                _coll := gensym("coll");
+                _index := gensym("index");
+                quote
+                    !_coll := !coll; !_index := -1;
+                    !tuple(Ident("__core_while"), [
+                        quote !_index + 1 < len(!_coll) end,
+                        quote
+                            !_index = !_index + 1;
+                            !var := (!_coll)[!_index];
+                            !body
+                        end,
+                        thn,
+                        els
+                    ])
+                end
+            end;
             #rule {for: [__core_for, EXPR, in, EXPR, do, EXPR, +[then, EXPR], +[else, EXPR], end]}
 
             #rule {try: [__core_try, EXPR, *[except, EXPR, then, EXPR], end]}
@@ -1061,6 +1065,9 @@ if __name__ == "__main__":
 
     # Example
 
-    # tuple
-    print(walk(""" tuple(2, 3) """)) # -> (2, 3)
-    print(walk(""" type(tuple(2, 3)) """)) # -> tuple
+    # Gensym
+    print(walk(""" gensym("foo") """)) # -> __foo_x
+    print(walk(""" gensym("foo") """)) # -> __foo_y
+    print(walk(""" type(gensym("foo")) """)) # -> Ident
+
+    print(walk(""" for i in [1, 2, 3] do ans := i * 2 end; [i, ans] """)) # -> [3, 6]
