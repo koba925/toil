@@ -662,6 +662,9 @@ class TestToT(TestBase):
         self.walk(r""" def myadd(a, b) do a + b end """)
         assert self.walk(r""" myadd(2, 3) """) == 5
 
+        self.walk(r""" def say_hello do "hello" end """)
+        assert self.walk(r""" say_hello() """) == "hello"
+
         self.walk(r"""
             def fact(n) do n * fact(n - 1) end;
             def fact(0) do 1 end
@@ -670,7 +673,7 @@ class TestToT(TestBase):
         assert self.walk(r""" fact(3) """) == 6
 
         with pytest.raises(Exception, match="Invalid def syntax"):
-            self.walk(r""" def myadd do 2 end """)
+            self.walk(r""" def 2 do 3 end """)
 
     def test_if(self):
         assert self.walk(r""" if True then 2 end """) == 2

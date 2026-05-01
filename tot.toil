@@ -332,6 +332,8 @@ defclass Parser params tokens do
         match call_expr
             case Expr(name, args) then
                 Expr(Ident('define'), [name, Expr(Ident('func'), [args, body_expr])])
+            case Ident(name) then
+                Expr(Ident('define'), [call_expr, Expr(Ident('func'), [[], body_expr])])
             case _ then
                 raise('Invalid def syntax @ _def(): ' + str(call_expr))
         end

@@ -2039,6 +2039,11 @@ class TestCustomSyntax(TestBase):
 
     def test_def(self):
         self.i.walk(r"""
+            def say_hello do "hello" end
+        """)
+        assert self.i.walk(r""" say_hello() """) == "hello"
+
+        self.i.walk(r"""
             def fact(n) do n * fact(n - 1) end;
             def fact(0) do 1 end
         """)
@@ -2046,7 +2051,7 @@ class TestCustomSyntax(TestBase):
         assert self.i.walk(r""" fact(3) """) == 6
 
         with pytest.raises(AssertionError, match="Invalid def syntax"):
-            self.i.walk(r""" def myadd do 2 end """)
+            self.i.walk(r""" def 2 do 3 end """)
 
     def test_let_custom_rule(self):
         # Setup for let_func and let_scope

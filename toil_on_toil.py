@@ -343,6 +343,8 @@ i.walk(r"""
             match call_expr
                 case Expr(name, args) then
                     Expr(Ident('define'), [name, Expr(Ident('func'), [args, body_expr])])
+                case Ident(name) then
+                    Expr(Ident('define'), [call_expr, Expr(Ident('func'), [[], body_expr])])
                 case _ then
                     raise('Invalid def syntax @ _def(): ' + str(call_expr))
             end
@@ -1068,45 +1070,15 @@ if __name__ == "__main__":
 
     # Example
 
-    # Function overloading
-    walk("""
-        deffunc foo params x do print("Not supported: " + str(x))  end;
-        deffunc foo params {kind: "Person", name: str(name)} do print("Person: " + name) end;
-        deffunc foo params str(s) do print("string: " + s) end;
-        deffunc foo params int(n) do print("int: " + str(n)) end
-    """)
-    walk(""" foo(2) """) # -> int: 2
-    walk(""" foo("bar") """) # -> string: bar
-    walk(""" foo({kind: "Person", name: "John"}) """) # -> Person: John
-    walk(""" foo([2]) """) # -> Not supported: [2]
-
-    walk("""
-        fib := n -> fib(n - 1) + fib(n - 2);
-        fib := 1 -> 1;
-        fib := 0 -> 0
-    """)
-    print(walk(""" fib(0) """)) # -> 0
-    print(walk(""" fib(1) """)) # -> 1
-    print(walk(""" fib(4) """)) # -> 3
-
-    print(walk("""
-        defclass Accumulator params do
-            self.total = 0;
-            defmethod add params int(n) do self.total = self.total + n end;
-            defmethod add params list(arr) do
-                for n in arr do self.add(n) end
-            end;
-            defmethod add params str(s) do self.add(int(s)) end
-        end;
-        acc := Accumulator();
-        acc.add(10); acc.add([20, 30]); acc.add("40");
-        acc.total
-    """)) # -> 100
-
     # Def
+    walk("""
+        def say_hello do "hello" end
+    """)
+    print(walk(""" say_hello() """)) # -> hello
+
     walk("""
         def fact(n) do n * fact(n - 1) end;
         def fact(0) do 1 end
     """)
-    print(walk(""" fact(0) """)) # -> 0
+    print(walk(""" fact(0) """)) # -> 1
     print(walk(""" fact(3) """)) # -> 6
