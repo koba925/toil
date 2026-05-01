@@ -806,22 +806,17 @@ class Interpreter:
 
             #rule {quote: [__core_quote, EXPR, end]}
 
-            __core_defmacro := macro name, params_, body do
-                quote !name := macro !!params_ do !body end end
-            end;
-            #rule {defmacro: [__core_defmacro, EXPR, params, EXPRS, do, EXPR, end]}
-
-            __core_defmac := macro call_expr, body do
+            __core_defmacro := macro call_expr, body do
                 match call_expr
                     case Expr(name, args) then
                         quote !name := macro !!args do !body end end
                     case Ident(name) then
                         quote !call_expr := macro do !body end end
                     case _ then
-                        raise("Invalid defmac syntax")
+                        raise("Invalid defmacro syntax")
                 end
             end;
-            #rule {defmac: [__core_defmac, EXPR, do, EXPR, end]}
+            #rule {defmacro: [__core_defmacro, EXPR, do, EXPR, end]}
 
             __core_quotes := macro expr do quote quote scope !expr end end end end;
             #rule {quotes: [__core_quotes, EXPR, end]}
@@ -890,18 +885,18 @@ class Interpreter:
 
             # Object oriented notations
 
-            defmac __core_defclass(name, params_, body) do
+            defmacro __core_defclass(name, params_, body) do
                 quote
                     def (!name)(!!params_) do self := {}; !body; self end
                 end
             end;
             #rule {defclass: [__core_defclass, EXPR, params, EXPRS, do, EXPR, end]}
 
-            defmac inherits(super) do
+            defmacro inherits(super) do
                 quote self = !super end
             end;
 
-            defmac __core_defmethod(name, params_, body) do
+            defmacro __core_defmethod(name, params_, body) do
                 Expr(Ident("assign"), [
                         Expr(Ident("dot"), [Ident("self"), str(name) ]),
                         quote func self, !!params_ do !body end end
@@ -909,12 +904,12 @@ class Interpreter:
             end;
             #rule {defmethod: [__core_defmethod, EXPR, params, EXPRS, do, EXPR, end]}
 
-            defmac __core_defmodule(name_expr, export_expr, body_expr) do
+            defmacro __core_defmodule(name_expr, export_expr, body_expr) do
                 quote def !name_expr do !body_expr; !export_expr end end
             end;
             #rule {defmodule: [__core_defmodule, EXPR, export, EXPR, do, EXPR, end]}
 
-            defmac __core_import(mod_expr, name_expr) do
+            defmacro __core_import(mod_expr, name_expr) do
                 quote !name_expr := (!mod_expr)() end
             end
             #rule {import: [__core_import, EXPR, as, EXPR, end]}
@@ -1074,10 +1069,10 @@ if __name__ == "__main__":
     print(walk(""" fact(0) """)) # -> 1
     print(walk(""" fact(3) """)) # -> 6
 
-    # Defmac
-    print("\nDefmac")
+    # Defmacro
+    print("\nDefmacro")
     walk("""
-        defmac mwhen(cond, body) do
+        defmacro mwhen(cond, body) do
             quote if !cond then !body else None end end
         end
     """)
@@ -1085,11 +1080,11 @@ if __name__ == "__main__":
     print(walk(""" mwhen(2 == 2, 3) """)) # -> 3
     print(walk(""" mwhen(2 == 3, 4 / 0) """)) # -> None
 
-    walk(""" defmac mzero() do quote 2 end end """)
+    walk(""" defmacro mzero() do quote 2 end end """)
     print(walk(""" mzero() """)) # -> 2
 
-    walk(""" defmac mzero_no_paren do quote 3 end end """)
+    walk(""" defmacro mzero_no_paren do quote 3 end end """)
     print(walk(""" mzero_no_paren() """)) # -> 3
 
     # walk(""" mwhen(2 == 2) """) # -> Argument mismatch
-    # walk(""" defmac 2 do 3 end """) # -> Invalid defmac syntax
+    # walk(""" defmacro 2 do 3 end """) # -> Invalid defmacro syntax
