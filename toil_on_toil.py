@@ -21,12 +21,12 @@ i.walk(r"""
 """)
 
 i.walk(r"""
-    defclass Scanner params src do
+    defcls Scanner(src) do
         self._src = src;
         self._pos = 0;
         self._tokens = [];
 
-        defmethod tokenize params do
+        defmeth tokenize do
             # print(src)
             while True do
                 while self._current_char().isspace() do self._advance() end;
@@ -55,7 +55,7 @@ i.walk(r"""
             self._tokens
         end;
 
-        defmethod _number params do
+        defmeth _number do
             start := self._pos;
             while self._current_char().isdigit() do
                 self._advance()
@@ -63,7 +63,7 @@ i.walk(r"""
             self._tokens.push(int(self._src.slice(start, self._pos)))
         end;
 
-        defmethod _raw_string params do
+        defmeth _raw_string do
             self._advance();
             start := self._pos;
             while (c := self._current_char()) != "'" do
@@ -74,7 +74,7 @@ i.walk(r"""
             self._advance()
         end;
 
-        defmethod _string params do
+        defmeth _string do
             self._advance();
             s := [];
             while (ch := self._current_char()) != '"' do
@@ -96,7 +96,7 @@ i.walk(r"""
             self._tokens.push(s.join(''))
         end;
 
-        defmethod _ident params do
+        defmeth _ident do
             start := self._pos;
             self._advance();
             while self._current_char().is_ident_rest() do
@@ -111,7 +111,7 @@ i.walk(r"""
             end
         end;
 
-        defmethod _two_char_operator params successors do
+        defmeth _two_char_operator(successors) do
             start := self._pos;
             self._advance();
             if self._current_char().in(successors) then
@@ -120,9 +120,9 @@ i.walk(r"""
             self._tokens.push(Ident(self._src.slice(start, self._pos)))
         end;
 
-        defmethod _advance params do self._pos = self._pos + 1 end;
+        defmeth _advance do self._pos = self._pos + 1 end;
 
-        defmethod _current_char params do
+        defmeth _current_char do
             if self._pos < self._src.len() then
                 self._src[self._pos]
             else
@@ -133,11 +133,11 @@ i.walk(r"""
 """)
 
 i.walk(r"""
-    defclass Parser params tokens do
+    defcls Parser(tokens) do
         self._tokens = tokens;
         self._pos = 0;
 
-        defmethod parse params do
+        defmeth parse do
             # print(self._tokens);
             expr := self._expression();
             if self._current() != Ident('$EOF') then
@@ -146,11 +146,11 @@ i.walk(r"""
             expr
         end;
 
-        defmethod _expression params do
+        defmeth _expression do
             self._sequence()
         end;
 
-        defmethod _sequence params do
+        defmeth _sequence do
             exprs := [self._define_assign()];
             while self._current() == Ident(';') do
                 self._current_and_advance();
@@ -159,13 +159,13 @@ i.walk(r"""
             if exprs.len() == 1 then exprs[0] else Expr(Ident('seq'), exprs) end
         end;
 
-        defmethod _define_assign params do
+        defmeth _define_assign do
             self._binary_right({
                 ':=': Ident('define'), '=': Ident('assign')
             }, self._arrow)
         end;
 
-        defmethod _arrow params do
+        defmeth _arrow do
             left := self._and_or();
             if self._current() == Ident('->') then
                 self._current_and_advance();
@@ -177,17 +177,17 @@ i.walk(r"""
             end
         end;
 
-        defmethod _and_or params do
+        defmeth _and_or do
             self._binary_right({
                 'and': Ident('and'), 'or': Ident('or')
             }, self._not)
         end;
 
-        defmethod _not params do
+        defmeth _not do
             self._unary({'not': Ident('not')}, self._comparison)
         end;
 
-        defmethod _comparison params do
+        defmeth _comparison do
             self._binary_left({
                 '==': Ident('equal'), '!=': Ident('not_equal'),
                 '<': Ident('less'), '>': Ident('greater'),
@@ -195,25 +195,25 @@ i.walk(r"""
             }, self._add_sub)
         end;
 
-        defmethod _add_sub params do
+        defmeth _add_sub do
             self._binary_left({
                 '+': Ident('add'), '-': Ident('sub')
             }, self._mul_div_mod)
         end;
 
-        defmethod _mul_div_mod params do
+        defmeth _mul_div_mod do
             self._binary_left({
                 '*': Ident('mul'), '/': Ident('div'), '%': Ident('mod')
             }, self._unaries)
         end;
 
-        defmethod _unaries params do
+        defmeth _unaries do
             self._unary({
                 '-': Ident('neg'), '+': Ident('+'), '*': Ident('*')
             }, self._call_index_dot)
         end;
 
-        defmethod _call_index_dot params do
+        defmeth _call_index_dot do
             target := self._primary();
             while (op := self._current()).in([Ident('('), Ident('['), Ident('.')]) do
                 if op == Ident('(') then
@@ -236,7 +236,7 @@ i.walk(r"""
             target
         end;
 
-        defmethod _primary params do
+        defmeth _primary do
             match self._current()
                 case None then self._current_and_advance()
                 case bool(_) or int(_) or str(_) then self._current_and_advance()
@@ -251,8 +251,6 @@ i.walk(r"""
                 case Ident('while') then self._while()
                 case Ident('for') then self._for()
                 case Ident('try') then self._try()
-                case Ident('defclass') then self._defclass()
-                case Ident('defmethod') then self._defmethod()
                 case Ident('defcls') then self._defcls()
                 case Ident('defmeth') then self._defmeth()
                 case Ident(name) then
@@ -265,21 +263,21 @@ i.walk(r"""
             end
         end;
 
-        defmethod _group params do
+        defmeth _group do
             self._current_and_advance();
             expr := self._expression();
             self._consume(Ident(')'));
             expr
         end;
 
-        defmethod _list params do
+        defmeth _list do
             self._current_and_advance();
             exprs := self._comma_separated_exprs(Ident(']'));
             self._consume(Ident(']'));
             exprs
         end;
 
-        defmethod _dict params do
+        defmeth _dict do
             def _parse_key_value(dic) do
                 match self._current()
                     case Ident('*') then
@@ -315,7 +313,7 @@ i.walk(r"""
             dic
         end;
 
-        defmethod _func params do
+        defmeth _func do
             self._current_and_advance();
             params := self._comma_separated_exprs(Ident('do'));
             self._consume(Ident('do'));
@@ -324,7 +322,7 @@ i.walk(r"""
             Expr(Ident('func'), [params, body_expr])
         end;
 
-        defmethod _def params do
+        defmeth _def do
             self._current_and_advance();
             call_expr := self._expression();
             self._consume(Ident('do'));
@@ -340,14 +338,14 @@ i.walk(r"""
             end
         end;
 
-        defmethod _scope params do
+        defmeth _scope do
             self._current_and_advance();
             body_expr := self._expression();
             self._consume(Ident('end'));
             Expr(Ident('scope'), [body_expr])
         end;
 
-        defmethod _if params do
+        defmeth _if do
             self._current_and_advance();
             cond_expr := self._expression();
             self._consume(Ident('then'));
@@ -366,7 +364,7 @@ i.walk(r"""
             Expr(Ident('if'), [cond_expr, then_expr, else_expr])
         end;
 
-        defmethod _match params do
+        defmeth _match do
             self._current_and_advance();
             val_expr := self._expression();
             cases := [];
@@ -381,7 +379,7 @@ i.walk(r"""
             Expr(Ident('match'), [val_expr, cases])
         end;
 
-        defmethod _while params do
+        defmeth _while do
             self._current_and_advance();
             cond_expr := self._expression();
             self._consume(Ident('do'));
@@ -398,7 +396,7 @@ i.walk(r"""
             Expr(Ident('while'), [cond_expr, body_expr, then_expr, else_expr])
         end;
 
-        defmethod _try params do
+        defmeth _try do
             self._current_and_advance();
             body_expr := self._expression();
             clauses := [];
@@ -413,7 +411,7 @@ i.walk(r"""
             Expr(Ident('try'), [body_expr, clauses])
         end;
 
-        defmethod _for params do
+        defmeth _for do
             self._current_and_advance();
             var_expr := self._expression();
             self._consume(Ident('in'));
@@ -432,44 +430,7 @@ i.walk(r"""
             Expr(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr])
         end;
 
-        defmethod _defclass params do
-            self._current_and_advance();
-            name := self._current_and_advance();
-            self._consume(Ident('params'));
-            params_ := self._comma_separated_exprs(Ident('do'));
-            self._consume(Ident('do'));
-            body_expr := self._expression();
-            self._consume(Ident('end'));
-
-            Expr(Ident('define'), [
-                name,
-                Expr(Ident('func'), [
-                    params_,
-                    Expr(Ident('seq'), [
-                        Expr(Ident('define'), [Ident('self'), {}]),
-                        body_expr,
-                        Ident('self')
-                    ])
-                ])
-            ])
-        end;
-
-        defmethod _defmethod params do
-            self._current_and_advance();
-            name := self._current_and_advance();
-            self._consume(Ident('params'));
-            params_ := self._comma_separated_exprs(Ident('do'));
-            self._consume(Ident('do'));
-            body_expr := self._expression();
-            self._consume(Ident('end'));
-
-            Expr(Ident('assign'), [
-                Expr(Ident('dot'), [Ident('self'), str(name)]),
-                Expr(Ident('func'), [[Ident('self')] + params_, body_expr])
-            ])
-        end;
-
-        defmethod _defcls params do
+        defmeth _defcls do
             self._current_and_advance();
             call_expr := self._expression();
             self._consume(Ident('do'));
@@ -506,7 +467,7 @@ i.walk(r"""
             end
         end;
 
-        defmethod _defmeth params do
+        defmeth _defmeth do
             self._current_and_advance();
             call_expr := self._expression();
             self._consume(Ident('do'));
@@ -529,7 +490,7 @@ i.walk(r"""
             end
         end;
 
-        defmethod _binary_left params ops, sub_elem do
+        defmeth _binary_left(ops, sub_elem) do
             left := sub_elem();
             while type(op := self._current()) == 'Ident' and str(op).in(ops) do
                 self._current_and_advance();
@@ -539,7 +500,7 @@ i.walk(r"""
             left
         end;
 
-        defmethod _binary_right params ops, sub_elem do
+        defmeth _binary_right(ops, sub_elem) do
             left := sub_elem();
             if type(op := self._current()) == 'Ident' and str(op).in(ops) then
                 self._current_and_advance();
@@ -550,7 +511,7 @@ i.walk(r"""
             end
         end;
 
-        defmethod _unary params ops, sub_elem do
+        defmeth _unary(ops, sub_elem) do
             if type(op := self._current()) == 'Ident' and str(op).in(ops) then
                 self._current_and_advance();
                 Expr(ops[str(op)], [self._unary(ops, sub_elem)])
@@ -559,7 +520,7 @@ i.walk(r"""
             end
         end;
 
-        defmethod _comma_separated_exprs params terminator do
+        defmeth _comma_separated_exprs(terminator) do
             cse := [];
             if self._current() != terminator then
                 cse.push(self._expression());
@@ -571,7 +532,7 @@ i.walk(r"""
             cse
         end;
 
-        defmethod _consume params expected do
+        defmeth _consume(expected) do
             if self._current() == expected then
                 self._current_and_advance()
             else
@@ -580,9 +541,9 @@ i.walk(r"""
             end
         end;
 
-        defmethod _current params do self._tokens[self._pos] end;
+        defmeth _current do self._tokens[self._pos] end;
 
-        defmethod _current_and_advance params do
+        defmeth _current_and_advance do
             self._pos = self._pos + 1;
             self._tokens[self._pos - 1]
         end
@@ -590,15 +551,15 @@ i.walk(r"""
 """)
 
 i.walk(r"""
-    defclass Environment params parent do
+    defcls Environment(parent) do
         self._parent = parent;
         self._vars = {};
 
-        defmethod define params name, val do
+        defmeth define(name, val) do
             self._vars[name] = val
         end;
 
-        defmethod lookup params name do
+        defmeth lookup(name) do
             if name.in(self._vars) then
                 self._vars
             elif self._parent != None then
@@ -608,13 +569,13 @@ i.walk(r"""
             end
         end;
 
-        defmethod val params name do
+        defmeth val(name) do
             vars := self.lookup(name);
             if vars == None then raise('Undefined variable @ val: ' + name) end;
             vars[name]
         end;
 
-        defmethod assign params name, val do
+        defmeth assign(name, val) do
             vars := self.lookup(name);
             if vars == None then raise('Undefined variable @ assign: ' + name) end;
             vars[name] = val
@@ -623,8 +584,8 @@ i.walk(r"""
 """)
 
 i.walk(r"""
-    defclass Evaluator params do
-        defmethod eval params expr, env do
+    defcls Evaluator do
+        defmeth eval(expr, env) do
             # print(expr);
             match expr
                 case None then expr
@@ -674,11 +635,11 @@ i.walk(r"""
             end
         end;
 
-        defmethod _eval_optional_arg params args, env do
+        defmeth _eval_optional_arg(args, env) do
             if args.len() == 0 then None else self.eval(args[0], env) end
         end;
 
-        defmethod _dot params target_expr, attr_name, env do
+        defmeth _dot(target_expr, attr_name, env) do
             target_val := self.eval(target_expr, env);
             if target_val.type() == 'dict' and attr_name.in(target_val) then
                 attr_val := target_val[attr_name];
@@ -698,7 +659,7 @@ i.walk(r"""
             end
         end;
 
-        defmethod _define params left_expr, right_expr, env do
+        defmeth _define(left_expr, right_expr, env) do
             right_val := self.eval(right_expr, env);
             match left_expr
                 case Ident(name) then
@@ -726,7 +687,7 @@ i.walk(r"""
             end
         end;
 
-        defmethod _assign params left_expr, right_expr, env do
+        defmeth _assign(left_expr, right_expr, env) do
             def _set_val(coll_expr, index_expr, right_val) do
                 coll_val := self.eval(coll_expr, env);
                 index_val := self.eval(index_expr, env);
@@ -768,13 +729,13 @@ i.walk(r"""
             end
         end;
 
-        defmethod _seq params exprs, env do
+        defmeth _seq(exprs, env) do
             for expr in exprs do
                 val := self.eval(expr, env)
             then val end
         end;
 
-        defmethod _if params cond_expr, then_expr, else_expr, env do
+        defmeth _if(cond_expr, then_expr, else_expr, env) do
             if self.eval(cond_expr, env) then
                 self.eval(then_expr, env)
             else
@@ -782,7 +743,7 @@ i.walk(r"""
             end
         end;
 
-        defmethod _match params val_expr, cases, env do
+        defmeth _match(val_expr, cases, env) do
             val := self.eval(val_expr, env);
             for Expr(pattern, body_expr) in cases do
                 if self._match_pattern(pattern, val, env) then
@@ -792,7 +753,7 @@ i.walk(r"""
             None
         end;
 
-        defmethod _while params cond_expr, body_expr, then_expr, else_expr, env do
+        defmeth _while(cond_expr, body_expr, then_expr, else_expr, env) do
             while self.eval(cond_expr, env) do
                 try
                     self.eval(body_expr, env)
@@ -806,8 +767,8 @@ i.walk(r"""
             end
         end;
 
-        defmethod _for params
-            var_expr, coll_expr, body_expr, then_expr, else_expr, env
+        defmeth _for(
+            var_expr, coll_expr, body_expr, then_expr, else_expr, env)
         do
             coll_val := self.eval(coll_expr, env);
             for val in coll_val do
@@ -826,7 +787,7 @@ i.walk(r"""
             end
         end;
 
-        defmethod _try params body_expr, clauses, env do
+        defmeth _try(body_expr, clauses, env) do
             try
                 self.eval(body_expr, env)
             except e then
@@ -845,13 +806,13 @@ i.walk(r"""
             end
         end;
 
-        defmethod _op params op_expr, args_expr, env do
+        defmeth _op(op_expr, args_expr, env) do
             op_val := self.eval(op_expr, env);
             args_val := args_expr.map(arg -> self.eval(arg, env));
             self.apply(op_val, args_val)
         end;
 
-        defmethod apply params op_val, args_val do
+        defmeth apply(op_val, args_val) do
             match op_val
                 case Expr(Ident('hostfunc'), f) then f(args_val)
                 case Expr(Ident('closure'), [params_, body_expr, closure_env, fallback]) then
@@ -871,7 +832,7 @@ i.walk(r"""
             end
         end;
 
-        defmethod _match_pattern params pattern, value, env do
+        defmeth _match_pattern(pattern, value, env) do
             def _match_list do
                 i := 0; lpat := pattern.len(); lval := value.len();
 
@@ -957,16 +918,16 @@ i.walk(r"""
 """)
 
 i.walk(r"""
-    defclass Interpreter params do
+    defcls Interpreter do
         self._env = Environment(None);
 
-        defmethod init_env params do
+        defmeth init_env do
             self._env = Environment(None);
             self._builtins();
             self
         end;
 
-        defmethod _builtins params do
+        defmeth _builtins do
             self._env.define('__builtins', None);
 
             self._env.define('add', Expr(Ident('hostfunc'), args -> args[0] + args[1]));
@@ -1024,7 +985,7 @@ i.walk(r"""
             ))
         end;
 
-        defmethod stdlib params do
+        defmeth stdlib do
             self.walk('
                 def first(a) do a[0] end;
                 def rest(a) do slice(a, 1, None) end;
@@ -1085,18 +1046,18 @@ i.walk(r"""
             self
         end;
 
-        defmethod _load params path do
+        defmeth _load(path) do
             src := read(path);
             module_env := Environment(self._env);
             expr := self.ast(src);
             Evaluator().eval(expr, module_env)
         end;
 
-        defmethod scan params src do Scanner(src).tokenize() end;
-        defmethod parse params tokens do Parser(tokens).parse() end;
-        defmethod ast params src do Parser(self.scan(src)).parse() end;
-        defmethod eval params ast do Evaluator().eval(ast, self._env) end;
-        defmethod walk params src do
+        defmeth scan(src) do Scanner(src).tokenize() end;
+        defmeth parse(tokens) do Parser(tokens).parse() end;
+        defmeth ast(src) do Parser(self.scan(src)).parse() end;
+        defmeth eval(ast) do Evaluator().eval(ast, self._env) end;
+        defmeth walk(src) do
             try
                 self.eval(self.ast(src))
             except ['ReturnException', val] then

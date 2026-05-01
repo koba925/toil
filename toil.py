@@ -885,24 +885,9 @@ class Interpreter:
 
             # Object oriented notations
 
-            defmacro __core_defclass(name, params_, body) do
-                quote
-                    def (!name)(!!params_) do self := {}; !body; self end
-                end
-            end;
-            #rule {defclass: [__core_defclass, EXPR, params, EXPRS, do, EXPR, end]}
-
             defmacro inherits(super) do
                 quote self = !super end
             end;
-
-            defmacro __core_defmethod(name, params_, body) do
-                Expr(Ident("assign"), [
-                        Expr(Ident("dot"), [Ident("self"), str(name) ]),
-                        quote func self, !!params_ do !body end end
-                ])
-            end;
-            #rule {defmethod: [__core_defmethod, EXPR, params, EXPRS, do, EXPR, end]}
 
             defmacro __core_defcls(call_expr, body) do
                 match call_expr
