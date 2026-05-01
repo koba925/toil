@@ -1,8 +1,8 @@
-deffunc gcd_recur params a, b do
+def gcd_recur(a, b) do
     if a == 0 then b else gcd_recur(b % a, a) end
 end;
 
-deffunc gcd_iter params a, b do
+def gcd_iter(a, b) do
     while a != 0 do [a, b] := [b % a, a] end;
     b
 end;

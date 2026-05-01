@@ -134,27 +134,6 @@ class TestParse(TestBase):
         with pytest.raises(AssertionError):
             self.i.ast(""" func a do 2 """)
 
-    def test_deffunc(self):
-        assert self.i.walk(""" expand(deffunc two params do 2 end) """) == (
-            Ident('define'), [Ident('two'), (Ident('__core_func'), [[], 2])])
-        assert self.i.walk(""" expand(
-             deffunc add2 params a do
-                a + 2
-             end
-        )""") == (Ident('define'), [Ident('add2'), (Ident('__core_func'), [[Ident('a')], (Ident('add'), [Ident('a'), 2])])])
-        assert self.i.walk(""" expand(
-            deffunc sum params a, b, c do
-                a + b + c
-            end
-        ) """) == (Ident('define'), [Ident('sum'), (Ident('__core_func'), [[Ident('a'), Ident('b'), Ident('c')], (Ident('add'), [(Ident('add'), [Ident('a'), Ident('b')]), Ident('c')])])])
-
-        with pytest.raises(AssertionError):
-            self.i.walk(""" deffunc add2 a do a + 2 end """)
-        with pytest.raises(AssertionError):
-            self.i.walk(""" deffunc add2 params a a + 2 end """)
-        with pytest.raises(AssertionError):
-            self.i.walk(""" deffunc 2 params do 3 end """)
-
     def test_no_token(self):
         with pytest.raises(AssertionError):
             self.i.ast("""  """)
@@ -720,17 +699,17 @@ class TestGo(TestBase):
         assert self.i.walk(""" func a do a + 2 end (3) """) == 5
         assert self.i.walk(""" func a, b do a + b end (2, 3) """) == 5
 
-    def test_deffunc(self):
-        self.i.walk(""" deffunc two params do 2 end """)
+    def test_def_usage(self):
+        self.i.walk(""" def two do 2 end """)
         assert self.i.walk(""" two() """) == 2
-        self.i.walk(""" deffunc add2 params a do a + 2 end """)
+        self.i.walk(""" def add2(a) do a + 2 end """)
         assert self.i.walk(""" add2(3) """) == 5
-        self.i.walk(""" deffunc sum params a, b, c do a + b + c end """)
+        self.i.walk(""" def sum(a, b, c) do a + b + c end """)
         assert self.i.walk(""" sum(2, 3, 4) """) == 9
 
     def test_fac(self):
         assert self.i.walk("""
-            deffunc fac params n do
+            def fac(n) do
                 if n == 1 then 1 else n * fac(n - 1) end
             end;
             fac(5)
@@ -738,7 +717,7 @@ class TestGo(TestBase):
 
     def test_fib(self):
         self.i.walk("""
-            deffunc fib params n do
+            def fib(n) do
                 if n == 0 then 0
                 elif n == 1 then 1
                 else fib(n - 1) + fib(n - 2)
@@ -752,7 +731,7 @@ class TestGo(TestBase):
 
     def test_gcd_recursive(self):
         assert self.i.walk("""
-            deffunc gcd params a, b do
+            def gcd(a, b) do
                 if a == 0 then b else gcd(b % a, a) end
             end;
             gcd(24, 36)
@@ -760,15 +739,15 @@ class TestGo(TestBase):
 
     def test_mutual_recursion(self):
         self.i.walk("""
-            deffunc is_even params n do if n == 0 then True else is_odd(n - 1) end end;
-            deffunc is_odd params n do if n == 0 then False else is_even(n - 1) end end
+            def is_even(n) do if n == 0 then True else is_odd(n - 1) end end;
+            def is_odd(n) do if n == 0 then False else is_even(n - 1) end end
         """)
         assert self.i.walk(""" is_even(10) """) is True
         assert self.i.walk(""" is_odd(10) """) is False
 
     def test_gcd_iterative(self):
         assert self.i.walk("""
-            deffunc gcd params a, b do
+            def gcd(a, b) do
                 while a != 0 do
                     [a, b] := [b % a, a]
                 end;
@@ -987,15 +966,15 @@ text
         assert self.i.walk(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """) == [5, 6]
 
     def test_argument_destructuring(self, capsys):
-        self.i.walk(""" deffunc f params a, [b, c] do [a, b, c] end """)
+        self.i.walk(""" def f(a, [b, c]) do [a, b, c] end """)
         assert self.i.walk(""" f(2, [3, 4]) """) == [2, 3, 4]
 
-        self.i.walk(""" deffunc g params *a do a end""")
+        self.i.walk(""" def g(*a) do a end""")
         assert self.i.walk(""" g() """) == []
         assert self.i.walk(""" g(2 + 3) """) == [5]
         assert self.i.walk(""" g(2, 3, 4) """) == [2, 3, 4]
 
-        self.i.walk(""" deffunc h params a, *b do [a, b] end """)
+        self.i.walk(""" def h(a, *b) do [a, b] end """)
         assert self.i.walk(""" h(2 + 3) """) == [5, []]
         assert self.i.walk(""" h(2, 3, 4) """) == [2, [3, 4]]
         with pytest.raises(AssertionError, match="Argument mismatch"):
@@ -1003,7 +982,7 @@ text
 
         assert self.i.walk(r""" func {a: d, *rest}, e do [d, e, rest] end ({a: 2, b: 3, c: 4}, 5) """) == [2, 5, {'b': 3, 'c': 4}]
 
-        self.i.walk(r""" deffunc foo params int(a), str(b) do [a, b] end """)
+        self.i.walk(r""" def foo(int(a), str(b)) do [a, b] end """)
         assert self.i.walk(r""" foo(2, "a") """) == [2, "a"]
 
         with pytest.raises(AssertionError, match="Argument mismatch"):
@@ -1164,7 +1143,7 @@ text
 
     def test_return(self):
         self.i.walk("""
-            deffunc f params a do
+            def f(a) do
                 if a == 2 then return(3) end;
                 4
             end
@@ -1173,7 +1152,7 @@ text
         assert self.i.walk(""" f(3) """) == 4
 
         self.i.walk("""
-            deffunc fib params n do
+            def fib(n) do
                 if n == 0 then return(0) end;
                 if n == 1 then return(1) end;
                 fib(n - 1) + fib(n - 2)
@@ -1338,7 +1317,7 @@ text
 
     def test_oo_style(self, capsys):
         self.i.walk("""
-            deffunc Animal params name do
+            def Animal(name) do
                 self := {};
                 self._name = name;
                 self.introduce = func self do print("I'm", self._name) end;
@@ -1357,7 +1336,7 @@ text
         assert capsys.readouterr().out == "I'm Rocky\ncrying\nI'm Lucy\ncrying\n"
 
         self.i.walk("""
-            deffunc Dog params name do
+            def Dog(name) do
                 self := Animal(name);
                 self.make_sound = func self do print("woof") end;
                 self
@@ -1374,7 +1353,7 @@ text
         self.i.walk(r"""
             defmacro _defclass params name, params_, body do
                 quote
-                    deffunc !name params !!params_ do
+                    def (!name)(!!params_) do
                         self := {};
                         !body;
                         self
@@ -1430,12 +1409,12 @@ text
         """)
         assert capsys.readouterr().out == "I'm Leo\nwoof\n"
 
-    def test_overload_deffunc(self, capsys):
+    def test_overload_def(self, capsys):
         self.i.walk("""
-            deffunc foo params x do print("Not supported: " + str(x))  end;
-            deffunc foo params {kind: "Person", name: str(name)} do print("Person: " + name) end;
-            deffunc foo params str(s) do print("string: " + s) end;
-            deffunc foo params int(n) do print("int: " + str(n)) end
+            def foo(x) do print("Not supported: " + str(x))  end;
+            def foo({kind: "Person", name: str(name)}) do print("Person: " + name) end;
+            def foo(str(s)) do print("string: " + s) end;
+            def foo(int(n)) do print("int: " + str(n)) end
         """)
         self.i.walk(""" foo(2) """)
         assert capsys.readouterr().out == "int: 2\n"
@@ -1489,7 +1468,7 @@ text
 
     def test_test_framework(self, capsys):
         self.i.walk("""
-            deffunc Test params name do
+            def Test(name) do
                 self := { name, failed: 0 };
                 self.assert = func self, cond, msg do
                     if not cond then
@@ -1594,10 +1573,10 @@ text
 
         # Poor man's syntax sugar
         assert self.i.walk("""
-            deffunc mydeffunc params name, params_, body do
-                eval("deffunc " + name + " params " + params_ + " do " + body + " end")
+            def mydef(name, params_, body) do
+                eval("def " + name + "(" + params_ + ") do " + body + " end")
             end;
-            mydeffunc("myadd", "a, b", "a + b");
+            mydef("myadd", "a, b", "a + b");
             myadd(2, 3)
         """) == 5
 
@@ -1697,7 +1676,7 @@ text
         # Basic macro (when) vs function (fwhen)
         self.i.walk("""
             defmacro when params cond, body do Expr(Ident("__core_if"), [cond, body, None]) end;
-            deffunc fwhen params cond, body do if cond then body else None end end
+            def fwhen(cond, body) do if cond then body else None end end
         """)
         assert self.i.walk(""" expand(when(2 == 2, 3)) """) == (Ident("__core_if"), [(Ident("equal"), [2, 2]), 3, None])
         assert self.i.walk(""" when(2 == 2, 3) """) == 3
@@ -1742,7 +1721,7 @@ text
 
         # Side effect in macro argument
         self.i.walk("""
-            deffunc ftwice params x do x + x end;
+            def ftwice(x) do x + x end;
             defmacro mtwice params x do Expr(Ident("add"), [x, x]) end
         """)
         self.i.walk(""" cnt := 0 """)
@@ -1867,7 +1846,7 @@ class TestMacroSamples(TestBase):
 
     def test_side_effect_macro(self):
         self.i.walk("""
-            deffunc ftwice params x do x + x end;
+            def ftwice(x) do x + x end;
             mtwice := macro x do quote add(!x, !x) end end
         """)
         self.i.walk(""" cnt := 0 """)
@@ -2157,8 +2136,8 @@ class TestCustomSyntax(TestBase):
                 public_val := 2;
                 _private_val := 3;
 
-                deffunc public_func params a do a + 2 end;
-                deffunc _private_func params a do a end
+                def public_func(a) do a + 2 end;
+                def _private_func(a) do a end
             end
         """)
 
@@ -2193,10 +2172,10 @@ class TestCustomSyntax(TestBase):
 
         self.i.walk("""
             defmodule GCD export {recur, iter} do
-                deffunc recur params a, b do
+                def recur(a, b) do
                     if a == 0 then b else recur(b % a, a) end
                 end;
-                deffunc iter params a, b do
+                def iter(a, b) do
                     while a != 0 do [a, b] := [b % a, a] end;
                     b
                 end

@@ -8,16 +8,16 @@ from toil import Interpreter
 i = Interpreter().init_env().stdlib()
 
 i.walk(r"""
-    deffunc isalpha params c do
+    def isalpha(c) do
        type(c) == 'str' and ('a' <= c and c <= 'z') or ('A' <= c and c <= 'Z')
     end;
-    deffunc isdigit params c do type(c) == 'str' and '0' <= c and c <= '9' end;
-    deffunc isalnum params c do isalpha(c) or isdigit(c) end;
-    deffunc isspace params c do c == ' ' or c == "\n" end;
+    def isdigit(c) do type(c) == 'str' and '0' <= c and c <= '9' end;
+    def isalnum(c) do isalpha(c) or isdigit(c) end;
+    def isspace(c) do c == ' ' or c == "\n" end;
 
-    deffunc is_ident_first params c do isalpha(c) or c == '_' end;
-    deffunc is_ident_rest params c do isalnum(c) or c == '_' end;
-    deffunc is_ident params s do is_ident_first(s[0]) end
+    def is_ident_first(c) do isalpha(c) or c == '_' end;
+    def is_ident_rest(c) do isalnum(c) or c == '_' end;
+    def is_ident(s) do is_ident_first(s[0]) end
 """)
 
 i.walk(r"""
@@ -244,7 +244,6 @@ i.walk(r"""
                 case Ident('[') then self._list()
                 case Ident('{') then self._dict()
                 case Ident('func') then self._func()
-                case Ident('deffunc') then self._deffunc()
                 case Ident('def') then self._def()
                 case Ident('scope') then self._scope()
                 case Ident('if') then self._if()
@@ -279,7 +278,7 @@ i.walk(r"""
         end;
 
         defmethod _dict params do
-            deffunc _parse_key_value params dic do
+            def _parse_key_value(dic) do
                 match self._current()
                     case Ident('*') then
                         self._current_and_advance();
@@ -321,17 +320,6 @@ i.walk(r"""
             body_expr := self._expression();
             self._consume(Ident('end'));
             Expr(Ident('func'), [params, body_expr])
-        end;
-
-        defmethod _deffunc params do
-            self._current_and_advance();
-            name := self._current_and_advance();
-            self._consume(Ident('params'));
-            params := self._comma_separated_exprs(Ident('do'));
-            self._consume(Ident('do'));
-            body_expr := self._expression();
-            self._consume(Ident('end'));
-            Expr(Ident('define'), [name, Expr(Ident('func'), [params, body_expr])])
         end;
 
         defmethod _def params do
@@ -677,7 +665,7 @@ i.walk(r"""
         end;
 
         defmethod _assign params left_expr, right_expr, env do
-            deffunc _set_val params coll_expr, index_expr, right_val do
+            def _set_val(coll_expr, index_expr, right_val) do
                 coll_val := self.eval(coll_expr, env);
                 index_val := self.eval(index_expr, env);
                 if type(coll_val) == 'dict' and type(index_val) == 'str' then
@@ -822,7 +810,7 @@ i.walk(r"""
         end;
 
         defmethod _match_pattern params pattern, value, env do
-            deffunc _match_list params do
+            def _match_list do
                 i := 0; lpat := pattern.len(); lval := value.len();
 
                 no_star := True;
@@ -861,7 +849,7 @@ i.walk(r"""
                 True
             end;
 
-            deffunc _match_dict params do
+            def _match_dict do
                 tmp_pat := pattern.copy(); rest_name := None; tmp_val := value.copy();
                 if '*'.in(pattern) then
                     tmp_pat.pop('*');
@@ -976,29 +964,29 @@ i.walk(r"""
 
         defmethod stdlib params do
             self.walk('
-                deffunc first params a do a[0] end;
-                deffunc rest params a do slice(a, 1, None) end;
-                deffunc last params a do a[-1] end;
+                def first(a) do a[0] end;
+                def rest(a) do slice(a, 1, None) end;
+                def last(a) do a[-1] end;
 
-                deffunc range params start, stop, step do
+                def range(start, stop, step) do
                     b := [];
                     i := start; while i < stop do push(b, i); i = i + step end;
                     b
                 end;
 
-                deffunc map params a, f do
+                def map(a, f) do
                     b := [];
                     for x in a do push(b, f(x)) end;
                     b
                 end;
 
-                deffunc filter params a, f do
+                def filter(a, f) do
                     b := [];
                     for x in a do if f(x) then push(b, x) end end;
                     b
                 end;
 
-                deffunc zip params a, b do
+                def zip(a, b) do
                     z := []; la := len(a); lb := len(b);
                     i := 0; while i < la and i < lb do
                         push(z, [a[i], b[i]]); i = i + 1
@@ -1006,27 +994,27 @@ i.walk(r"""
                     z
                 end;
 
-                deffunc reduce params a, f, init do
+                def reduce(a, f, init) do
                     acc := init;
                     for x in a do acc = f(acc, x) end;
                     acc
                 end;
 
-                deffunc reverse params a do
+                def reverse(a) do
                     b := []; l := len(a);
                     for i in range(1, l + 1, 1) do push(b, a[l - i]) end;
                     b
                 end;
 
-                deffunc enumerate params a do
+                def enumerate(a) do
                     zip(range(0, len(a), 1), a)
                 end;
 
-                deffunc all params a, f do
+                def all(a, f) do
                     for x in a do if not f(x) then return(False) end end; True
                 end;
 
-                deffunc any params a, f do
+                def any(a, f) do
                     for x in a do if f(x) then return(True) end end; False
                 end
             ');

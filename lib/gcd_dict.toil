@@ -1,8 +1,8 @@
-deffunc recur params a, b do
+def recur(a, b) do
     if a == 0 then b else recur(b % a, a) end
 end;
 
-deffunc iter params a, b do
+def iter(a, b) do
     while a != 0 do [a, b] := [b % a, a] end;
     b
 end;

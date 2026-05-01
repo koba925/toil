@@ -409,7 +409,7 @@ class TestToT(TestBase):
         assert self.walk(r""" [2, 3, 4].len() """) == 3
         assert self.walk(r""" [2, 3, 4].len().add(5) """) == 8
 
-        self.walk(r""" deffunc myadd params a, b do a + b end """)
+        self.walk(r""" def myadd(a, b) do a + b end """)
         assert self.walk(r""" 2.myadd(3) """) == 5
 
         with pytest.raises(AssertionError, match="Undefined variable"):
@@ -589,10 +589,10 @@ class TestToT(TestBase):
         assert self.walk(r""" func a, *rest do [a, rest] end (2, 3, 4) """) == [2, [3, 4]]
         assert self.walk(r""" func {a: d, *rest}, e do [d, e, rest] end ({a: 2, b: 3, c: 4}, 5) """) == [2, 5, {'b': 3, 'c': 4}]
 
-        assert self.walk(r""" deffunc foo params int(a), str(b) do [a, b] end; foo(2, "a") """) == [2, "a"]
+        assert self.walk(r""" def foo(int(a), str(b)) do [a, b] end; foo(2, "a") """) == [2, "a"]
 
         with pytest.raises(Exception, match="Pattern mismatch"):
-            self.walk(r""" deffunc bar params int(a), str(b) do [a, b] end; bar(2, 3) """)
+            self.walk(r""" def bar(int(a), str(b)) do [a, b] end; bar(2, 3) """)
         with pytest.raises(Exception, match="Pattern mismatch"):
             self.walk(r""" func a, b do [a, b] end (2) """)
         with pytest.raises(Exception, match="Pattern mismatch"):
@@ -604,7 +604,7 @@ class TestToT(TestBase):
 
     def test_return(self):
         self.walk("""
-            deffunc f params a do
+            def f(a) do
                 if a == 2 then return(3) end;
                 4
             end
@@ -613,7 +613,7 @@ class TestToT(TestBase):
         assert self.walk(""" f(3) """) == 4
 
         self.walk("""
-            deffunc fib params n do
+            def fib(n) do
                 if n == 0 then return(0) end;
                 if n == 1 then return(1) end;
                 fib(n - 1) + fib(n - 2)
@@ -628,16 +628,12 @@ class TestToT(TestBase):
         with pytest.raises(Exception):
             self.walk(""" return() """)
 
-    def test_deffunc(self):
-        self.walk(r""" deffunc myadd params a, b do a + b end """)
-        assert self.walk(r""" myadd(2, 3) """) == 5
-
-    def test_overload_deffunc(self, capsys):
+    def test_overload_def(self, capsys):
         self.walk("""
-            deffunc foo params x do print("Not supported: " + str(x))  end;
-            deffunc foo params {kind: "Person", name: str(name)} do print("Person: " + name) end;
-            deffunc foo params str(s) do print("string: " + s) end;
-            deffunc foo params int(n) do print("int: " + str(n)) end
+            def foo(x) do print("Not supported: " + str(x))  end;
+            def foo({kind: "Person", name: str(name)}) do print("Person: " + name) end;
+            def foo(str(s)) do print("string: " + s) end;
+            def foo(int(n)) do print("int: " + str(n)) end
         """)
         self.walk(""" foo(2) """)
         assert capsys.readouterr().out == "int: 2\n"
@@ -1152,7 +1148,7 @@ class TestToT(TestBase):
 class TestExamples(TestBase):
     def test_recursion_gcd(self):
         self.walk("""
-            deffunc gcd params a, b do
+            def gcd(a, b) do
                 if b == 0 then a else gcd(b, a % b) end
             end
         """)
@@ -1160,7 +1156,7 @@ class TestExamples(TestBase):
 
     def test_iteration_gcd(self):
         self.walk("""
-            deffunc gcd params a, b do
+            def gcd(a, b) do
                 while b > 0 do
                     tmp := b; b = a % b; a = tmp
                 end;
@@ -1171,7 +1167,7 @@ class TestExamples(TestBase):
 
     def test_recursion_fac(self):
         self.walk("""
-            deffunc fac params n do
+            def fac(n) do
                 if n == 0 then 1 else n * fac(n - 1) end
             end
         """)
@@ -1181,7 +1177,7 @@ class TestExamples(TestBase):
 
     def test_iteration_fac(self):
         self.walk("""
-            deffunc fac params n do
+            def fac(n) do
                 result := 1;
                 for n in range(1, n + 1, 1) do
                     result = result * n
@@ -1195,7 +1191,7 @@ class TestExamples(TestBase):
 
     def test_recursion_fib(self):
         self.walk("""
-            deffunc fib params n do
+            def fib(n) do
                 if n == 0 then 0
                 elif n == 1 then 1
                 else fib(n - 1) + fib(n - 2)
@@ -1208,7 +1204,7 @@ class TestExamples(TestBase):
 
     def test_iteration_fib(self):
         self.walk("""
-            deffunc fib params n do
+            def fib(n) do
                 a := 0; b := 1;
                 for n in range(0, n, 1) do
                     tmp := b; b = a + b; a = tmp
@@ -1222,8 +1218,8 @@ class TestExamples(TestBase):
 
     def test_mutual_recursion(self):
         self.walk("""
-            deffunc even params n do if n == 0 then True else odd(n - 1) end end;
-            deffunc odd params n do if n == 0 then False else even(n - 1) end end
+            def even(n) do if n == 0 then True else odd(n - 1) end end;
+            def odd(n) do if n == 0 then False else even(n - 1) end end
         """)
         assert self.walk("even(2)") is True
         assert self.walk("even(3)") is False
@@ -1247,7 +1243,7 @@ class TestExamples(TestBase):
 
     def test_bubblesort(self):
         assert self.walk("""
-            deffunc bubblesort params a do
+            def bubblesort(a) do
                 n := len(a);
                 for i in range(0, n, 1) do
                     for j in range(0, n - i - 1, 1) do
@@ -1264,7 +1260,7 @@ class TestExamples(TestBase):
 
     def test_quicksort(self):
         assert self.walk("""
-            deffunc quicksort params a do
+            def quicksort(a) do
                 if len(a) <= 1 then a else
                     pivot := first(a); rem := rest(a);
                     left := rem.filter(x -> x < pivot);
@@ -1278,7 +1274,7 @@ class TestExamples(TestBase):
 
     def test_sieve(self):
         assert self.walk("""
-            deffunc sieve params n do
+            def sieve(n) do
                 s := [False, False] + [True] * (n - 2);
                 i := 2; while i * i < n do
                     if s[i] then
@@ -1295,7 +1291,7 @@ class TestExamples(TestBase):
 
     def test_poor_mans_object(self, capsys):
         self.walk("""
-            deffunc Animal params name do
+            def Animal(name) do
                 self := {};
                 self._name = name;
                 self.introduce = func self do print("I am", self._name) end;
@@ -1314,7 +1310,7 @@ class TestExamples(TestBase):
         assert capsys.readouterr().out == "I am Rocky\ncrying\nI am Lucy\ncrying\n"
 
         self.walk("""
-            deffunc Dog params name do
+            def Dog(name) do
                 self := Animal(name);
                 self.make_sound = func self do print("woof") end;
                 self

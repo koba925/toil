@@ -1,4 +1,4 @@
-deffunc fib params n do
+def fib(n) do
     if n == 0 then 0
     elif n == 1 then 1
     else fib(n - 1) + fib(n - 2)

@@ -814,11 +814,6 @@ class Interpreter:
             __core_quotes := macro expr do quote quote scope !expr end end end end;
             #rule {quotes: [__core_quotes, EXPR, end]}
 
-            __core_deffunc := macro name, params_, body do
-                quote !name := func !!params_ do !body end end
-            end;
-            #rule {deffunc: [__core_deffunc, EXPR, params, EXPRS, do, EXPR, end]}
-
             __core_def := macro call_expr, body do
                 match call_expr
                     case Expr(name, args) then
@@ -885,11 +880,7 @@ class Interpreter:
 
             defmacro __core_defclass params name, params_, body do
                 quote
-                    deffunc !name params !!params_ do
-                        self := {};
-                        !body;
-                        self
-                    end
+                    def (!name)(!!params_) do self := {}; !body; self end
                 end
             end;
             #rule {defclass: [__core_defclass, EXPR, params, EXPRS, do, EXPR, end]}
@@ -900,16 +891,14 @@ class Interpreter:
 
             defmacro __core_defmethod params name, params_, body do
                 Expr(Ident("assign"), [
-                        Expr(Ident("dot"),
-                        [Ident("self"), str(name)
-                    ]),
-                    quote func self, !!params_ do !body end end
+                        Expr(Ident("dot"), [Ident("self"), str(name) ]),
+                        quote func self, !!params_ do !body end end
                 ])
             end;
             #rule {defmethod: [__core_defmethod, EXPR, params, EXPRS, do, EXPR, end]}
 
             defmacro __core_defmodule params name_expr, export_expr, body_expr do
-                quote deffunc !name_expr params do !body_expr; !export_expr end end
+                quote def !name_expr do !body_expr; !export_expr end end
             end;
             #rule {defmodule: [__core_defmodule, EXPR, export, EXPR, do, EXPR, end]}
 
@@ -926,11 +915,11 @@ class Interpreter:
         self.walk("""
             __stdlib := None;
 
-            deffunc first params a do a[0] end;
-            deffunc rest params a do slice(a, 1, None) end;
-            deffunc last params a do a[-1] end;
+            def first(a) do a[0] end;
+            def rest(a) do slice(a, 1, None) end;
+            def last(a) do a[-1] end;
 
-            deffunc map params a, f do
+            def map(a, f) do
                 b := []; l := len(a);
                 i := 0; while i < l do
                     push(b, f(a[i]));
@@ -939,7 +928,7 @@ class Interpreter:
                 b
             end;
 
-            deffunc filter params a, f do
+            def filter(a, f) do
                 b := []; l := len(a);
                 i := 0; while i < l do
                     if f(a[i]) then push(b, a[i]) end;
@@ -948,7 +937,7 @@ class Interpreter:
                 b
             end;
 
-            deffunc zip params a, b do
+            def zip(a, b) do
                 z := []; la := len(a); lb := len(b);
                 i := 0; while i < la and i < lb do
                     push(z, [a[i], b[i]]);
@@ -957,7 +946,7 @@ class Interpreter:
                 z
             end;
 
-            deffunc reduce params a, f, init do
+            def reduce(a, f, init) do
                 acc := init; l := len(a);
                 i := 0; while i < l do
                     acc = f(acc, a[i]);
@@ -966,7 +955,7 @@ class Interpreter:
                 acc
             end;
 
-            deffunc reverse params a do
+            def reverse(a) do
                 b := []; i := len(a) - 1;
                 while i >= 0 do
                     push(b, a[i]);
@@ -975,7 +964,7 @@ class Interpreter:
                 b
             end;
 
-            deffunc range params start, stop, step do
+            def range(start, stop, step) do
                 b := [];
                 i := start; while i < stop do
                     push(b, i);
@@ -984,15 +973,15 @@ class Interpreter:
                 b
             end;
 
-            deffunc enumerate params a do
+            def enumerate(a) do
                 zip(range(0, len(a), 1), a)
             end;
 
-            deffunc all params a, f do
+            def all(a, f) do
                 for x in a do if not f(x) then return(False) end end; True
             end;
 
-            deffunc any params a, f do
+            def any(a, f) do
                 for x in a do if f(x) then return(True) end end; False
             end
             """)
