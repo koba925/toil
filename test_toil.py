@@ -1351,7 +1351,7 @@ text
 
     def test_oo_style_with_macro(self, capsys):
         self.i.walk(r"""
-            defmacro _defclass params name, params_, body do
+            defmac _defclass(name, params_, body) do
                 quote
                     def (!name)(!!params_) do
                         self := {};
@@ -1362,11 +1362,11 @@ text
             end;
             #rule {defclass: [_defclass, EXPR, params, EXPRS, do, EXPR, end]}
 
-            defmacro inherits params super do
+            defmac inherits(super) do
                 quote self = !super end
             end;
 
-            defmacro _defmethod params name, params_, body do
+            defmac _defmethod(name, params_, body) do
                 Expr(Ident("assign"), [
                         Expr(Ident("dot"),
                         [Ident("self"), str(name)
@@ -1675,7 +1675,7 @@ text
     def test_macro(self, capsys):
         # Basic macro (when) vs function (fwhen)
         self.i.walk("""
-            defmacro when params cond, body do Expr(Ident("__core_if"), [cond, body, None]) end;
+            defmac when(cond, body) do Expr(Ident("__core_if"), [cond, body, None]) end;
             def fwhen(cond, body) do if cond then body else None end end
         """)
         assert self.i.walk(""" expand(when(2 == 2, 3)) """) == (Ident("__core_if"), [(Ident("equal"), [2, 2]), 3, None])
@@ -1686,21 +1686,21 @@ text
         with pytest.raises(ZeroDivisionError):
             self.i.walk(""" fwhen(2 == 3, 4 / 0) """)
 
-        self.i.walk(""" defmacro mwhen params cond, body do Expr(Ident("__core_if"), [cond, body, None]) end """)
+        self.i.walk(""" defmac mwhen(cond, body) do Expr(Ident("__core_if"), [cond, body, None]) end """)
         assert self.i.walk(""" mwhen(2 == 2, 3) """) == 3
         with pytest.raises(AssertionError, match="Argument mismatch"):
             self.i.walk(""" mwhen(2 == 2) """)
 
         # Macro for scope
         self.i.walk("""
-            defmacro mscope params body do Expr(Expr(Ident("__core_func"), [[], body]), []) end
+            defmac mscope(body) do Expr(Expr(Ident("__core_func"), [[], body]), []) end
         """)
         self.i.walk(""" a := 2; mscope(print(a); a := 3; print(a)); print(a) """)
         assert capsys.readouterr().out == "2\n3\n2\n"
 
         # Anaphoric if
         self.i.walk("""
-            defmacro maif params cnd, thn, els do Expr(Ident("__core_scope"), [Expr(Ident("__core_if"), [
+            defmac maif(cnd, thn, els) do Expr(Ident("__core_scope"), [Expr(Ident("__core_if"), [
                 Expr(Ident("define"), [Ident("it"), cnd]),
                 thn,
                 els
@@ -1711,8 +1711,8 @@ text
 
         # and/or using aif
         self.i.walk("""
-            defmacro mand params a, b do Expr(Ident("maif"), [a, b, Ident("it")]) end;
-            defmacro mor params a, b do Expr(Ident("maif"), [a, Ident("it"), b]) end
+            defmac mand(a, b) do Expr(Ident("maif"), [a, b, Ident("it")]) end;
+            defmac mor(a, b) do Expr(Ident("maif"), [a, Ident("it"), b]) end
         """)
         assert self.i.walk(""" mand(2, 3) """) == 3
         assert self.i.walk(""" mand(0, 3) """) == 0
@@ -1722,7 +1722,7 @@ text
         # Side effect in macro argument
         self.i.walk("""
             def ftwice(x) do x + x end;
-            defmacro mtwice params x do Expr(Ident("add"), [x, x]) end
+            defmac mtwice(x) do Expr(Ident("add"), [x, x]) end
         """)
         self.i.walk(""" cnt := 0 """)
         assert self.i.walk(""" ftwice(cnt = cnt + 1) """) == 2
@@ -1733,7 +1733,7 @@ text
         assert self.i.walk(""" cnt """) == 2
 
         # Variable capture (Non-hygienic)
-        self.i.walk(""" defmacro capture params val do Expr(Ident("define"), [Ident("x"), val]) end """)
+        self.i.walk(""" defmac capture(val) do Expr(Ident("define"), [Ident("x"), val]) end """)
         self.i.walk(""" x := 1 """)
         self.i.walk(""" capture(2) """)
         assert self.i.walk(""" x """) == 2
@@ -2031,6 +2031,27 @@ class TestCustomSyntax(TestBase):
 
         with pytest.raises(AssertionError, match="Invalid def syntax"):
             self.i.walk(r""" def 2 do 3 end """)
+
+    def test_defmac(self):
+        self.i.walk(r"""
+            defmac mwhen(cond, body) do
+                quote if !cond then !body else None end end
+            end
+        """)
+        assert self.i.walk(r""" expand(mwhen(2 == 2, 3)) """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 2]), 3, [], [None]])
+        assert self.i.walk(r""" mwhen(2 == 2, 3) """) == 3
+        assert self.i.walk(r""" mwhen(2 == 3, 4 / 0) """) is None
+
+        self.i.walk(r""" defmac mzero() do quote 2 end end """)
+        assert self.i.walk(r""" mzero() """) == 2
+
+        self.i.walk(r""" defmac mzero_no_paren do quote 3 end end """)
+        assert self.i.walk(r""" mzero_no_paren() """) == 3
+
+        with pytest.raises(AssertionError, match="Argument mismatch"):
+            self.i.walk(""" mwhen(2 == 2) """)
+        with pytest.raises(AssertionError, match="Invalid defmac syntax"):
+            self.i.walk(r""" defmac 2 do 3 end """)
 
     def test_let_custom_rule(self):
         # Setup for let_func and let_scope

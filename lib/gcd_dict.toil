@@ -3,8 +3,7 @@ def recur(a, b) do
 end;
 
 def iter(a, b) do
-    while a != 0 do [a, b] := [b % a, a] end;
-    b
+    while a != 0 do [a, b] := [b % a, a] then b end
 end;
 
 {recur, iter}
