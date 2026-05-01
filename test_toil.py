@@ -938,13 +938,13 @@ text
         with pytest.raises(AssertionError, match="Pattern mismatch"):
             self.i.walk(r""" Ident(a) := "aaa" """)
 
-        assert self.i.walk(r""" Expr(Ident("add"), [int(a), int(b)]) := quote 2 + 3 end; [a, b] """) == [2, 3]
-        assert self.i.walk(r""" Expr(Ident("add"), [Ident(name1), Ident(name2)]) := quote a + b end; [name1, name2] """) == ['a', 'b']
+        assert self.i.walk(r""" tuple(Ident("add"), [int(a), int(b)]) := quote 2 + 3 end; [a, b] """) == [2, 3]
+        assert self.i.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := quote a + b end; [name1, name2] """) == ['a', 'b']
 
         with pytest.raises(AssertionError, match="Pattern mismatch"):
-            self.i.walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := quote 2 + 3 end """)
+            self.i.walk(r""" tuple(Ident('add'), [Ident(name1), Ident(name2)]) := quote 2 + 3 end """)
         with pytest.raises(AssertionError, match="Pattern mismatch"):
-            self.i.walk(r""" Expr(Ident('add'), [Ident(name1), Ident(name2)]) := Expr(Ident('add')) """)
+            self.i.walk(r""" tuple(Ident('add'), [Ident(name1), Ident(name2)]) := tuple(Ident('add')) """)
 
     def test_destructure_type(self):
         assert self.i.walk(r""" int(a) := 2; a """) == 2
@@ -1100,9 +1100,9 @@ text
         assert self.i.walk(r""" match Ident("aaa") case Ident("bbb") then "yes" end """) is None
         assert self.i.walk(r""" match Ident("aaa") case Ident(a) then [a] end """) == ['aaa']
 
-        assert self.i.walk(r""" match quote a + b end case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) == ["a", "b"]
-        assert self.i.walk(r""" match 2 + 3 case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
-        assert self.i.walk(r""" match Expr(Ident("add")) case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
+        assert self.i.walk(r""" match quote a + b end case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) == ["a", "b"]
+        assert self.i.walk(r""" match 2 + 3 case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
+        assert self.i.walk(r""" match tuple(Ident("add")) case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
 
     def test_match_type_and_or(self):
         assert self.i.walk(r""" match 2 case int(a) then a end """) == 2
@@ -1259,9 +1259,9 @@ text
         self.i.walk("""
             f := func ast do
                 match ast
-                    case Expr(Ident("add"), [left, right]) then left + right
-                    case Expr(Ident("sub"), [left, right]) then left - right
-                    case Expr(op, args) then [op, args]
+                    case tuple(Ident("add"), [left, right]) then left + right
+                    case tuple(Ident("sub"), [left, right]) then left - right
+                    case tuple(op, args) then [op, args]
                     case _ then None
                 end
             end
@@ -1271,8 +1271,8 @@ text
         assert self.i.walk(""" f(quote 2 * 3 end) """) == [Ident("mul"), [2, 3]]
         assert self.i.walk(""" f(2) """) is None
 
-        assert self.i.walk(""" f(Expr(Ident("add"), [2, 3])) """) == 5
-        assert self.i.walk(""" f(Expr("add", [2, 3])) """) == ["add", [2, 3]]
+        assert self.i.walk(""" f(tuple(Ident("add"), [2, 3])) """) == 5
+        assert self.i.walk(""" f(tuple("add", [2, 3])) """) == ["add", [2, 3]]
         assert self.i.walk(""" f([Ident("add"), [2, 3]]) """) == None
 
     def test_dict_module(self):
@@ -1561,7 +1561,7 @@ text
         assert self.i.walk(""" type("abc") """) == "str"
         assert self.i.walk(""" type([2, 3]) """) == "list"
         assert self.i.walk(""" type({a: 2}) """) == "dict"
-        assert self.i.walk(""" type(quote 2 + 3 end) """) == "Expr"
+        assert self.i.walk(""" type(quote 2 + 3 end) """) == "tuple"
         assert self.i.walk(""" type(quote a end) """) == "Ident"
 
     def test_env_exposure(self):
@@ -1599,16 +1599,16 @@ text
 
     def test_ast_primitives(self):
         assert self.i.walk(""" quote if True then 2 else 3 end end """) == (Ident("__core_if_macro"), [True, 2, [], [3]])
-        assert self.i.walk(""" Expr(Ident("__core_if"), [True, 2, 3]) """) == (Ident("__core_if"), [True, 2, 3])
-        assert self.i.walk(""" eval_expr(Expr(Ident("__core_if"), [True, 2, 3])) """) == 2
-        assert self.i.walk(""" eval_expr(Expr(Ident("__core_if_macro"), [True, 2, [], [3]])) """) == 2
+        assert self.i.walk(""" tuple(Ident("__core_if"), [True, 2, 3]) """) == (Ident("__core_if"), [True, 2, 3])
+        assert self.i.walk(""" eval_expr(tuple(Ident("__core_if"), [True, 2, 3])) """) == 2
+        assert self.i.walk(""" eval_expr(tuple(Ident("__core_if_macro"), [True, 2, [], [3]])) """) == 2
 
         with pytest.raises(AssertionError):
-            self.i.walk(""" eval_expr(Expr(Ident("if"), [True, 2, 3] """)
+            self.i.walk(""" eval_expr(tuple(Ident("if"), [True, 2, 3] """)
 
         assert self.i.walk(""" quote add(2, 3) end """) == (Ident("add"), [2, 3])
-        assert self.i.walk(""" Expr(Ident("add"), [2, 3]) """) == (Ident("add"), [2, 3])
-        assert self.i.walk(""" eval_expr(Expr(Ident("add"), [2, 3])) """) == 5
+        assert self.i.walk(""" tuple(Ident("add"), [2, 3]) """) == (Ident("add"), [2, 3])
+        assert self.i.walk(""" eval_expr(tuple(Ident("add"), [2, 3])) """) == 5
 
         assert self.i.walk(""" quote
             a := 2;
@@ -1616,13 +1616,13 @@ text
             if a == b then a + b else a * b end
         end """) == (Ident("seq"), [(Ident("define"), [Ident("a"), 2]), (Ident("define"), [Ident("b"), 3]), (Ident("__core_if_macro"), [(Ident("equal"), [Ident("a"), Ident("b")]), (Ident("add"), [Ident("a"), Ident("b")]), [], [(Ident("mul"), [Ident("a"), Ident("b")])]])])
         assert self.i.walk("""
-            Expr(Ident("seq"), [
-                Expr(Ident("define"), [Ident("a"), 2]),
-                Expr(Ident("define"), [Ident("b"), 3]),
-                Expr(Ident("__core_if"), [
-                    Expr(Ident("equal"), [Ident("a"), Ident("b")]),
-                    Expr(Ident("add"), [Ident("a"), Ident("b")]),
-                    Expr(Ident("mul"), [Ident("a"), Ident("b")])
+            tuple(Ident("seq"), [
+                tuple(Ident("define"), [Ident("a"), 2]),
+                tuple(Ident("define"), [Ident("b"), 3]),
+                tuple(Ident("__core_if"), [
+                    tuple(Ident("equal"), [Ident("a"), Ident("b")]),
+                    tuple(Ident("add"), [Ident("a"), Ident("b")]),
+                    tuple(Ident("mul"), [Ident("a"), Ident("b")])
                 ])
             ])
         """) == (Ident("seq"), [
@@ -1635,13 +1635,13 @@ text
             ])
         ])
         assert self.i.walk(""" eval_expr(
-            Expr(Ident("seq"), [
-                Expr(Ident("define"), [Ident("a"), 2]),
-                Expr(Ident("define"), [Ident("b"), 3]),
-                Expr(Ident("__core_if"), [
-                    Expr(Ident("equal"), [Ident("a"), Ident("b")]),
-                    Expr(Ident("add"), [Ident("a"), Ident("b")]),
-                    Expr(Ident("mul"), [Ident("a"), Ident("b")])
+            tuple(Ident("seq"), [
+                tuple(Ident("define"), [Ident("a"), 2]),
+                tuple(Ident("define"), [Ident("b"), 3]),
+                tuple(Ident("__core_if"), [
+                    tuple(Ident("equal"), [Ident("a"), Ident("b")]),
+                    tuple(Ident("add"), [Ident("a"), Ident("b")]),
+                    tuple(Ident("mul"), [Ident("a"), Ident("b")])
                 ])
             ])
         ) """) == 6
@@ -1649,7 +1649,7 @@ text
     def test_macro(self, capsys):
         # Basic macro (when) vs function (fwhen)
         self.i.walk("""
-            defmacro when(cond, body) do Expr(Ident("__core_if"), [cond, body, None]) end;
+            defmacro when(cond, body) do tuple(Ident("__core_if"), [cond, body, None]) end;
             def fwhen(cond, body) do if cond then body else None end end
         """)
         assert self.i.walk(""" expand(when(2 == 2, 3)) """) == (Ident("__core_if"), [(Ident("equal"), [2, 2]), 3, None])
@@ -1660,22 +1660,22 @@ text
         with pytest.raises(ZeroDivisionError):
             self.i.walk(""" fwhen(2 == 3, 4 / 0) """)
 
-        self.i.walk(""" defmacro mwhen(cond, body) do Expr(Ident("__core_if"), [cond, body, None]) end """)
+        self.i.walk(""" defmacro mwhen(cond, body) do tuple(Ident("__core_if"), [cond, body, None]) end """)
         assert self.i.walk(""" mwhen(2 == 2, 3) """) == 3
         with pytest.raises(AssertionError, match="Argument mismatch"):
             self.i.walk(""" mwhen(2 == 2) """)
 
         # Macro for scope
         self.i.walk("""
-            defmacro mscope(body) do Expr(Expr(Ident("__core_func"), [[], body]), []) end
+            defmacro mscope(body) do tuple(tuple(Ident("__core_func"), [[], body]), []) end
         """)
         self.i.walk(""" a := 2; mscope(print(a); a := 3; print(a)); print(a) """)
         assert capsys.readouterr().out == "2\n3\n2\n"
 
         # Anaphoric if
         self.i.walk("""
-            defmacro maif(cnd, thn, els) do Expr(Ident("__core_scope"), [Expr(Ident("__core_if"), [
-                Expr(Ident("define"), [Ident("it"), cnd]),
+            defmacro maif(cnd, thn, els) do tuple(Ident("__core_scope"), [tuple(Ident("__core_if"), [
+                tuple(Ident("define"), [Ident("it"), cnd]),
                 thn,
                 els
             ])]) end
@@ -1685,8 +1685,8 @@ text
 
         # and/or using aif
         self.i.walk("""
-            defmacro mand(a, b) do Expr(Ident("maif"), [a, b, Ident("it")]) end;
-            defmacro mor(a, b) do Expr(Ident("maif"), [a, Ident("it"), b]) end
+            defmacro mand(a, b) do tuple(Ident("maif"), [a, b, Ident("it")]) end;
+            defmacro mor(a, b) do tuple(Ident("maif"), [a, Ident("it"), b]) end
         """)
         assert self.i.walk(""" mand(2, 3) """) == 3
         assert self.i.walk(""" mand(0, 3) """) == 0
@@ -1696,7 +1696,7 @@ text
         # Side effect in macro argument
         self.i.walk("""
             def ftwice(x) do x + x end;
-            defmacro mtwice(x) do Expr(Ident("add"), [x, x]) end
+            defmacro mtwice(x) do tuple(Ident("add"), [x, x]) end
         """)
         self.i.walk(""" cnt := 0 """)
         assert self.i.walk(""" ftwice(cnt = cnt + 1) """) == 2
@@ -1707,7 +1707,7 @@ text
         assert self.i.walk(""" cnt """) == 2
 
         # Variable capture (Non-hygienic)
-        self.i.walk(""" defmacro capture(val) do Expr(Ident("define"), [Ident("x"), val]) end """)
+        self.i.walk(""" defmacro capture(val) do tuple(Ident("define"), [Ident("x"), val]) end """)
         self.i.walk(""" x := 1 """)
         self.i.walk(""" capture(2) """)
         assert self.i.walk(""" x """) == 2

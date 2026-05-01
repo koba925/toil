@@ -24,7 +24,7 @@ SymbolTable = dict[str, Value]
 def is_ident_first(c): return c.isalpha() or c == "_"
 def is_ident_rest(c): return c.isalnum() or c == "_"
 def is_ident(s): return is_ident_first(s[0])
-def toil_type(expr): return "Expr" if type(expr) is tuple else type(expr).__name__
+def toil_type(expr): return type(expr).__name__
 
 
 class RuleCollector:
@@ -495,23 +495,13 @@ class Evaluator:
             case _:
                 return expr
 
-    def _overload_closure(self, right_val, old_val):
-        match right_val, old_val:
-            case (
-                (Ident("closure"), [params, body, closure_env, _]),
-                (Ident("closure"), _)
-            ):
-                return (Ident("closure"), [params, body, closure_env, old_val])
-            case _:
-                return right_val
-
     def _define(self, left_expr, right_expr, env):
         right_val = self.eval(right_expr, env)
         match left_expr:
             case Ident(name):
                 old_val_dict = env.lookup(name)
-                if old_val_dict is not None and name in old_val_dict:
-                    right_val = self._overload_closure(right_val, old_val_dict[name])
+                if old_val_dict is not None:
+                    right_val = self._overload_closure(right_val, old_val_dict, name)
         if self._match_pattern(left_expr, right_val, env):
             return right_val
         assert False, f"Pattern mismatch @ _define(): {left_expr}, {right_val}"
@@ -529,14 +519,26 @@ class Evaluator:
                     case list(), int():
                         coll_val[index_val] = right_val
                     case dict(), str():
-                        if index_val in coll_val:
-                            right_val = self._overload_closure(right_val, coll_val[index_val])
+                        right_val = self._overload_closure(right_val, coll_val, index_val)
                         coll_val[index_val] = right_val
                     case _:
                         assert False, f"Invalid indexing @ _assign(): {coll_val}, {index_val}"
                 return right_val
             case unexpected:
                 assert False, f"Invalid assign target @ _assign(): {unexpected}"
+
+    def _overload_closure(self, right_val, coll_val, index_val):
+        if not isinstance(coll_val, dict) or not isinstance(index_val, str):
+            return right_val
+        if index_val in coll_val:
+            old_val = coll_val[index_val]
+            match right_val, old_val:
+                case (
+                    (Ident("closure"), [params, body, closure_env, _]),
+                    (Ident("closure"), _)
+                ):
+                    return (Ident("closure"), [params, body, closure_env, old_val])
+        return right_val
 
     def _seq(self, exprs, env):
         val = None
@@ -705,9 +707,9 @@ class Evaluator:
             case (Ident('Ident'), [name_pat]):
                 return toil_type(value) == 'Ident' and \
                     self._match_pattern(name_pat, value.name, env)
-            case (Ident('Expr'), expr_pats):
+            case (Ident('tuple'), expr_pats):
                 return (
-                    toil_type(value) == 'Expr' and len(expr_pats) == len(value) and
+                    toil_type(value) == 'tuple' and len(expr_pats) == len(value) and
                     all(self._match_pattern(p, v, env) for p, v in zip(expr_pats, value))
                 )
             case (Ident(typ), [val_pat]):
@@ -789,7 +791,7 @@ class Interpreter:
         self._env.define("list", lambda args: list(args[0]))
         self._env.define("dict", lambda args: dict(args[0]))
         self._env.define("Ident", lambda args: Ident(args[0]))
-        self._env.define("Expr", lambda args: tuple(args))
+        self._env.define("tuple", lambda args: tuple(args))
 
         self._env.define("print", lambda args: print(*args))
 
@@ -808,7 +810,7 @@ class Interpreter:
 
             __core_defmacro := macro call_expr, body do
                 match call_expr
-                    case Expr(name, args) then
+                    case tuple(name, args) then
                         quote !name := macro !!args do !body end end
                     case Ident(name) then
                         quote !call_expr := macro do !body end end
@@ -823,7 +825,7 @@ class Interpreter:
 
             defmacro __core_def(call_expr, body) do
                 match call_expr
-                    case Expr(name, args) then
+                    case tuple(name, args) then
                         quote !name := func !!args do !body end end
                     case Ident(name) then
                         quote !call_expr := func do !body end end
@@ -868,7 +870,7 @@ class Interpreter:
             defmacro __core_for(var, coll, body, thn, els) do quote scope
                 __core_for_coll := !coll;
                 __core_for_index := -1;
-                !Expr(Ident("__core_while"), [
+                !tuple(Ident("__core_while"), [
                     quote __core_for_index + 1 < len(__core_for_coll) end,
                     quote
                         __core_for_index = __core_for_index + 1;
@@ -891,7 +893,7 @@ class Interpreter:
 
             defmacro __core_defclass(call_expr, body) do
                 match call_expr
-                    case Expr(name, args) then
+                    case tuple(name, args) then
                         quote def (!name)(!!args) do self := {}; !body; self end end
                     case Ident(name) then
                         quote def (!call_expr)() do self := {}; !body; self end end
@@ -903,7 +905,7 @@ class Interpreter:
 
             defmacro __core_defmethod(call_expr, body) do
                 match call_expr
-                    case Expr(name, args) then
+                    case tuple(name, args) then
                         quote self[!str(name)] = func self, !!args do !body end end
                     case Ident(name) then
                         quote self[!str(name)] = func self do !body end end
@@ -1059,55 +1061,6 @@ if __name__ == "__main__":
 
     # Example
 
-    # Def
-    walk("""
-        def say_hello do "hello" end
-    """)
-    print(walk(""" say_hello() """)) # -> hello
-
-    walk("""
-        def fact(n) do n * fact(n - 1) end;
-        def fact(0) do 1 end
-    """)
-    print(walk(""" fact(0) """)) # -> 1
-    print(walk(""" fact(3) """)) # -> 6
-
-    # Defmacro
-    print("\nDefmacro")
-    walk("""
-        defmacro mwhen(cond, body) do
-            quote if !cond then !body else None end end
-        end
-    """)
-    print(walk(""" expand(mwhen(2 == 2, 3)) """)) # -> (__core_if_macro, [(equal, [2, 2]), 3, [], [None]])
-    print(walk(""" mwhen(2 == 2, 3) """)) # -> 3
-    print(walk(""" mwhen(2 == 3, 4 / 0) """)) # -> None
-
-    walk(""" defmacro mzero() do quote 2 end end """)
-    print(walk(""" mzero() """)) # -> 2
-
-    walk(""" defmacro mzero_no_paren do quote 3 end end """)
-    print(walk(""" mzero_no_paren() """)) # -> 3
-
-    # walk(""" mwhen(2 == 2) """) # -> Argument mismatch
-    # walk(""" defmacro 2 do 3 end """) # -> Invalid defmacro syntax
-
-    # defclass / defmethod 正常系の実行例
-    print("\ndefclass / defmethod")
-    walk("""
-        defclass Counter(start) do
-            self.count = start;
-            defmethod inc(step) do
-                self.count = self.count + step
-            end;
-            defmethod get do
-                self.count
-            end
-        end
-    """)
-    walk(""" c := Counter(2) """)
-    walk(""" c.inc(3) """)
-    print(walk(""" c.get() """)) # -> 5
-
-    # walk(""" defclass 2 do 3 end """) # -> Invalid defclass syntax
-    # walk(""" defclass ErrCounter() do defmethod 2 do 3 end end; ErrCounter() """) # -> Invalid defmethod syntax
+    # tuple
+    print(walk(""" tuple(2, 3) """)) # -> (2, 3)
+    print(walk(""" type(tuple(2, 3)) """)) # -> tuple

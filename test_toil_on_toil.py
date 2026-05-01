@@ -234,13 +234,13 @@ class TestToT(TestBase):
         with pytest.raises(Exception, match="Pattern mismatch"):
             self.walk(r""" Ident(a) := "aaa" """)
 
-        assert self.walk(r""" Expr(Ident("add"), [int(a), int(b)]) := quote(2 + 3); [a, b] """) == [2, 3]
-        assert self.walk(r""" Expr(Ident("add"), [Ident(name1), Ident(name2)]) := quote(a + b); [name1, name2] """) == ['a', 'b']
+        assert self.walk(r""" tuple(Ident("add"), [int(a), int(b)]) := quote(2 + 3); [a, b] """) == [2, 3]
+        assert self.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := quote(a + b); [name1, name2] """) == ['a', 'b']
 
         with pytest.raises(Exception, match="Pattern mismatch"):
-            self.walk(r""" Expr(Ident("add"), [Ident(name1), Ident(name2)]) := 2 + 3 """)
+            self.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := 2 + 3 """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            self.walk(r""" Expr(Ident("add"), [Ident(name1), Ident(name2)]) := Expr(Ident("add")) """)
+            self.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := tuple(Ident("add")) """)
 
     def test_destructure_type(self):
         assert self.walk(r""" int(a) := 2; a """) == 2
@@ -777,9 +777,9 @@ class TestToT(TestBase):
         assert self.walk(r""" match Ident("aaa") case Ident("bbb") then "yes" end """) is None
         assert self.walk(r""" match Ident("aaa") case Ident(a) then [a] end """) == ['aaa']
 
-        assert self.walk(r""" match quote(a + b) case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) == ["a", "b"]
-        assert self.walk(r""" match 2 + 3 case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
-        assert self.walk(r""" match Expr(Ident("add")) case Expr(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
+        assert self.walk(r""" match quote(a + b) case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) == ["a", "b"]
+        assert self.walk(r""" match 2 + 3 case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
+        assert self.walk(r""" match tuple(Ident("add")) case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
 
     def test_match_type_and_or(self):
         assert self.walk(r""" match 2 case int(a) then a end """) == 2
@@ -1110,7 +1110,7 @@ class TestToT(TestBase):
 
     def test_eval_apply(self):
         assert self.walk(""" eval("2 + 3") """) == 5
-        assert self.walk(""" eval_expr(Expr(Ident("add"), [2, 3])) """) == 5
+        assert self.walk(""" eval_expr(tuple(Ident("add"), [2, 3])) """) == 5
         assert self.walk(""" apply(add, [2, 3]) """) == 5
         assert self.walk(""" apply(func a, b do a + b end, [2, 3]) """) == 5
 

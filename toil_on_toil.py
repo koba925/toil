@@ -154,7 +154,7 @@ i.walk(r"""
                 self._current_and_advance();
                 exprs.push(self._define_assign())
             end;
-            if exprs.len() == 1 then exprs[0] else Expr(Ident('seq'), exprs) end
+            if exprs.len() == 1 then exprs[0] else tuple(Ident('seq'), exprs) end
         end;
 
         defmethod _define_assign do
@@ -169,7 +169,7 @@ i.walk(r"""
                 self._current_and_advance();
                 right := self._arrow();
                 params_ := if left.type() == 'list' then left else [left] end;
-                Expr(Ident('func'), [params_, right])
+                tuple(Ident('func'), [params_, right])
             else
                 left
             end
@@ -216,11 +216,11 @@ i.walk(r"""
             while (op := self._current()).in([Ident('('), Ident('['), Ident('.')]) do
                 if op == Ident('(') then
                     self._current_and_advance();
-                    target = Expr(target, self._comma_separated_exprs(Ident(')')));
+                    target = tuple(target, self._comma_separated_exprs(Ident(')')));
                     self._consume(Ident(')'))
                 elif op == Ident('[') then
                     self._current_and_advance();
-                    target = Expr(Ident('index'), [target, self._expression()]);
+                    target = tuple(Ident('index'), [target, self._expression()]);
                     self._consume(Ident(']'))
                 else
                     self._current_and_advance();
@@ -228,7 +228,7 @@ i.walk(r"""
                     if attr_name.type() != 'Ident' then
                         raise('Invalid attribute @ _call_index_dot(): ' + str(attr_name))
                     end;
-                    target = Expr(Ident('dot'), [target, str(attr_name)])
+                    target = tuple(Ident('dot'), [target, str(attr_name)])
                 end
             end;
             target
@@ -317,7 +317,7 @@ i.walk(r"""
             self._consume(Ident('do'));
             body_expr := self._expression();
             self._consume(Ident('end'));
-            Expr(Ident('func'), [params, body_expr])
+            tuple(Ident('func'), [params, body_expr])
         end;
 
         defmethod _def do
@@ -327,10 +327,10 @@ i.walk(r"""
             body_expr := self._expression();
             self._consume(Ident('end'));
             match call_expr
-                case Expr(name, args) then
-                    Expr(Ident('define'), [name, Expr(Ident('func'), [args, body_expr])])
+                case tuple(name, args) then
+                    tuple(Ident('define'), [name, tuple(Ident('func'), [args, body_expr])])
                 case Ident(name) then
-                    Expr(Ident('define'), [call_expr, Expr(Ident('func'), [[], body_expr])])
+                    tuple(Ident('define'), [call_expr, tuple(Ident('func'), [[], body_expr])])
                 case _ then
                     raise('Invalid def syntax @ _def(): ' + str(call_expr))
             end
@@ -340,7 +340,7 @@ i.walk(r"""
             self._current_and_advance();
             body_expr := self._expression();
             self._consume(Ident('end'));
-            Expr(Ident('scope'), [body_expr])
+            tuple(Ident('scope'), [body_expr])
         end;
 
         defmethod _if do
@@ -359,7 +359,7 @@ i.walk(r"""
                 else_expr = None;
                 self._consume(Ident('end'))
             end;
-            Expr(Ident('if'), [cond_expr, then_expr, else_expr])
+            tuple(Ident('if'), [cond_expr, then_expr, else_expr])
         end;
 
         defmethod _match do
@@ -371,10 +371,10 @@ i.walk(r"""
                 pattern := self._expression();
                 self._consume(Ident('then'));
                 body_expr := self._expression();
-                cases.push(Expr(pattern, body_expr))
+                cases.push(tuple(pattern, body_expr))
             end;
             self._consume(Ident('end'));
-            Expr(Ident('match'), [val_expr, cases])
+            tuple(Ident('match'), [val_expr, cases])
         end;
 
         defmethod _while do
@@ -391,7 +391,7 @@ i.walk(r"""
                 [self._expression()]
             else [] end;
             self._consume(Ident('end'));
-            Expr(Ident('while'), [cond_expr, body_expr, then_expr, else_expr])
+            tuple(Ident('while'), [cond_expr, body_expr, then_expr, else_expr])
         end;
 
         defmethod _try do
@@ -406,7 +406,7 @@ i.walk(r"""
                 clauses.push([cond_expr, except_expr])
             end;
             self._consume(Ident('end'));
-            Expr(Ident('try'), [body_expr, clauses])
+            tuple(Ident('try'), [body_expr, clauses])
         end;
 
         defmethod _for do
@@ -425,7 +425,7 @@ i.walk(r"""
                 [self._expression()]
             else [] end;
             self._consume(Ident('end'));
-            Expr(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr])
+            tuple(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr])
         end;
 
         defmethod _defclass do
@@ -436,25 +436,25 @@ i.walk(r"""
             self._consume(Ident('end'));
 
             match call_expr
-                case Expr(name, args) then
-                    Expr(Ident('define'), [
+                case tuple(name, args) then
+                    tuple(Ident('define'), [
                         name,
-                        Expr(Ident('func'), [
+                        tuple(Ident('func'), [
                             args,
-                            Expr(Ident('seq'), [
-                                Expr(Ident('define'), [Ident('self'), {}]),
+                            tuple(Ident('seq'), [
+                                tuple(Ident('define'), [Ident('self'), {}]),
                                 body_expr,
                                 Ident('self')
                             ])
                         ])
                     ])
                 case Ident(name) then
-                    Expr(Ident('define'), [
+                    tuple(Ident('define'), [
                         call_expr,
-                        Expr(Ident('func'), [
+                        tuple(Ident('func'), [
                             [],
-                            Expr(Ident('seq'), [
-                                Expr(Ident('define'), [Ident('self'), {}]),
+                            tuple(Ident('seq'), [
+                                tuple(Ident('define'), [Ident('self'), {}]),
                                 body_expr,
                                 Ident('self')
                             ])
@@ -473,15 +473,15 @@ i.walk(r"""
             self._consume(Ident('end'));
 
             match call_expr
-                case Expr(name, args) then
-                    Expr(Ident('assign'), [
-                        Expr(Ident('dot'), [Ident('self'), str(name)]),
-                        Expr(Ident('func'), [[Ident('self')] + args, body_expr])
+                case tuple(name, args) then
+                    tuple(Ident('assign'), [
+                        tuple(Ident('dot'), [Ident('self'), str(name)]),
+                        tuple(Ident('func'), [[Ident('self')] + args, body_expr])
                     ])
                 case Ident(name) then
-                    Expr(Ident('assign'), [
-                        Expr(Ident('dot'), [Ident('self'), str(name)]),
-                        Expr(Ident('func'), [[Ident('self')], body_expr])
+                    tuple(Ident('assign'), [
+                        tuple(Ident('dot'), [Ident('self'), str(name)]),
+                        tuple(Ident('func'), [[Ident('self')], body_expr])
                     ])
                 case _ then
                     raise('Invalid defmethod syntax @ _defmethod(): ' + str(call_expr))
@@ -493,7 +493,7 @@ i.walk(r"""
             while type(op := self._current()) == 'Ident' and str(op).in(ops) do
                 self._current_and_advance();
                 right := sub_elem();
-                left = Expr(ops[str(op)], [left, right])
+                left = tuple(ops[str(op)], [left, right])
             end;
             left
         end;
@@ -503,7 +503,7 @@ i.walk(r"""
             if type(op := self._current()) == 'Ident' and str(op).in(ops) then
                 self._current_and_advance();
                 right := self._binary_right(ops, sub_elem);
-                Expr(ops[str(op)], [left, right])
+                tuple(ops[str(op)], [left, right])
             else
                 left
             end
@@ -512,7 +512,7 @@ i.walk(r"""
         defmethod _unary(ops, sub_elem) do
             if type(op := self._current()) == 'Ident' and str(op).in(ops) then
                 self._current_and_advance();
-                Expr(ops[str(op)], [self._unary(ops, sub_elem)])
+                tuple(ops[str(op)], [self._unary(ops, sub_elem)])
             else
                 sub_elem()
             end
@@ -592,43 +592,43 @@ i.walk(r"""
                 case dict(_) then
                     expr.items().map([[k, v]] -> [k, self.eval(v, env)]).dict()
                 case Ident(name) then env.val(name)
-                case Expr(Ident('quote'), [expr]) then
+                case tuple(Ident('quote'), [expr]) then
                     expr
-                case Expr(Ident('func'), [params, body_expr]) then
-                    Expr(Ident('closure'), [params, body_expr, env, None])
-                case Expr(Ident('return'), args) then
+                case tuple(Ident('func'), [params, body_expr]) then
+                    tuple(Ident('closure'), [params, body_expr, env, None])
+                case tuple(Ident('return'), args) then
                     raise(['ReturnException', self._eval_optional_arg(args, env)])
-                case Expr(Ident('dot'), [target_expr, attr_expr]) then
+                case tuple(Ident('dot'), [target_expr, attr_expr]) then
                     self._dot(target_expr, attr_expr, env)
-                case Expr(Ident('scope'), [body_expr]) then
+                case tuple(Ident('scope'), [body_expr]) then
                     self.eval(body_expr, Environment(env))
-                case Expr(Ident('define'), [left_expr, right_expr]) then
+                case tuple(Ident('define'), [left_expr, right_expr]) then
                     self._define(left_expr, right_expr, env)
-                case Expr(Ident('assign'), [left_expr, right_expr]) then
+                case tuple(Ident('assign'), [left_expr, right_expr]) then
                     self._assign(left_expr, right_expr, env)
-                case Expr(Ident('seq'), exprs) then
+                case tuple(Ident('seq'), exprs) then
                     self._seq(exprs, env)
-                case Expr(Ident('if'), [cond_expr, then_expr, else_expr]) then
+                case tuple(Ident('if'), [cond_expr, then_expr, else_expr]) then
                     self._if(cond_expr, then_expr, else_expr, env)
-                case Expr(Ident('match'), [val_expr, cases]) then
+                case tuple(Ident('match'), [val_expr, cases]) then
                     self._match(val_expr, cases, env)
-                case Expr(Ident('and'), [left_expr, right_expr]) then
+                case tuple(Ident('and'), [left_expr, right_expr]) then
                     self.eval(left_expr, env) and self.eval(right_expr, env)
-                case Expr(Ident('or'), [left_expr, right_expr]) then
+                case tuple(Ident('or'), [left_expr, right_expr]) then
                     self.eval(left_expr, env) or self.eval(right_expr, env)
-                case Expr(Ident('while'), [cond_expr, body_expr, then_expr, else_expr]) then
+                case tuple(Ident('while'), [cond_expr, body_expr, then_expr, else_expr]) then
                     self._while(cond_expr, body_expr, then_expr, else_expr, env)
-                case Expr(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr]) then
+                case tuple(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr]) then
                     self._for(var_expr, coll_expr, body_expr, then_expr, else_expr, env)
-                case Expr(Ident('try'), [body_expr, clauses]) then
+                case tuple(Ident('try'), [body_expr, clauses]) then
                     self._try(body_expr, clauses, env)
-                case Expr(Ident('raise'), [val]) then
+                case tuple(Ident('raise'), [val]) then
                     raise(self.eval(val, env))
-                case Expr(Ident('continue'), []) then
+                case tuple(Ident('continue'), []) then
                     raise(['ContinueException'])
-                case Expr(Ident('break'), []) then
+                case tuple(Ident('break'), []) then
                     raise(['BreakException'])
-                case Expr(op_expr, args_expr) then
+                case tuple(op_expr, args_expr) then
                     self._op(op_expr, args_expr, env)
             end
         end;
@@ -638,8 +638,8 @@ i.walk(r"""
             if target_val.type() == 'dict' and attr_name.in(target_val) then
                 attr_val := target_val[attr_name];
                 match attr_val
-                    case Expr(Ident('closure'), [[Ident('self'), *_], _, _, _]) then
-                        Expr(Ident('hostfunc'), args ->
+                    case tuple(Ident('closure'), [[Ident('self'), *_], _, _, _]) then
+                        tuple(Ident('hostfunc'), args ->
                             self.apply(attr_val, [target_val] + args)
                         )
                     case _ then
@@ -647,7 +647,7 @@ i.walk(r"""
                 end
             else
                 func_val := env.val(attr_name);
-                Expr(Ident('hostfunc'), args ->
+                tuple(Ident('hostfunc'), args ->
                     self.apply(func_val, [target_val] + args)
                 )
             end
@@ -658,9 +658,8 @@ i.walk(r"""
             match left_expr
                 case Ident(name) then
                     old_val_dict := env.lookup(name);
-                    if old_val_dict != None and name.in(old_val_dict) then
-                        old_val := old_val_dict[name];
-                        right_val = self._overload_closure(right_val, old_val)
+                    if old_val_dict != None then
+                        right_val = self._overload_closure(right_val, old_val_dict, name)
                     end
             end;
             if self._match_pattern(left_expr, right_val, env) then
@@ -674,42 +673,38 @@ i.walk(r"""
             def _set_val(coll_expr, index_expr, right_val) do
                 coll_val := self.eval(coll_expr, env);
                 index_val := self.eval(index_expr, env);
-                if type(coll_val) == 'dict' and type(index_val) == 'str' then
-                    if index_val.in(coll_val) then
-                        old_val := coll_val[index_val];
-                        right_val = self._overload_closure(right_val, old_val)
-                    end
-                end;
+                right_val = self._overload_closure(right_val, coll_val, index_val);
                 coll_val[index_val] = right_val
             end;
 
             right_val := self.eval(right_expr, env);
-            match left_expr.type()
-                case 'Ident' then
-                    env.assign(str(left_expr), right_val)
-                case 'Expr' then
-                    match left_expr
-                        case Expr(Ident('index'), [coll_expr, index_expr]) then
-                            _set_val(coll_expr, index_expr, right_val)
-                        case Expr(Ident('dot'), [coll_expr, index_expr]) then
-                            _set_val(coll_expr, index_expr, right_val)
-                        case _ then
-                            raise('Invalid assign target @ _assign: ' + str(left_expr))
-                    end
+            match left_expr
+                case Ident(name) then
+                    env.assign(name, right_val)
+                case tuple(Ident('index'), [coll_expr, index_expr]) then
+                        _set_val(coll_expr, index_expr, right_val)
+                case tuple(Ident('dot'), [coll_expr, index_expr]) then
+                        _set_val(coll_expr, index_expr, right_val)
                 case _ then
                     raise('Invalid assign target @ _assign: ' + str(left_expr))
             end
         end;
 
-        defmethod _overload_closure(right_val, old_val) do
-            match [right_val, old_val]
-                case [
-                    Expr(Ident('closure'), [pat, body, env_, _]),
-                    Expr(Ident('closure'), _)
-                ] then
-                    Expr(Ident('closure'), [pat, body, env_, old_val])
-                case _ then right_val
-            end
+        defmethod _overload_closure(right_val, coll_val, index_val) do
+            if type(coll_val) != 'dict' or type(index_val) != 'str' then
+                return(right_val)
+            end;
+            if index_val.in(coll_val) then
+                old_val := coll_val[index_val];
+                match [right_val, old_val]
+                    case [
+                        tuple(Ident('closure'), [pat, body, env_, _]),
+                        tuple(Ident('closure'), _)
+                    ] then
+                        return(tuple(Ident('closure'), [pat, body, env_, old_val]))
+                end
+            end;
+            right_val
         end;
 
         defmethod _seq(exprs, env) do
@@ -728,7 +723,7 @@ i.walk(r"""
 
         defmethod _match(val_expr, cases, env) do
             val := self.eval(val_expr, env);
-            for Expr(pattern, body_expr) in cases do
+            for tuple(pattern, body_expr) in cases do
                 if self._match_pattern(pattern, val, env) then
                     return(self.eval(body_expr, env))
                 end
@@ -801,8 +796,8 @@ i.walk(r"""
 
         defmethod apply(op_val, args_val) do
             match op_val
-                case Expr(Ident('hostfunc'), f) then f(args_val)
-                case Expr(Ident('closure'), [params_, body_expr, closure_env, fallback]) then
+                case tuple(Ident('hostfunc'), f) then f(args_val)
+                case tuple(Ident('closure'), [params_, body_expr, closure_env, fallback]) then
                     new_env := Environment(closure_env);
                     if self._match_pattern(params_, args_val, new_env) then
                         try
@@ -827,7 +822,7 @@ i.walk(r"""
                 while i < lpat do
                     sub_pat := pattern[i];
                     match sub_pat
-                        case Expr(Ident('*'), [Ident(rest_name)]) then
+                        case tuple(Ident('*'), [Ident(rest_name)]) then
                             no_star = False; break()
                     end;
                     if i >= lval then return(False) end;
@@ -847,7 +842,7 @@ i.walk(r"""
                 while i < lpat do
                     sub_pat := pattern[i];
                     match sub_pat
-                        case Expr(Ident('*'), [Ident(rest_name)]) then return(False)
+                        case tuple(Ident('*'), [Ident(rest_name)]) then return(False)
                     end;
                     sub_val := value[i + lrest - 1];
                     if not self._match_pattern(sub_pat, sub_val, env) then
@@ -884,18 +879,18 @@ i.walk(r"""
                 case Ident(name) then env.define(name, value); True
                 case list(_) then value.type() == 'list' and _match_list()
                 case dict(_) then value.type() == 'dict' and _match_dict()
-                case Expr(Ident('or'), [left_pat, right_pat]) then
+                case tuple(Ident('or'), [left_pat, right_pat]) then
                     self._match_pattern(left_pat, value, env) or
                     self._match_pattern(right_pat, value, env)
-                case Expr(Ident('Ident'), [name_pat]) then
+                case tuple(Ident('Ident'), [name_pat]) then
                     value.type() == 'Ident' and
                     self._match_pattern(name_pat, str(value), env)
-                case Expr(Ident('Expr'), expr_pats) then
-                    value.type() == 'Expr' and expr_pats.len() == value.len() and
+                case tuple(Ident('tuple'), expr_pats) then
+                    value.type() == 'tuple' and expr_pats.len() == value.len() and
                     zip(expr_pats, value).all(
                         [[p, v]] -> self._match_pattern(p, v, env)
                     )
-                case Expr(Ident(typ), [val_pat]) then
+                case tuple(Ident(typ), [val_pat]) then
                     value.type() == typ and self._match_pattern(val_pat, value, env)
                 case _ then
                     pattern.type() == value.type() and pattern == value
@@ -915,61 +910,61 @@ i.walk(r"""
         end;
 
         defmethod _builtins do
-            def make_hostfunc(f) do Expr(Ident('hostfunc'), args -> f(args)) end;
+            def make_hostfunc(f) do tuple(Ident('hostfunc'), args -> f(args)) end;
 
             self._env.define('__builtins', None);
 
-            self._env.define('add', Expr(Ident('hostfunc'), args -> args[0] + args[1]));
-            self._env.define('sub', Expr(Ident('hostfunc'), args -> args[0] - args[1]));
-            self._env.define('mul', Expr(Ident('hostfunc'), args -> args[0] * args[1]));
-            self._env.define('div', Expr(Ident('hostfunc'), args -> args[0] / args[1]));
-            self._env.define('mod', Expr(Ident('hostfunc'), args -> args[0] % args[1]));
-            self._env.define('neg', Expr(Ident('hostfunc'), args -> -args[0]));
+            self._env.define('add', tuple(Ident('hostfunc'), args -> args[0] + args[1]));
+            self._env.define('sub', tuple(Ident('hostfunc'), args -> args[0] - args[1]));
+            self._env.define('mul', tuple(Ident('hostfunc'), args -> args[0] * args[1]));
+            self._env.define('div', tuple(Ident('hostfunc'), args -> args[0] / args[1]));
+            self._env.define('mod', tuple(Ident('hostfunc'), args -> args[0] % args[1]));
+            self._env.define('neg', tuple(Ident('hostfunc'), args -> -args[0]));
 
-            self._env.define('equal', Expr(Ident('hostfunc'), args -> args[0] == args[1]));
-            self._env.define('not_equal', Expr(Ident('hostfunc'), args -> args[0] != args[1]));
-            self._env.define('less', Expr(Ident('hostfunc'), args -> args[0] < args[1]));
-            self._env.define('greater', Expr(Ident('hostfunc'), args -> args[0] > args[1]));
-            self._env.define('less_equal', Expr(Ident('hostfunc'), args -> args[0] <= args[1]));
-            self._env.define('greater_equal', Expr(Ident('hostfunc'), args -> args[0] >= args[1]));
-            self._env.define('not', Expr(Ident('hostfunc'), args -> not args[0]));
+            self._env.define('equal', tuple(Ident('hostfunc'), args -> args[0] == args[1]));
+            self._env.define('not_equal', tuple(Ident('hostfunc'), args -> args[0] != args[1]));
+            self._env.define('less', tuple(Ident('hostfunc'), args -> args[0] < args[1]));
+            self._env.define('greater', tuple(Ident('hostfunc'), args -> args[0] > args[1]));
+            self._env.define('less_equal', tuple(Ident('hostfunc'), args -> args[0] <= args[1]));
+            self._env.define('greater_equal', tuple(Ident('hostfunc'), args -> args[0] >= args[1]));
+            self._env.define('not', tuple(Ident('hostfunc'), args -> not args[0]));
 
-            self._env.define('len', Expr(Ident('hostfunc'), args -> len(args[0])));
-            self._env.define('index', Expr(Ident('hostfunc'), args -> index(args[0], args[1])));
-            self._env.define('slice', Expr(Ident('hostfunc'), args -> slice(args[0], args[1], args[2])));
-            self._env.define('push', Expr(Ident('hostfunc'), args -> push(args[0], args[1])));
-            self._env.define('pop', Expr(Ident('hostfunc'), args -> pop(args[0])));
-            self._env.define('in', Expr(Ident('hostfunc'), args -> in(args[0], args[1])));
-            self._env.define('copy', Expr(Ident('hostfunc'), args -> copy(args[0])));
+            self._env.define('len', tuple(Ident('hostfunc'), args -> len(args[0])));
+            self._env.define('index', tuple(Ident('hostfunc'), args -> index(args[0], args[1])));
+            self._env.define('slice', tuple(Ident('hostfunc'), args -> slice(args[0], args[1], args[2])));
+            self._env.define('push', tuple(Ident('hostfunc'), args -> push(args[0], args[1])));
+            self._env.define('pop', tuple(Ident('hostfunc'), args -> pop(args[0])));
+            self._env.define('in', tuple(Ident('hostfunc'), args -> in(args[0], args[1])));
+            self._env.define('copy', tuple(Ident('hostfunc'), args -> copy(args[0])));
 
-            self._env.define('chr', Expr(Ident('hostfunc'), args -> chr(args[0])));
-            self._env.define('ord', Expr(Ident('hostfunc'), args -> ord(args[0])));
-            self._env.define('join', Expr(Ident('hostfunc'), args -> join(args[0], args[1])));
+            self._env.define('chr', tuple(Ident('hostfunc'), args -> chr(args[0])));
+            self._env.define('ord', tuple(Ident('hostfunc'), args -> ord(args[0])));
+            self._env.define('join', tuple(Ident('hostfunc'), args -> join(args[0], args[1])));
 
-            self._env.define('keys', Expr(Ident('hostfunc'), args -> keys(args[0])));
-            self._env.define('items', Expr(Ident('hostfunc'), args -> items(args[0])));
+            self._env.define('keys', tuple(Ident('hostfunc'), args -> keys(args[0])));
+            self._env.define('items', tuple(Ident('hostfunc'), args -> items(args[0])));
 
-            self._env.define('type', Expr(Ident('hostfunc'), args -> type(args[0])));
-            self._env.define('bool', Expr(Ident('hostfunc'), args -> bool(args[0])));
-            self._env.define('int', Expr(Ident('hostfunc'), args -> int(args[0])));
-            self._env.define('str', Expr(Ident('hostfunc'), args -> str(args[0])));
-            self._env.define('list', Expr(Ident('hostfunc'), args -> list(args[0])));
-            self._env.define('dict', Expr(Ident('hostfunc'), args -> dict(args[0])));
-            self._env.define('Ident', Expr(Ident('hostfunc'), args -> Ident(args[0])));
-            self._env.define('Expr', Expr(Ident('hostfunc'), args -> apply(Expr, args)));
+            self._env.define('type', tuple(Ident('hostfunc'), args -> type(args[0])));
+            self._env.define('bool', tuple(Ident('hostfunc'), args -> bool(args[0])));
+            self._env.define('int', tuple(Ident('hostfunc'), args -> int(args[0])));
+            self._env.define('str', tuple(Ident('hostfunc'), args -> str(args[0])));
+            self._env.define('list', tuple(Ident('hostfunc'), args -> list(args[0])));
+            self._env.define('dict', tuple(Ident('hostfunc'), args -> dict(args[0])));
+            self._env.define('Ident', tuple(Ident('hostfunc'), args -> Ident(args[0])));
+            self._env.define('tuple', tuple(Ident('hostfunc'), args -> apply(tuple, args)));
 
-            self._env.define('print', Expr(Ident('hostfunc'), args -> apply(print, args)));
+            self._env.define('print', tuple(Ident('hostfunc'), args -> apply(print, args)));
 
-            self._env.define('read', Expr(Ident('hostfunc'), args -> read(args[0])));
-            self._env.define('load', Expr(Ident('hostfunc'), args -> self._load(args[0])));
+            self._env.define('read', tuple(Ident('hostfunc'), args -> read(args[0])));
+            self._env.define('load', tuple(Ident('hostfunc'), args -> self._load(args[0])));
 
-            self._env.define('eval', Expr(Ident('hostfunc'), args ->
+            self._env.define('eval', tuple(Ident('hostfunc'), args ->
                 Evaluator().eval(self.ast(args[0]), self._env)
             ));
-            self._env.define('eval_expr', Expr(Ident('hostfunc'), args ->
+            self._env.define('eval_expr', tuple(Ident('hostfunc'), args ->
                 Evaluator().eval(args[0], self._env)
             ));
-            self._env.define('apply', Expr(Ident('hostfunc'), args ->
+            self._env.define('apply', tuple(Ident('hostfunc'), args ->
                 Evaluator().apply(args[0], args[1])
             ))
         end;
@@ -1064,34 +1059,6 @@ if __name__ == "__main__":
 
     # Example
 
-    # Def
-    walk("""
-        def say_hello do "hello" end
-    """)
-    print(walk(""" say_hello() """)) # -> hello
-
-    walk("""
-        def fact(n) do n * fact(n - 1) end;
-        def fact(0) do 1 end
-    """)
-    print(walk(""" fact(0) """)) # -> 1
-    print(walk(""" fact(3) """)) # -> 6
-
-    print("\ndefclass / defmethod")
-    walk("""
-        defclass Counter(start) do
-            self.count = start;
-            defmethod inc(step) do
-                self.count = self.count + step
-            end;
-            defmethod get do
-                self.count
-            end
-        end
-    """)
-    walk(""" c := Counter(2) """)
-    walk(""" c.inc(3) """)
-    print(walk(""" c.get() """)) # -> 5
-
-    # walk(""" defclass 2 do 3 end """) # -> Invalid defclass syntax
-    # walk(""" defclass ErrCounter() do defmethod 2 do 3 end end; ErrCounter() """) # -> Invalid defmethod syntax
+    # tuple
+    print(walk(""" tuple(2, 3) """)) # -> (2, 3)
+    print(walk(""" type(tuple(2, 3)) """)) # -> tuple
