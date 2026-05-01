@@ -818,10 +818,10 @@ class Interpreter:
             end;
             #rule {defmacro: [__core_defmacro, EXPR, do, EXPR, end]}
 
-            __core_quotes := macro expr do quote quote scope !expr end end end end;
+            defmacro __core_quotes(expr) do quote quote scope !expr end end end end;
             #rule {quotes: [__core_quotes, EXPR, end]}
 
-            __core_def := macro call_expr, body do
+            defmacro __core_def(call_expr, body) do
                 match call_expr
                     case Expr(name, args) then
                         quote !name := func !!args do !body end end
@@ -835,7 +835,7 @@ class Interpreter:
 
             #rule {pif: [__core_if, EXPR, then, EXPR, else, EXPR, end]}
 
-            __core_if_macro := macro cnd, thn, elifs, els do scope
+            defmacro __core_if_macro(cnd, thn, elifs, els) do scope
                 __core_if_expr := pif els == [] then None else els[0] end;
                 __core_if_i := len(elifs) - 1;
                 while __core_if_i >= 0 do
@@ -855,17 +855,17 @@ class Interpreter:
 
             #rule {match: [__core_match, EXPR, *[case, EXPR, then, EXPR], end]}
 
-            _aif := macro cnd, thn, els do quote
+            defmacro _aif(cnd, thn, els) do quote
                 pif it := !cnd then !thn else !els end
             end end;
             #rule {aif: [_aif, EXPR, then, EXPR, else, EXPR, end]}
 
-            and := macro a, b do quote aif !a then !b else it end end end;
-            or := macro a, b do quote aif !a then it else !b end end end;
+            defmacro and(a, b) do quote aif !a then !b else it end end end;
+            defmacro or(a, b) do quote aif !a then it else !b end end end;
 
             #rule {while: [__core_while, EXPR, do, EXPR, +[then, EXPR], +[else, EXPR], end]}
 
-            __core_for := macro var, coll, body, thn, els do quote scope
+            defmacro __core_for(var, coll, body, thn, els) do quote scope
                 __core_for_coll := !coll;
                 __core_for_index := -1;
                 !Expr(Ident("__core_while"), [
