@@ -450,7 +450,7 @@ class Evaluator:
             case (Ident("break"), []):
                 raise BreakException()
             case (Ident("__core_func"), [params, body]):
-                return (Ident("closure"), [params, body, env])
+                return (Ident("closure"), [params, body, env, None])
             case (Ident("return"), args):
                 assert len(args) <= 1, \
                     f"Return takes zero or one argument @ evaluate(): {args}"
@@ -497,6 +497,16 @@ class Evaluator:
 
     def _define(self, left_expr, right_expr, env):
         right_val = self.eval(right_expr, env)
+        match left_expr:
+            case Ident(name):
+                match right_val:
+                    case (Ident("closure"), [params, body, closure_env, fallback]):
+                        old_val_dict = env.lookup(name)
+                        if old_val_dict is not None and name in old_val_dict:
+                            old_val = old_val_dict[name]
+                            match old_val:
+                                case (Ident("closure"), _):
+                                    right_val = (Ident("closure"), [params, body, closure_env, old_val])
         if self._match_pattern(left_expr, right_val, env):
             return right_val
         assert False, f"Pattern mismatch @ _define(): {left_expr}, {right_val}"
@@ -514,6 +524,13 @@ class Evaluator:
                     case list(), int():
                         coll_val[index_val] = right_val
                     case dict(), str():
+                        match right_val:
+                            case (Ident("closure"), [params, body, closure_env, fallback]):
+                                if index_val in coll_val:
+                                    old_val = coll_val[index_val]
+                                    match old_val:
+                                        case (Ident("closure"), _):
+                                            right_val = (Ident("closure"), [params, body, closure_env, old_val])
                         coll_val[index_val] = right_val
                     case _:
                         assert False, f"Invalid indexing @ _assign(): {coll_val}, {index_val}"
@@ -564,7 +581,7 @@ class Evaluator:
             case dict() if attr_expr in target_val:
                 attr_val = target_val[attr_expr]
                 match attr_val:
-                    case (Ident("closure"), [[Ident("self"), *_], _, _]):
+                    case (Ident("closure"), [[Ident("self"), *_], _, _, _]):
                         return lambda args: self.apply(attr_val, [target_val] + args)
                 return attr_val
 
@@ -572,7 +589,7 @@ class Evaluator:
         match attr_val:
             case c if callable(c):
                 return lambda args: c([target_val] + args)
-            case (Ident("closure"), [_, _, _]):
+            case (Ident("closure"), [_, _, _, _]):
                 return lambda args: self.apply(attr_val, [target_val] + args)
 
     def _op(self, op_expr, args_expr, env):
@@ -606,12 +623,14 @@ class Evaluator:
         match op_val:
             case c if callable(c):
                 return c(args_val)
-            case (Ident("closure"), [params, body, closure_env]):
+            case (Ident("closure"), [params, body, closure_env, fallback]):
                 new_env = Environment(closure_env)
                 if self._match_pattern(params, args_val, new_env):
                     try:
                         return self.eval(body, new_env)
                     except ReturnException as e: return e.val
+                if fallback is not None:
+                    return self.apply(fallback, args_val)
                 assert False, f"Argument mismatch @ apply(): {params}, {args_val}"
             case _:
                 assert False, f"Invalid operator @ apply(): {op_val}"
@@ -799,6 +818,16 @@ class Interpreter:
                 quote !name := func !!params_ do !body end end
             end;
             #rule {deffunc: [__core_deffunc, EXPR, params, EXPRS, do, EXPR, end]}
+
+            __core_def := macro call_expr, body do
+                match call_expr
+                    case Expr(name, args) then
+                        quote !name := func !!args do !body end end
+                    case _ then
+                        raise("Invalid def syntax")
+                end
+            end;
+            #rule {def: [__core_def, EXPR, do, EXPR, end]}
 
             #rule {pif: [__core_if, EXPR, then, EXPR, else, EXPR, end]}
 
@@ -1029,21 +1058,45 @@ if __name__ == "__main__":
 
     # Example
 
-    # Arrow function
-    print(walk(""" ([] -> 2)() """)) # -> 2
-    print(walk(""" ([a] -> a + 2)(3) """)) # -> 5
-    print(walk(""" (a -> a + 2)(3) """)) # -> 5 (single-parameter shorthand)
-    print(walk(""" ([[a, b]] -> a + b)([2, 3]) """)) # -> 5 (No shorthand for single list argument)
-    print(walk(""" ([a, b] -> a + b)(2, 3) """)) # -> 5
-    # walk(""" ([a, b] -> a + b)(2) """) # -> Argument mismatch
+    # Function overloading
+    walk("""
+        deffunc foo params x do print("Not supported: " + str(x))  end;
+        deffunc foo params {kind: "Person", name: str(name)} do print("Person: " + name) end;
+        deffunc foo params str(s) do print("string: " + s) end;
+        deffunc foo params int(n) do print("int: " + str(n)) end
+    """)
+    walk(""" foo(2) """) # -> int: 2
+    walk(""" foo("bar") """) # -> string: bar
+    walk(""" foo({kind: "Person", name: "John"}) """) # -> Person: John
+    walk(""" foo([2]) """) # -> Not supported: [2]
 
-    print(walk(""" ([a, *b] -> b)(2, 3, 4) """)) # -> [3, 4]
-    print(walk(""" ({a} -> a + 2)({a: 3}) """)) # -> 5
-    # walk(""" ({a} -> a + 2)({b: 3}) """) # -> Argument mismatch
-    print(walk(""" (int(a) -> a + 2)(3) """)) # -> 5
-    # walk(""" (int(a) -> a + 2)("aaa") """) # -> Argument mismatch
+    walk("""
+        fib := n -> fib(n - 1) + fib(n - 2);
+        fib := 1 -> 1;
+        fib := 0 -> 0
+    """)
+    print(walk(""" fib(0) """)) # -> 0
+    print(walk(""" fib(1) """)) # -> 1
+    print(walk(""" fib(4) """)) # -> 3
 
-    print(walk(""" (x -> x or 2)(False) """)) # -> 2
-    print(walk(""" (a -> b -> a + b)(2)(3) """)) # -> 5
+    print(walk("""
+        defclass Accumulator params do
+            self.total = 0;
+            defmethod add params int(n) do self.total = self.total + n end;
+            defmethod add params list(arr) do
+                for n in arr do self.add(n) end
+            end;
+            defmethod add params str(s) do self.add(int(s)) end
+        end;
+        acc := Accumulator();
+        acc.add(10); acc.add([20, 30]); acc.add("40");
+        acc.total
+    """)) # -> 100
 
-    walk(""" for i in [1, 2, 3].filter(x -> x % 2 == 1) do print(i) end """) # -> 1\n3\n
+    # Def
+    walk("""
+        def fact(n) do n * fact(n - 1) end;
+        def fact(0) do 1 end
+    """)
+    print(walk(""" fact(0) """)) # -> 0
+    print(walk(""" fact(3) """)) # -> 6

@@ -632,6 +632,46 @@ class TestToT(TestBase):
         self.walk(r""" deffunc myadd params a, b do a + b end """)
         assert self.walk(r""" myadd(2, 3) """) == 5
 
+    def test_overload_deffunc(self, capsys):
+        self.walk("""
+            deffunc foo params x do print("Not supported: " + str(x))  end;
+            deffunc foo params {kind: "Person", name: str(name)} do print("Person: " + name) end;
+            deffunc foo params str(s) do print("string: " + s) end;
+            deffunc foo params int(n) do print("int: " + str(n)) end
+        """)
+        self.walk(""" foo(2) """)
+        assert capsys.readouterr().out == "int: 2\n"
+        self.walk(""" foo("bar") """)
+        assert capsys.readouterr().out == "string: bar\n"
+        self.walk(""" foo({kind: "Person", name: "John"}) """)
+        assert capsys.readouterr().out == "Person: John\n"
+        self.walk(""" foo([2]) """)
+        assert capsys.readouterr().out == "Not supported: [2]\n"
+
+    def test_overload_arrow_func(self):
+        self.walk("""
+            fib := n -> fib(n - 1) + fib(n - 2);
+            fib := 1 -> 1;
+            fib := 0 -> 0
+        """)
+        assert self.walk(""" fib(0) """) == 0
+        assert self.walk(""" fib(1) """) == 1
+        assert self.walk(""" fib(4) """) == 3
+
+    def test_def(self):
+        self.walk(r""" def myadd(a, b) do a + b end """)
+        assert self.walk(r""" myadd(2, 3) """) == 5
+
+        self.walk(r"""
+            def fact(n) do n * fact(n - 1) end;
+            def fact(0) do 1 end
+        """)
+        assert self.walk(r""" fact(0) """) == 1
+        assert self.walk(r""" fact(3) """) == 6
+
+        with pytest.raises(Exception, match="Invalid def syntax"):
+            self.walk(r""" def myadd do 2 end """)
+
     def test_if(self):
         assert self.walk(r""" if True then 2 end """) == 2
         assert self.walk(r""" if False then 2 end """) is None
@@ -1049,6 +1089,21 @@ class TestToT(TestBase):
             self.walk(""" defclass Foo params x end """)
         with pytest.raises(Exception, match="Expected params"):
             self.walk(""" defclass Foo params x do defmethod bar do end end """)
+
+    def test_defmethod_overloading(self):
+        self.walk("""
+            defclass Accumulator params do
+                self.total = 0;
+                defmethod add params int(n) do self.total = self.total + n end;
+                defmethod add params list(arr) do
+                    for n in arr do self.add(n) end
+                end;
+                defmethod add params str(s) do self.add(int(s)) end
+            end;
+            acc := Accumulator();
+            acc.add(10); acc.add([20, 30]); acc.add("40")
+        """)
+        assert self.walk(""" acc.total """) == 100
 
     def test_read_load(self, tmp_path):
         assert self.walk(""" type(read("lib/fib.toil")) """) == "str"

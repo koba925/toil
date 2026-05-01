@@ -245,6 +245,7 @@ i.walk(r"""
                 case Ident('{') then self._dict()
                 case Ident('func') then self._func()
                 case Ident('deffunc') then self._deffunc()
+                case Ident('def') then self._def()
                 case Ident('scope') then self._scope()
                 case Ident('if') then self._if()
                 case Ident('match') then self._match()
@@ -331,6 +332,20 @@ i.walk(r"""
             body_expr := self._expression();
             self._consume(Ident('end'));
             Expr(Ident('define'), [name, Expr(Ident('func'), [params, body_expr])])
+        end;
+
+        defmethod _def params do
+            self._current_and_advance();
+            call_expr := self._expression();
+            self._consume(Ident('do'));
+            body_expr := self._expression();
+            self._consume(Ident('end'));
+            match call_expr
+                case Expr(name, args) then
+                    Expr(Ident('define'), [name, Expr(Ident('func'), [args, body_expr])])
+                case _ then
+                    raise('Invalid def syntax @ _def(): ' + str(call_expr))
+            end
         end;
 
         defmethod _scope params do
@@ -569,7 +584,7 @@ i.walk(r"""
                 case Expr(Ident('quote'), [expr]) then
                     expr
                 case Expr(Ident('func'), [params, body_expr]) then
-                    Expr(Ident('closure'), [params, body_expr, env])
+                    Expr(Ident('closure'), [params, body_expr, env, None])
                 case Expr(Ident('return'), args) then
                     raise(['ReturnException', self._eval_optional_arg(args, env)])
                 case Expr(Ident('dot'), [target_expr, attr_expr]) then
@@ -616,7 +631,7 @@ i.walk(r"""
             if target_val.type() == 'dict' and attr_name.in(target_val) then
                 attr_val := target_val[attr_name];
                 match attr_val
-                    case Expr(Ident('closure'), [[Ident('self'), *_], _, _]) then
+                    case Expr(Ident('closure'), [[Ident('self'), *_], _, _, _]) then
                         Expr(Ident('hostfunc'), args ->
                             self.apply(attr_val, [target_val] + args)
                         )
@@ -633,6 +648,25 @@ i.walk(r"""
 
         defmethod _define params left_expr, right_expr, env do
             right_val := self.eval(right_expr, env);
+            match left_expr
+                case Ident(name) then
+                    match right_val
+                        case Expr(Ident('closure'), [
+                            params_, body_expr, closure_env, fallback
+                        ]) then
+                            old_val_dict := env.lookup(name);
+                            if old_val_dict != None and name.in(old_val_dict) then
+                                old_val := old_val_dict[name];
+                                match old_val
+                                    case Expr(Ident('closure'), _) then
+                                        right_val = Expr(
+                                            Ident('closure'),
+                                            [params_, body_expr, closure_env, old_val]
+                                        )
+                                end
+                            end
+                    end
+            end;
             if self._match_pattern(left_expr, right_val, env) then
                 right_val
             else
@@ -644,6 +678,23 @@ i.walk(r"""
             deffunc _set_val params coll_expr, index_expr, right_val do
                 coll_val := self.eval(coll_expr, env);
                 index_val := self.eval(index_expr, env);
+                if type(coll_val) == 'dict' and type(index_val) == 'str' then
+                    match right_val
+                        case Expr(Ident('closure'), [
+                            params_, body_expr, closure_env, fallback
+                        ]) then
+                            if index_val.in(coll_val) then
+                                old_val := coll_val[index_val];
+                                match old_val
+                                    case Expr(Ident('closure'), _) then
+                                        right_val = Expr(
+                                            Ident('closure'),
+                                            [params_, body_expr, closure_env, old_val]
+                                        )
+                                end
+                            end
+                    end
+                end;
                 coll_val[index_val] = right_val
             end;
 
@@ -751,7 +802,7 @@ i.walk(r"""
         defmethod apply params op_val, args_val do
             match op_val
                 case Expr(Ident('hostfunc'), f) then f(args_val)
-                case Expr(Ident('closure'), [params_, body_expr, closure_env]) then
+                case Expr(Ident('closure'), [params_, body_expr, closure_env, fallback]) then
                     new_env := Environment(closure_env);
                     if self._match_pattern(params_, args_val, new_env) then
                         try
@@ -759,6 +810,9 @@ i.walk(r"""
                         except ['ReturnException', val] then
                             return(val)
                         end
+                    end;
+                    if fallback != None then
+                        return(self.apply(fallback, args_val))
                     end;
                     raise('Pattern mismatch @ apply: ' + str(params_) + ', ' + str(args_val))
                 case _ then raise('Invalid operator @ apply: ' + str(op_val))
@@ -1014,21 +1068,45 @@ if __name__ == "__main__":
 
     # Example
 
-    # Arrow function
-    print(walk(""" ([] -> 2)() """)) # -> 2
-    print(walk(""" ([a] -> a + 2)(3) """)) # -> 5
-    print(walk(""" (a -> a + 2)(3) """)) # -> 5 (single-parameter shorthand)
-    print(walk(""" ([[a, b]] -> a + b)([2, 3]) """)) # -> 5 (No shorthand for single list argument)
-    print(walk(""" ([a, b] -> a + b)(2, 3) """)) # -> 5
-    # walk(""" ([a, b] -> a + b)(2) """) # -> Argument mismatch
+    # Function overloading
+    walk("""
+        deffunc foo params x do print("Not supported: " + str(x))  end;
+        deffunc foo params {kind: "Person", name: str(name)} do print("Person: " + name) end;
+        deffunc foo params str(s) do print("string: " + s) end;
+        deffunc foo params int(n) do print("int: " + str(n)) end
+    """)
+    walk(""" foo(2) """) # -> int: 2
+    walk(""" foo("bar") """) # -> string: bar
+    walk(""" foo({kind: "Person", name: "John"}) """) # -> Person: John
+    walk(""" foo([2]) """) # -> Not supported: [2]
 
-    print(walk(""" ([a, *b] -> b)(2, 3, 4) """)) # -> [3, 4]
-    print(walk(""" ({a} -> a + 2)({a: 3}) """)) # -> 5
-    # walk(""" ({a} -> a + 2)({b: 3}) """) # -> Argument mismatch
-    print(walk(""" (int(a) -> a + 2)(3) """)) # -> 5
-    # walk(""" (int(a) -> a + 2)("aaa") """) # -> Argument mismatch
+    walk("""
+        fib := n -> fib(n - 1) + fib(n - 2);
+        fib := 1 -> 1;
+        fib := 0 -> 0
+    """)
+    print(walk(""" fib(0) """)) # -> 0
+    print(walk(""" fib(1) """)) # -> 1
+    print(walk(""" fib(4) """)) # -> 3
 
-    print(walk(""" (x -> x or 2)(False) """)) # -> 2
-    print(walk(""" (a -> b -> a + b)(2)(3) """)) # -> 5
+    print(walk("""
+        defclass Accumulator params do
+            self.total = 0;
+            defmethod add params int(n) do self.total = self.total + n end;
+            defmethod add params list(arr) do
+                for n in arr do self.add(n) end
+            end;
+            defmethod add params str(s) do self.add(int(s)) end
+        end;
+        acc := Accumulator();
+        acc.add(10); acc.add([20, 30]); acc.add("40");
+        acc.total
+    """)) # -> 100
 
-    walk(""" for i in [1, 2, 3].filter(x -> x % 2 == 1) do print(i) end """) # -> 1\n3\n
+    # Def
+    walk("""
+        def fact(n) do n * fact(n - 1) end;
+        def fact(0) do 1 end
+    """)
+    print(walk(""" fact(0) """)) # -> 0
+    print(walk(""" fact(3) """)) # -> 6

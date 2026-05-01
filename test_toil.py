@@ -1430,6 +1430,47 @@ text
         """)
         assert capsys.readouterr().out == "I'm Leo\nwoof\n"
 
+    def test_overload_deffunc(self, capsys):
+        self.i.walk("""
+            deffunc foo params x do print("Not supported: " + str(x))  end;
+            deffunc foo params {kind: "Person", name: str(name)} do print("Person: " + name) end;
+            deffunc foo params str(s) do print("string: " + s) end;
+            deffunc foo params int(n) do print("int: " + str(n)) end
+        """)
+        self.i.walk(""" foo(2) """)
+        assert capsys.readouterr().out == "int: 2\n"
+        self.i.walk(""" foo("bar") """)
+        assert capsys.readouterr().out == "string: bar\n"
+        self.i.walk(""" foo({kind: "Person", name: "John"}) """)
+        assert capsys.readouterr().out == "Person: John\n"
+        self.i.walk(""" foo([2]) """)
+        assert capsys.readouterr().out == "Not supported: [2]\n"
+
+    def test_overload_arrow_func(self):
+        self.i.walk("""
+            fib := n -> fib(n - 1) + fib(n - 2);
+            fib := 1 -> 1;
+            fib := 0 -> 0
+        """)
+        assert self.i.walk(""" fib(0) """) == 0
+        assert self.i.walk(""" fib(1) """) == 1
+        assert self.i.walk(""" fib(4) """) == 3
+
+    def test_defmethod_overloading(self):
+        self.i.walk("""
+            defclass Accumulator params do
+                self.total = 0;
+                defmethod add params int(n) do self.total = self.total + n end;
+                defmethod add params list(arr) do
+                    for n in arr do self.add(n) end
+                end;
+                defmethod add params str(s) do self.add(int(s)) end
+            end;
+            acc := Accumulator();
+            acc.add(10); acc.add([20, 30]); acc.add("40")
+        """)
+        assert self.i.walk(""" acc.total """) == 100
+
     def test_sieve_ufcs(self):
         result = self.i.walk("""
             sieve := [False, False] + [True] * 98;
@@ -1995,6 +2036,17 @@ class TestCustomSyntax(TestBase):
         self.i.walk(""" defmacro mone_macro params x do quote !x * 2 end end """)
         assert self.i.walk(""" expand(mone_macro(3)) """)
         assert self.i.walk(""" mone_macro(3) """) == 6
+
+    def test_def(self):
+        self.i.walk(r"""
+            def fact(n) do n * fact(n - 1) end;
+            def fact(0) do 1 end
+        """)
+        assert self.i.walk(r""" fact(0) """) == 1
+        assert self.i.walk(r""" fact(3) """) == 6
+
+        with pytest.raises(AssertionError, match="Invalid def syntax"):
+            self.i.walk(r""" def myadd do 2 end """)
 
     def test_let_custom_rule(self):
         # Setup for let_func and let_scope

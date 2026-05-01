@@ -234,6 +234,7 @@ defclass Parser params tokens do
             case Ident('{') then self._dict()
             case Ident('func') then self._func()
             case Ident('deffunc') then self._deffunc()
+            case Ident('def') then self._def()
             case Ident('scope') then self._scope()
             case Ident('if') then self._if()
             case Ident('match') then self._match()
@@ -320,6 +321,20 @@ defclass Parser params tokens do
         body_expr := self._expression();
         self._consume(Ident('end'));
         Expr(Ident('define'), [name, Expr(Ident('func'), [params, body_expr])])
+    end;
+
+    defmethod _def params do
+        self._current_and_advance();
+        call_expr := self._expression();
+        self._consume(Ident('do'));
+        body_expr := self._expression();
+        self._consume(Ident('end'));
+        match call_expr
+            case Expr(name, args) then
+                Expr(Ident('define'), [name, Expr(Ident('func'), [args, body_expr])])
+            case _ then
+                raise('Invalid def syntax @ _def(): ' + str(call_expr))
+        end
     end;
 
     defmethod _scope params do
@@ -556,7 +571,7 @@ defclass Evaluator params do
             case Expr(Ident('quote'), [expr]) then
                 expr
             case Expr(Ident('func'), [params, body_expr]) then
-                Expr(Ident('closure'), [params, body_expr, env])
+                Expr(Ident('closure'), [params, body_expr, env, None])
             case Expr(Ident('return'), args) then
                 raise(['ReturnException', self._eval_optional_arg(args, env)])
             case Expr(Ident('dot'), [target_expr, attr_expr]) then
@@ -603,7 +618,7 @@ defclass Evaluator params do
         if target_val.type() == 'dict' and attr_name.in(target_val) then
             attr_val := target_val[attr_name];
             match attr_val
-                case Expr(Ident('closure'), [[Ident('self'), *_], _, _]) then
+                case Expr(Ident('closure'), [[Ident('self'), *_], _, _, _]) then
                     Expr(Ident('hostfunc'), args ->
                         self.apply(attr_val, [target_val] + args)
                     )
@@ -620,6 +635,25 @@ defclass Evaluator params do
 
     defmethod _define params left_expr, right_expr, env do
         right_val := self.eval(right_expr, env);
+        match left_expr
+            case Ident(name) then
+                match right_val
+                    case Expr(Ident('closure'), [
+                        params_, body_expr, closure_env, fallback
+                    ]) then
+                        old_val_dict := env.lookup(name);
+                        if old_val_dict != None and name.in(old_val_dict) then
+                            old_val := old_val_dict[name];
+                            match old_val
+                                case Expr(Ident('closure'), _) then
+                                    right_val = Expr(
+                                        Ident('closure'),
+                                        [params_, body_expr, closure_env, old_val]
+                                    )
+                            end
+                        end
+                end
+        end;
         if self._match_pattern(left_expr, right_val, env) then
             right_val
         else
@@ -631,6 +665,23 @@ defclass Evaluator params do
         deffunc _set_val params coll_expr, index_expr, right_val do
             coll_val := self.eval(coll_expr, env);
             index_val := self.eval(index_expr, env);
+            if type(coll_val) == 'dict' and type(index_val) == 'str' then
+                match right_val
+                    case Expr(Ident('closure'), [
+                        params_, body_expr, closure_env, fallback
+                    ]) then
+                        if index_val.in(coll_val) then
+                            old_val := coll_val[index_val];
+                            match old_val
+                                case Expr(Ident('closure'), _) then
+                                    right_val = Expr(
+                                        Ident('closure'),
+                                        [params_, body_expr, closure_env, old_val]
+                                    )
+                            end
+                        end
+                end
+            end;
             coll_val[index_val] = right_val
         end;
 
@@ -738,7 +789,7 @@ defclass Evaluator params do
     defmethod apply params op_val, args_val do
         match op_val
             case Expr(Ident('hostfunc'), f) then f(args_val)
-            case Expr(Ident('closure'), [params_, body_expr, closure_env]) then
+            case Expr(Ident('closure'), [params_, body_expr, closure_env, fallback]) then
                 new_env := Environment(closure_env);
                 if self._match_pattern(params_, args_val, new_env) then
                     try
@@ -746,6 +797,9 @@ defclass Evaluator params do
                     except ['ReturnException', val] then
                         return(val)
                     end
+                end;
+                if fallback != None then
+                    return(self.apply(fallback, args_val))
                 end;
                 raise('Pattern mismatch @ apply: ' + str(params_) + ', ' + str(args_val))
             case _ then raise('Invalid operator @ apply: ' + str(op_val))
