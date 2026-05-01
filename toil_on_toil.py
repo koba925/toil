@@ -1059,6 +1059,23 @@ if __name__ == "__main__":
 
     # Example
 
-    # tuple
-    print(walk(""" tuple(2, 3) """)) # -> (2, 3)
-    print(walk(""" type(tuple(2, 3)) """)) # -> tuple
+    # Lazy evaluation
+    print(walk("""
+        def force(thunk) do thunk() end;
+        def stream_car(s) do s[0] end;
+        def stream_cdr(s) do force(s[1]) end;
+
+        def take(n, s) do
+            if n == 0 then
+                []
+            else
+                [stream_car(s)] + take(n - 1, stream_cdr(s))
+            end
+        end;
+
+        def count_from(n) do
+            [n, [] -> count_from(n + 1)]
+        end;
+
+        take(5, count_from(1))
+    """)) # -> [1, 2, 3, 4, 5]

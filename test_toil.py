@@ -1831,6 +1831,30 @@ class TestMacroSamples(TestBase):
         assert self.i.walk(""" call_by_name("add", 2, 3) """) == 5
         assert self.i.walk(""" call_by_name("sub", 10, 4) """) == 6
 
+    def test_lazy_evaluation(self):
+        assert self.i.walk("""
+            defmacro delay(expr) do quote func do !expr end end end;
+            def force(thunk) do thunk() end;
+
+            defmacro cons_stream(a, b) do quote tuple(!a, delay(!b)) end end;
+            def stream_car(s) do s[0] end;
+            def stream_cdr(s) do force(s[1]) end;
+
+            def take(n, s) do
+                if n == 0 then
+                    []
+                else
+                    [stream_car(s)] + take(n - 1, stream_cdr(s))
+                end
+            end;
+
+            def count_from(n) do
+                cons_stream(n, count_from(n + 1))
+            end;
+
+            take(5, count_from(1))
+        """) == [1, 2, 3, 4, 5]
+
 class TestCustomSyntax(TestBase):
     def test_when(self):
         self.i.walk("""

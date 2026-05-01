@@ -1320,5 +1320,26 @@ class TestExamples(TestBase):
         """)
         assert capsys.readouterr().out == "I am Leo\nwoof\n"
 
+    def test_lazy_evaluation_with_thunks(self):
+        assert self.walk("""
+            def force(thunk) do thunk() end;
+            def stream_car(s) do s[0] end;
+            def stream_cdr(s) do force(s[1]) end;
+
+            def take(n, s) do
+                if n == 0 then
+                    []
+                else
+                    [stream_car(s)] + take(n - 1, stream_cdr(s))
+                end
+            end;
+
+            def count_from(n) do
+                tuple(n, [] -> count_from(n + 1))
+            end;
+
+            take(5, count_from(1))
+        """) == [1, 2, 3, 4, 5]
+
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -1071,3 +1071,20 @@ if __name__ == "__main__":
     print(walk(""" type(gensym("foo")) """)) # -> Ident
 
     print(walk(""" for i in [1, 2, 3] do ans := i * 2 end; [i, ans] """)) # -> [3, 6]
+
+    # Lazy evaluation (Infinite stream) using macro
+    print(walk("""
+        defmacro delay(expr) do quote func do !expr end end end;
+        def force(thunk) do thunk() end;
+
+        defmacro cons_stream(a, b) do quote tuple(!a, delay(!b)) end end;
+        def stream_car(s) do s[0] end;
+        def stream_cdr(s) do force(s[1]) end;
+
+        def take(n, s) do
+            if n == 0 then [] else [stream_car(s)] + take(n - 1, stream_cdr(s)) end
+        end;
+
+        def count_from(n) do cons_stream(n, count_from(n + 1)) end;
+        take(5, count_from(1))
+    """)) # -> [1, 2, 3, 4, 5]
