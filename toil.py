@@ -753,6 +753,19 @@ class VM:
             match inst:
                 case ("halt",): break
                 case ("const", val): self._stack.append(val)
+                case ("add",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l + r)
+                case ("sub",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l - r)
+                case ("mul",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l * r)
+                case ("div",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l // r)
+                case ("mod",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l % r)
+                case ("equal",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l == r)
+                case ("not_equal",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l != r)
+                case ("less",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l < r)
+                case ("greater",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l > r)
+                case ("less_equal",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l <= r)
+                case ("greater_equal",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l >= r)
+                case ("neg",): self._stack.append(-self._stack.pop())
+                case ("not",): self._stack.append(not self._stack.pop())
                 case _:
                     assert False, f"Invalid instruction @ execute(): {inst}"
         assert len(self._stack) == 1, f"Unused stack left @ execute(): {self._stack}"
