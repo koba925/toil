@@ -17,6 +17,8 @@ RuleElement = Ident | tuple[Ident, list[Any]]
 CustomRules = dict[str, list[RuleElement]]
 Token = Ident | int | str | bool | None
 Expr = Any
+Inst = tuple
+Code = list[Inst]
 Value = Any
 SymbolTable = dict[str, Value]
 
@@ -718,6 +720,45 @@ class Evaluator:
             case _:
                 return type(pattern) is type(value) and pattern == value
 
+class Compiler:
+    def __init__(self):
+        self._code = []
+
+    def compile(self,expr: Expr) -> Code:
+        self._code = []
+        self._expression(expr)
+        self._code.append(("halt",))
+        return self._code
+
+    def _expression(self, expr):
+        match expr:
+            case None | bool() | int() | str():
+                self._code.append(("const", expr))
+            case _:
+                assert False, f"Unsupported expression @ compile(): {expr}"
+
+class VM:
+    def __init__(self):
+        self._code = []
+        self._ip = 0
+        self._stack = []
+
+    def load(self, code: Code) -> None:
+        self._code = code
+        self._ip = 0
+
+    def execute(self) -> Value:
+        while True:
+            inst = self._code[self._ip]; self._ip += 1
+            match inst:
+                case ("halt",): break
+                case ("const", val): self._stack.append(val)
+                case _:
+                    assert False, f"Invalid instruction @ execute(): {inst}"
+        assert len(self._stack) == 1, f"Unused stack left @ execute(): {self._stack}"
+        return self._stack.pop()
+
+
 class Interpreter:
     def __init__(self):
         self._env = Environment()
@@ -1029,6 +1070,18 @@ class Interpreter:
     def walk(self, src: str) -> Value:
         return self.eval(self.ast(src))
 
+    def compile(self, ast: Expr) -> Code:
+        return Compiler().compile(ast)
+
+    def execute(self, code: Code) -> Value:
+        vm = VM()
+        vm.load(code)
+        return vm.execute()
+
+    def run(self, src: str) -> Value:
+        return self.execute(self.compile(self.ast(src)))
+
+
 if __name__ == "__main__":
     import sys
 
@@ -1037,6 +1090,19 @@ if __name__ == "__main__":
     def ast(src): return i.ast(src)
     def eval(expr): return i.eval(expr)
     def walk(src): return i.walk(src)
+    def compile(expr): return i.compile(expr)
+    def execute(code): return i.execute(code)
+    def run(src): return i.run(src)
+    def run_verbose(src):
+        print()
+        expr = ast(src)
+        print("AST:", expr)
+        code = compile(expr)
+        print("Code:")
+        for addr, inst in enumerate(code): print(f"{addr:3}: {inst}")
+        result = execute(code)
+        print("Result:", result)
+        return result
 
     def repl():
         while True:
@@ -1052,7 +1118,7 @@ if __name__ == "__main__":
             except AssertionError as e:
                 print("Error:", e, sep="\n")
 
-    def run(filename):
+    def walk_file(filename):
         with open(filename, "r") as f:
             result = walk(f.read())
         exit(result if isinstance(result, int) else 0)
@@ -1061,30 +1127,12 @@ if __name__ == "__main__":
         if sys.argv[1] == "--repl":
             repl()
         else:
-            run(sys.argv[1])
+            walk_file(sys.argv[1])
 
     # Example
 
-    # Gensym
-    print(walk(""" gensym("foo") """)) # -> __foo_x
-    print(walk(""" gensym("foo") """)) # -> __foo_y
-    print(walk(""" type(gensym("foo")) """)) # -> Ident
+    run_verbose(r""" 2 """) # -> 2
+    run_verbose(r""" None """) # -> None
+    run_verbose(r""" True """) # -> True
+    run_verbose(r""" "hello" """) # -> hello
 
-    print(walk(""" for i in [1, 2, 3] do ans := i * 2 end; [i, ans] """)) # -> [3, 6]
-
-    # Lazy evaluation (Infinite stream) using macro
-    print(walk("""
-        defmacro delay(expr) do quote func do !expr end end end;
-        def force(thunk) do thunk() end;
-
-        defmacro cons_stream(a, b) do quote tuple(!a, delay(!b)) end end;
-        def stream_car(s) do s[0] end;
-        def stream_cdr(s) do force(s[1]) end;
-
-        def take(n, s) do
-            if n == 0 then [] else [stream_car(s)] + take(n - 1, stream_cdr(s)) end
-        end;
-
-        def count_from(n) do cons_stream(n, count_from(n + 1)) end;
-        take(5, count_from(1))
-    """)) # -> [1, 2, 3, 4, 5]
