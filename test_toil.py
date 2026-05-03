@@ -1170,10 +1170,10 @@ text
             i.walk(""" return() """)
 
     def test_load(self, tmp_path):
-        i.walk(""" fib := load("lib/fib.toil") """)
+        i.walk(""" fib := load("scripts/fib.toil") """)
         assert i.walk(""" fib(9) """) == 34
 
-        i.walk(""" [gcd_recur, gcd_iter] := load("lib/gcd.toil") """)
+        i.walk(""" [gcd_recur, gcd_iter] := load("scripts/gcd.toil") """)
         assert i.walk(""" gcd_recur(24, 36) """) == 12
         assert i.walk(""" gcd_iter(24, 36) """) == 12
 
@@ -1276,15 +1276,15 @@ text
         assert i.walk(""" f([Ident("add"), [2, 3]]) """) == None
 
     def test_dict_module(self):
-        i.walk(""" gcd := load("lib/gcd_dict.toil") """)
+        i.walk(""" gcd := load("scripts/gcd_dict.toil") """)
         assert i.walk(""" gcd.recur(24, 36) """) == 12
         assert i.walk(""" gcd.iter(24, 36) """) == 12
 
-        i.walk(""" {recur, iter} := load("lib/gcd_dict.toil") """)
+        i.walk(""" {recur, iter} := load("scripts/gcd_dict.toil") """)
         assert i.walk(""" recur(24, 36) """) == 12
         assert i.walk(""" iter(24, 36) """) == 12
 
-        i.walk(""" {recur: gcd_recur, iter: gcd_iter} := load("lib/gcd_dict.toil") """)
+        i.walk(""" {recur: gcd_recur, iter: gcd_iter} := load("scripts/gcd_dict.toil") """)
         assert i.walk(""" gcd_recur(24, 36) """) == 12
         assert i.walk(""" gcd_iter(24, 36) """) == 12
 

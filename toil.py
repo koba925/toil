@@ -1099,48 +1099,40 @@ if __name__ == "__main__":
     import sys
 
     i = Interpreter().init_env().stdlib()
-    def scan(src): return i.scan(src)
-    def ast(src): return i.ast(src)
-    def eval(expr): return i.eval(expr)
-    def walk(src): return i.walk(src)
-    def compile(expr): return i.compile(expr)
-    def execute(code): return i.execute(code)
-    def run(src): return i.run(src)
-    def run_verbose(src):
-        print()
-        expr = ast(src)
-        print("AST:", expr)
-        code = compile(expr)
-        print("Code:")
-        for addr, inst in enumerate(code): print(f"{addr:3}: {inst}")
-        result = execute(code)
-        print("Result:", result)
-        return result
 
-    def repl():
+    def repl(walk_or_run):
         while True:
             print("\nInput source and enter Ctrl+D:")
             if (src := sys.stdin.read()) == "":
                 exit(0)
             try:
-                expr = ast(src)
+                expr = i.ast(src)
                 print("AST:", expr, sep="\n")
-                print("Output:")
-                result = eval(expr)
+                if walk_or_run == "walk":
+                    print("Output:")
+                    result = i.eval(expr)
+                else:
+                    code = i.compile(src)
+                    print("Code:", code, "Output:", sep="\n")
+                    result = i.execute(code)
                 print("Result:", result, sep="\n")
             except AssertionError as e:
                 print("Error:", e, sep="\n")
 
-    def walk_file(filename):
+    def go_file(walk_or_run, filename):
         with open(filename, "r") as f:
-            result = walk(f.read())
+            if walk_or_run == "walk":
+                result = i.walk(f.read())
+            else:
+                result = i.run(f.read())
         exit(result if isinstance(result, int) else 0)
 
     if len(sys.argv) > 1:
-        if sys.argv[1] == "--repl":
-            repl()
-        else:
-            walk_file(sys.argv[1])
+        match sys.argv[1]:
+            case "--repl": repl("walk")
+            case "--rcepl": repl("run")
+            case "--walk": go_file("walk", sys.argv[2])
+            case "--run": go_file("run", sys.argv[2])
 
     # Example
 

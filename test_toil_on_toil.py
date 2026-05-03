@@ -1104,8 +1104,8 @@ class TestToT:
         assert i.walk(""" acc.total """) == 100
 
     def test_read_load(self, tmp_path):
-        assert i.walk(""" type(read("lib/fib.toil")) """) == "str"
-        assert i.walk(""" load("lib/fib.toil")(4) """) == 3
+        assert i.walk(""" type(read("scripts/fib.toil")) """) == "str"
+        assert i.walk(""" load("scripts/fib.toil")(4) """) == 3
 
     def test_eval_apply(self):
         assert i.walk(""" eval("2 + 3") """) == 5
