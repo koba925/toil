@@ -1083,8 +1083,8 @@ class Interpreter:
     def walk(self, src: str) -> Value:
         return self.eval(self.ast(src))
 
-    def compile(self, ast: Expr) -> Code:
-        return Compiler().compile(ast)
+    def compile(self, src: str) -> Code:
+        return Compiler().compile(self.ast(src))
 
     def execute(self, code: Code) -> Value:
         vm = VM()
@@ -1092,7 +1092,7 @@ class Interpreter:
         return vm.execute()
 
     def run(self, src: str) -> Value:
-        return self.execute(self.compile(self.ast(src)))
+        return self.execute(self.compile(src))
 
 
 if __name__ == "__main__":
@@ -1144,8 +1144,7 @@ if __name__ == "__main__":
 
     # Example
 
-    run_verbose(r""" 2 """) # -> 2
-    run_verbose(r""" None """) # -> None
-    run_verbose(r""" True """) # -> True
-    run_verbose(r""" "hello" """) # -> hello
-
+    print(i.run(r""" 2 """)) # -> 2
+    print(i.run(r""" None """)) # -> None
+    print(i.run(r""" True """)) # -> True
+    print(i.run(r""" "hello" """)) # -> hello
