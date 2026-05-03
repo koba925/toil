@@ -734,8 +734,23 @@ class Compiler:
         match expr:
             case None | bool() | int() | str():
                 self._code.append(("const", expr))
+            case (Ident('seq'), exprs): self._seq(exprs)
+            case (Ident('print'), [expr]):
+                self._expression(expr)
+                self._code.append(("print",))
+            case (Ident(op), [left, right]) if op in ("add", "mul", "equal"):
+                self._expression(left)
+                self._expression(right)
+                self._code.append((op,))
             case _:
                 assert False, f"Unsupported expression @ compile(): {expr}"
+
+    def _seq(self, exprs):
+        assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
+        for expr in exprs[:-1]:
+            self._expression(expr)
+            self._code.append(("pop",))
+        self._expression(exprs[-1])
 
 class VM:
     def __init__(self):
@@ -753,22 +768,14 @@ class VM:
             match inst:
                 case ("halt",): break
                 case ("const", val): self._stack.append(val)
+                case ("pop",): self._stack.pop()
                 case ("add",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l + r)
-                case ("sub",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l - r)
                 case ("mul",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l * r)
-                case ("div",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l // r)
-                case ("mod",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l % r)
                 case ("equal",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l == r)
-                case ("not_equal",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l != r)
-                case ("less",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l < r)
-                case ("greater",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l > r)
-                case ("less_equal",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l <= r)
-                case ("greater_equal",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l >= r)
-                case ("neg",): self._stack.append(-self._stack.pop())
-                case ("not",): self._stack.append(not self._stack.pop())
+                case ("print",): val = self._stack.pop(); print(val); self._stack.append(None)
                 case _:
                     assert False, f"Invalid instruction @ execute(): {inst}"
-        assert len(self._stack) == 1, f"Unused stack left @ execute(): {self._stack}"
+        assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
         return self._stack.pop()
 
 
@@ -1083,8 +1090,11 @@ class Interpreter:
     def walk(self, src: str) -> Value:
         return self.eval(self.ast(src))
 
-    def compile(self, src: str) -> Code:
-        return Compiler().compile(self.ast(src))
+    def compile(self, ast: Expr) -> Code:
+        return Compiler().compile(ast)
+
+    def code(self, src: str) -> Code:
+        return self.compile(self.ast(src))
 
     def execute(self, code: Code) -> Value:
         vm = VM()
@@ -1092,7 +1102,7 @@ class Interpreter:
         return vm.execute()
 
     def run(self, src: str) -> Value:
-        return self.execute(self.compile(src))
+        return self.execute(self.code(src))
 
 
 if __name__ == "__main__":
@@ -1112,7 +1122,7 @@ if __name__ == "__main__":
                     print("Output:")
                     result = i.eval(expr)
                 else:
-                    code = i.compile(src)
+                    code = i.code(src)
                     print("Code:", code, "Output:", sep="\n")
                     result = i.execute(code)
                 print("Result:", result, sep="\n")
@@ -1134,9 +1144,18 @@ if __name__ == "__main__":
             case "--walk": go_file("walk", sys.argv[2])
             case "--run": go_file("run", sys.argv[2])
 
+    def print_code(code):
+        for addr, inst in enumerate(code):
+            print(f"{addr:3}: {list(inst)}")
+
     # Example
 
-    print(i.run(r""" 2 """)) # -> 2
-    print(i.run(r""" None """)) # -> None
-    print(i.run(r""" True """)) # -> True
-    print(i.run(r""" "hello" """)) # -> hello
+    # Sequence
+
+    print_code(i.code(r""" print(2); print(3); 4 """))
+    print(i.run(r""" print(2); print(3); 4 """)) # -> -> 2\n3\n4
+
+    print_code(i.code(r""" (2; 3); (4; 5) """))
+    print(i.run(r""" (2; 3); (4; 5) """)) # -> -> 5
+
+    # i.compile((Ident("seq"), [])) # -> Empty sequence
