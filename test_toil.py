@@ -8,868 +8,65 @@ def reset_env():
     i.init_env().stdlib()
 
 
-class TestScan:
-    def test_number(self):
-        assert i.scan("""2""") == [2, Ident("$EOF")]
-        assert i.scan(""" 3 """) == [3, Ident("$EOF")]
-        assert i.scan(""" \t4\n5\n """) == [4, 5, Ident("$EOF")]
-        assert i.scan("""  """) == [Ident("$EOF")]
+class TestToil:
+    # Ensure test independence
+    def test_env_isolation_step1(self):
+        assert i.walk(r""" a := 2 """) == 2
+    def test_env_isolation_step2(self):
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            i.walk(r""" a """)
 
-    def test_operator(self):
-        assert i.scan(""" 1 + 2 """) == [1, Ident("+"), 2, Ident("$EOF")]
-        assert i.scan(""" 1 * 2 """) == [1, Ident("*"), 2, Ident("$EOF")]
-        assert i.scan(""" 1 / 2 """) == [1, Ident("/"), 2, Ident("$EOF")]
+    def test_overall_structure(self):
+        assert i.scan(r""" 2 """) == [2, Ident('$EOF')]
+        assert i.parse([2, Ident('$EOF')]) == 2
+        assert i.ast(r""" 2 """) == 2
+        assert i.eval(2) == 2
+        assert i.walk(r""" 2 """) == 2
 
-    def test_bool_none_ident(self):
-        assert i.scan(""" True """) == [True, Ident("$EOF")]
-        assert i.scan(""" False """) == [False, Ident("$EOF")]
-        assert i.scan(""" None """) == [None, Ident("$EOF")]
-        assert i.scan(""" a """) == [Ident("a"), Ident("$EOF")]
+    def test_sequence(self):
+        assert i.walk(r""" if True then 2 end; if True then 3 end """) == 3
+        assert i.walk(r""" if True then 2 end; if True then 3 end; 4 """) == 4
 
     def test_define_assign(self):
-        assert i.scan(""" a := 2 """) == [Ident("a"), Ident(":="), 2, Ident("$EOF")]
-        assert i.scan(""" a = 2 """) == [Ident("a"), Ident("="), 2, Ident("$EOF")]
-
-    def test_string(self):
-        assert i.scan(""" 'hello' """) == ["hello", Ident("$EOF")]
-        assert i.scan(""" "hello" """) == ["hello", Ident("$EOF")]
-        assert i.scan(r""" "a\nb" """) == ["a\nb", Ident("$EOF")]
-
-class TestParse:
-    def test_comparison(self):
-        assert i.ast(""" 2 == 3 == 4 """) == (
-            Ident("equal"), [(Ident("equal"), [2, 3]), 4]
-        )
-
-    def test_add_sub(self):
-        assert i.ast(""" 2 + 3 """) == (Ident("add"), [2, 3])
-        assert i.ast(""" 2 - 3 """) == (Ident("sub"), [2, 3])
-        assert i.ast(""" 2 + 3 * 4 """) == (Ident("add"), [2, (Ident("mul"), [3, 4])])
-        assert i.ast(""" 2 * 3 + 4 """) == (Ident("add"), [(Ident("mul"), [2, 3]), 4])
-
-    def test_mul_div(self):
-        assert i.ast(""" 2 * 3 """) == (Ident("mul"), [2, 3])
-        assert i.ast(""" 2 / 3 """) == (Ident("div"), [2, 3])
-        assert i.ast(""" 2 * 3 / 4 """) == (Ident("div"), [(Ident("mul"), [2, 3]), 4])
-
-    def test_not(self):
-        assert i.ast(""" not True """) == (Ident("not"), [True])
-        assert i.ast(""" not not False """) == (Ident("not"), [(Ident("not"), [False])])
-
-    def test_and_or(self):
-        assert i.ast(""" True and False """) == (Ident('and'), [True, False])
-        assert i.ast(""" True or False """) == (Ident('or'), [True, False])
-        assert i.ast(""" True or False and True """) == (Ident('and'), [(Ident('or'), [True, False]), True])
-        assert i.ast(""" a := False and not False """) == (Ident('define'), [Ident('a'), (Ident('and'), [False, (Ident('not'), [False])])])
-        assert i.ast(""" a := False or not False """) == (Ident('define'), [Ident('a'), (Ident('or'), [False, (Ident('not'), [False])])])
-
-    def test_neg(self):
-        assert i.ast(""" -2 """) == (Ident("neg"), [2])
-        assert i.ast(""" --3 """) == (Ident("neg"), [(Ident("neg"), [3])])
-
-    def test_number(self):
-        assert i.ast(""" 2 """) == 2
-
-    def test_bool_none(self):
-        assert i.ast(""" True """) is True
-        assert i.ast(""" False """) is False
-        assert i.ast(""" None """) is None
-
-    def test_paren(self):
-        assert i.ast(""" (1 + 2) """) == (Ident("add"), [1, 2])
-        assert i.ast(""" (1 + 2) * 3 """) == (Ident("mul"), [(Ident("add"), [1, 2]), 3])
-
-    def test_string(self):
-        assert i.ast(""" 'hello' """) == "hello"
-        assert i.ast(""" "hello" """) == "hello"
-        assert i.ast(r""" "a\nb" """) == "a\nb"
-
-    def test_seq(self):
-        assert i.ast(""" 2; 3 """) == (Ident("seq"), [2, 3])
-        assert i.ast(""" not True; False """) == (Ident("seq"), [(Ident("not"), [True]), False])
-
-    def test_if(self):
-        assert i.ast(""" if True then 2 else 3 end """) == (
-            Ident("__core_if_macro"), [True, 2, [], [3]])
-        assert i.ast(""" if not True then 2 + 3 else 4; 5 end """) == (
-            Ident("__core_if_macro"), [(Ident('not'), [True]), (Ident('add'), [2, 3]), [], [(Ident("seq"), [4, 5])]])
-
-        assert i.ast(""" if 1 then 10 end """) == (Ident('__core_if_macro'), [1, 10, [], []])
-        assert i.ast(""" if 1 then 10 else 20 end """) == (Ident("__core_if_macro"), [1, 10, [], [20]])
-        assert i.ast(""" if 1 then 10 elif 2 then 20 end """) == (Ident("__core_if_macro"), [1, 10, [[2, 20]], []])
-        assert i.ast(""" if 1 then 10 elif 2 then 20 else 30 end """) == (Ident("__core_if_macro"), [1, 10, [[2, 20]], [30]])
-        assert i.ast(""" if 1 then 10 elif 2 then 20 elif 3 then 30 else 40 end """) == (Ident("__core_if_macro"), [1, 10, [[2, 20], [3, 30]], [40]])
-
-    def test_define(self):
-        assert i.ast(""" a := not True """) == (Ident("define"), [Ident("a"), (Ident("not"), [True])])
-        assert i.ast(""" a := b := 2 """) == (Ident("define"), [Ident("a"), (Ident("define"), [Ident("b"), 2])])
-
-    def test_assign(self):
-        assert i.ast(""" a = 1 """) == (Ident("assign"), [Ident("a"), 1])
-        assert i.ast(""" a = b = 2 """) == (Ident("assign"), [Ident("a"), (Ident("assign"), [Ident("b"), 2])])
-        assert i.ast(""" a := b = 2 """) == (Ident("define"), [Ident("a"), (Ident("assign"), [Ident("b"), 2])])
-        assert i.ast(""" a := b = c := 3 """) == (Ident("define"), [Ident("a"), (Ident("assign"), [Ident("b"), (Ident("define"), [Ident("c"), 3])])])
-
-    def test_list_assign(self):
-        assert i.ast(""" a[0] = 1 """) == (Ident("assign"), [(Ident("index"), [Ident("a"), 0]), 1])
-        assert i.ast(""" a[1][2] = 3 """) == (Ident("assign"), [(Ident("index"), [(Ident("index"), [Ident("a"), 1]), 2]), 3])
-        assert i.ast(""" a[0] = b[1] = 2 """) == (Ident("assign"), [(Ident("index"), [Ident("a"), 0]), (Ident("assign"), [(Ident("index"), [Ident("b"), 1]), 2])])
-
-    def test_call(self):
-        assert i.ast(""" print() """) == (Ident("print"), [])
-        assert i.ast(""" neg(2) """) == (Ident("neg"), [2])
-        assert i.ast(""" add(2, mul(3, 4)) """) == (Ident("add"), [2, (Ident("mul"), [3, 4])])
-
-    def test_index(self):
-        assert i.ast(""" a[0] """) == (Ident("index"), [Ident("a"), 0])
-        assert i.ast(""" a[1][2] """) == (Ident("index"), [(Ident("index"), [Ident("a"), 1]), 2])
-
-    def test_func(self):
-        assert i.ast(""" func do 2 end """) == (Ident("__core_func"), [[], 2])
-        assert i.ast(""" func a do a + 2 end """) == (Ident("__core_func"), [[Ident("a")], (Ident("add"), [Ident("a"), 2])])
-        assert i.ast(""" func a, b do a + b end """) == (Ident("__core_func"), [[Ident("a"), Ident("b")], (Ident("add"), [Ident("a"), Ident("b")])])
-
-        with pytest.raises(AssertionError):
-            i.ast(""" func a 2 end """)
-        with pytest.raises(AssertionError):
-            i.ast(""" func a do 2 """)
-
-    def test_no_token(self):
-        with pytest.raises(AssertionError):
-            i.ast("""  """)
-
-    def test_extra_token(self):
-        with pytest.raises(AssertionError):
-            i.ast(""" 2 3 """)
-
-class TestEvaluate:
-    def test_evaluate_value(self):
-        assert i.eval(None) is None
-        assert i.eval(5) == 5
-        assert i.eval(True) is True
-        assert i.eval(False) is False
-
-    def test_seq(self, capsys):
-        i.eval((Ident("seq"), [
-            (Ident("print"), [2]),
-            (Ident("print"), [3])
-        ]))
-        assert capsys.readouterr().out == "2\n3\n"
-
-    def test_evaluate_if(self):
-        assert i.eval((Ident("__core_if"), [True, 2, 3])) == 2
-        assert i.eval((Ident("__core_if"), [False, 2, 3])) == 3
-        assert i.eval((Ident("__core_if"), [(Ident("__core_if"), [True, True, False]), 2, 3])) == 2
-        assert i.eval((Ident("__core_if"), [True, (Ident("__core_if"), [True, 2, 3]), 4])) == 2
-        assert i.eval((Ident("__core_if"), [False, 2, (Ident("__core_if"), [False, 3, 4])])) == 4
-
-    def test_evaluate_variable(self):
-        assert i.eval((Ident("define"), [Ident("a"), 2])) == 2
-        assert i.eval(Ident("a")) == 2
-
-        assert i.eval((Ident("define"), [Ident("b"), True])) == True
-        assert i.eval((Ident("__core_if"), [Ident("b"), 2, 3])) == 2
-
-        assert i.eval((Ident("define"), [Ident("c"), (Ident("__core_if"), [False, 2, 3])])) == 3
-        assert i.eval(Ident("c")) == 3
-
-    def test_evaluate_undefined_variable(self):
-        with pytest.raises(AssertionError):
-            i.eval(Ident("a"))
-
-    def test_evaluate_assign(self):
-        i.eval((Ident("define"), [Ident("a"), 1]))
-        assert i.eval((Ident("assign"), [Ident("a"), 2])) == 2
-        assert i.eval(Ident("a")) == 2
-        with pytest.raises(AssertionError):
-            i.eval((Ident("assign"), [Ident("b"), 2]))
-
-    def test_evaluate_scope(self, capsys):
-        i.eval((Ident("define"), [Ident("a"), 2]))
-        assert i.eval(Ident("a")) == 2
-        assert i.eval((Ident("__core_scope"), [Ident("a")])) == 2
-
-        assert i.eval((Ident("__core_scope"), [(Ident("seq"), [
-            (Ident("print"), [Ident("a")]),
-            (Ident("define"), [Ident("a"), 3]),
-            (Ident("print"), [Ident("a")]),
-            (Ident("define"), [Ident("b"), 4]),
-            (Ident("print"), [Ident("b")]),
-            Ident("b")
-        ])])) == 4
-        assert capsys.readouterr().out == "2\n3\n4\n"
-
-        assert i.eval(Ident("a")) == 2
-
-        with pytest.raises(AssertionError):
-            i.eval(Ident("b"))
-
-    def test_builtin_functions(self, capsys):
-        assert i.eval((Ident("add"), [2, 3])) == 5
-        assert i.eval((Ident("sub"), [5, 3])) == 2
-        assert i.eval((Ident("mul"), [2, 3])) == 6
-
-        assert i.eval((Ident("equal"), [2, 2])) is True
-        assert i.eval((Ident("equal"), [2, 3])) is False
-
-        assert i.eval((Ident("add"), [2, (Ident("mul"), [3, 4])])) == 14
-
-        i.eval((Ident("print"), [2, 3]))
-        assert capsys.readouterr().out == "2 3\n"
-
-        i.eval((Ident("print"), [(Ident("add"), [5, 5])]))
-        assert capsys.readouterr().out == "10\n"
-
-    def test_user_func(self):
-        i.eval((Ident("define"), [Ident("add2"), (Ident("__core_func"),
-            [[Ident("a")], (Ident("add"), [Ident("a"), 2])]
-        )]))
-        assert i.eval((Ident("add2"), [3])) == 5
-
-        i.eval((Ident("define"), [Ident("sum3"), (Ident("__core_func"),
-            [[Ident("a"), Ident("b"), Ident("c")],(Ident("add"), [Ident("a"), (Ident("add"), [Ident("b"), Ident("c")])])]
-        )]))
-        assert i.eval((Ident("sum3"), [2, 3, 4])) == 9
-
-    def test_recursion(self):
-        i.eval((Ident("define"), [Ident("fac"), (Ident("__core_func"), [
-            [Ident("n")],
-            (Ident("__core_if"), [
-                (Ident("equal"), [Ident("n"), 1]),
-                1,
-                (Ident("mul"), [Ident("n"), (Ident("fac"), [(Ident("sub"), [Ident("n"), 1])])])
-        ])
-        ])]))
-        assert i.eval((Ident("fac"), [1])) == 1
-        assert i.eval((Ident("fac"), [3])) == 6
-        assert i.eval((Ident("fac"), [5])) == 120
-
-    def test_scope_leak(self):
-        i.eval((Ident("define"), [Ident("x"), 2]))
-        i.eval((Ident("define"), [Ident("f"), (Ident("__core_func"), [[Ident("x")], 3])]))
-        i.eval((Ident("f"), [4]))
-        assert i.eval(Ident("x")) == 2
-
-    def test_closure(self):
-        i.eval((Ident("define"), [Ident("x"), 2]))
-        i.eval((Ident("define"), [Ident("return_x"), (Ident("__core_func"), [[], Ident("x")])]))
-        assert i.eval((Ident("return_x"), [])) == 2
-        assert i.eval((Ident("__core_scope"), [(Ident("seq"), [
-            (Ident("define"), [Ident("x"), 3]),
-            (Ident("return_x"), [])
-        ])])) == 2
-        assert i.eval(Ident("x")) == 2
-
-    def test_adder(self):
-        i.eval((Ident("define"), [Ident("make_adder"), (Ident("__core_func"), [
-            [Ident("n")],
-            (Ident("__core_func"), [[Ident("m")], (Ident("add"), [Ident("n"), Ident("m")])])
-        ])]))
-        i.eval((Ident("define"), [Ident("add2"), (Ident("make_adder"), [2])]))
-        i.eval((Ident("define"), [Ident("add3"), (Ident("make_adder"), [3])]))
-
-        assert i.eval((Ident("add2"), [3])) == 5
-        assert i.eval((Ident("add3"), [4])) == 7
-
-    def test_shadowing(self):
-        i.eval((Ident("define"), [Ident("make_shadow"), (Ident("__core_func"), [
-            [Ident("x")],
-            (Ident("__core_func"), [
-                [],
-                (Ident("seq"), [
-                    (Ident("define"), [Ident("x"), 3]),
-                    Ident("x")
-                ])
-            ])
-        ])]))
-        i.eval((Ident("define"), [Ident("g"), (Ident("make_shadow"), [2])]))
-        assert i.eval((Ident("g"), [])) == 3
-
-    def test_list(self):
-        i.eval((Ident("define"), [Ident("a"), [1, 2, 3]]))
-        assert i.eval(Ident("a")) == [1, 2, 3]
-        assert i.eval((Ident("index"), [Ident("a"), 0])) == 1
-        assert i.eval((Ident("index"), [Ident("a"), 2])) == 3
-
-        i.eval((Ident("assign"), [(Ident("index"), [Ident("a"), 1]), 4]))
-        assert i.eval(Ident("a")) == [1, 4, 3]
-
-    def test_list_nested(self):
-        i.eval((Ident("define"), [Ident("a"), [
-            [1, 2],
-            [3, 4]
-        ]]))
-        assert i.eval((Ident("index"), [(Ident("index"), [Ident("a"), 0]), 1])) == 2
-        assert i.eval((Ident("index"), [(Ident("index"), [Ident("a"), 1]), 0])) == 3
-
-        i.eval((Ident("assign"), [(Ident("index"), [(Ident("index"), [Ident("a"), 1]), 0]), 5]))
-        assert i.eval((Ident("index"), [(Ident("index"), [Ident("a"), 1]), 0])) == 5
-
-    def test_list_push_pop(self):
-        i.eval((Ident("define"), [Ident("a"), [1, 2]]))
-        i.eval((Ident("push"), [Ident("a"), 3]))
-        assert i.eval(Ident("a")) == [1, 2, 3]
-        assert i.eval((Ident("pop"), [Ident("a")])) == 3
-        assert i.eval(Ident("a")) == [1, 2]
-
-    def test_list_funcs(self):
-        i.eval((Ident("define"), [Ident("a"), [1, 2, 3]]))
-        assert i.eval((Ident("len"), [Ident("a")])) == 3
-        assert i.eval((Ident("slice"), [Ident("a"), 1, None])) == [2, 3]
-        assert i.eval((Ident("slice"), [Ident("a"), 1, 2])) == [2]
-        assert i.eval((Ident("slice"), [Ident("a"), None, 2])) == [1, 2]
-        assert i.eval((Ident("slice"), [Ident("a"), None, None])) == [1, 2, 3]
-
-    def test_list_error(self):
-        i.eval((Ident("define"), [Ident("a"), [1, 2]]))
-
-        with pytest.raises(AssertionError, match="Invalid indexing"):
-            i.eval((Ident("assign"), [(Ident("index"), [None, 0]), 1]))
-
-        with pytest.raises(AssertionError, match="Invalid indexing"):
-            i.eval((Ident("assign"), [(Ident("index"), [Ident("a"), None]), 1]))
-
-class TestWalk:
-    def test_whitespace(self):
-        assert i.walk("""  3 """) == 3
-        assert i.walk(""" 4 \t """) == 4
-        assert i.walk(""" 56\n """) == 56
-
-    def test_comparison(self):
-        assert i.walk(""" 2 + 5 == 3 + 4 """) is True
-        assert i.walk(""" 2 + 3 == 3 + 4 """) is False
-        assert i.walk(""" 2 + 5 != 3 + 4 """) is False
-        assert i.walk(""" 2 + 3 != 3 + 4 """) is True
-
-        assert i.walk(""" 2 + 4 < 3 + 4 """) is True
-        assert i.walk(""" 2 + 5 < 3 + 4 """) is False
-        assert i.walk(""" 2 + 5 < 2 + 4 """) is False
-        assert i.walk(""" 2 + 4 > 3 + 4 """) is False
-        assert i.walk(""" 2 + 5 > 3 + 4 """) is False
-        assert i.walk(""" 2 + 5 > 2 + 4 """) is True
-
-        assert i.walk(""" 2 + 4 <= 3 + 4 """) is True
-        assert i.walk(""" 2 + 5 <= 3 + 4 """) is True
-        assert i.walk(""" 2 + 5 <= 2 + 4 """) is False
-        assert i.walk(""" 2 + 4 >= 3 + 4 """) is False
-        assert i.walk(""" 2 + 5 >= 3 + 4 """) is True
-        assert i.walk(""" 2 + 5 >= 2 + 4 """) is True
-
-        assert i.walk(""" 2 == 2 == 2 """) is False
-
-    def test_add_sub(self):
-        assert i.walk(""" 2 + 3 """) == 5
-        assert i.walk(""" 5 - 3 """) == 2
-        assert i.walk(""" 2 + 3 - 4 + 5 """) == 6
-
-    def test_arrow_function(self):
-        assert i.walk(""" ([] -> 2)() """) == 2
-        assert i.walk(""" ([a] -> a + 2)(3) """) == 5
-        assert i.walk(""" (a -> a + 2)(3) """) == 5
-        assert i.walk(""" ([[a, b]] -> a + b)([2, 3]) """) == 5
-        assert i.walk(""" ([a, b] -> a + b)(2, 3) """) == 5
-        with pytest.raises(AssertionError, match="Argument mismatch"):
-            i.walk(""" ([a, b] -> a + b)(2) """)
-
-        assert i.walk(""" ([a, *b] -> b)(2, 3, 4) """) == [3, 4]
-        assert i.walk(""" ({a} -> a + 2)({a: 3}) """) == 5
-        with pytest.raises(AssertionError, match="Argument mismatch"):
-            i.walk(""" ({a} -> a + 2)({b: 3}) """)
-
-        assert i.walk(""" (int(a) -> a + 2)(3) """) == 5
-        with pytest.raises(AssertionError, match="Argument mismatch"):
-            i.walk(""" (int(a) -> a + 2)("aaa") """)
-
-        assert i.walk(""" (x -> x or 2)(False) """) == 2
-        assert i.walk(""" (a -> b -> a + b)(2)(3) """) == 5
-
-        assert i.walk(""" inc := a -> a + 1; inc(2) """) == 3
-        assert i.walk(""" myadd := [a, b] -> a + b; myadd(2, 3) """) == 5
-
-    def test_mul_div_mod(self):
-        assert i.walk(""" 2 * 3 """) == 6
-        assert i.walk(""" 6 / 3 """) == 2
-        assert i.walk(""" 7 % 3 """) == 1
-        assert i.walk(""" 2 * 3 / 2 """) == 3
-        assert i.walk(""" 2 * 3 + 4 """) == 10
-        assert i.walk(""" 2 + 3 * 4 """) == 14
-
-    def test_not(self):
-        assert i.walk(""" not True """) is False
-        assert i.walk(""" not False """) is True
-        assert i.walk(""" not not True """) is True
-        assert i.walk(""" not 2 == 3 """) is True
-
-    def test_and_or(self, capsys):
-        assert i.walk(""" True and False """) is False
-        assert i.walk(""" True or False """) is True
-        assert i.walk(""" False and True """) is False
-        assert i.walk(""" False or True """) is True
-
-        assert i.walk(""" True and 2 """) == 2
-        assert i.walk(""" 0 and 2 / 0 """) == 0
-        assert i.walk(""" False or 2 """) == 2
-        assert i.walk(""" 1 or 2 / 0 """) == 1
-
-        assert i.walk(""" print(2) and 3 """) is None
-        assert capsys.readouterr().out == "2\n"
-        assert i.walk(""" not print(2) or 3 """) is True
-        assert capsys.readouterr().out == "2\n"
-
-    def test_neg(self):
-        assert i.walk(""" -2 """) == -2
-        assert i.walk(""" --2 """) == 2
-        assert i.walk(""" -2 * 3 """) == -6
-
-    def test_number(self):
-        assert i.walk(""" 2 """) == 2
-
-        with pytest.raises(AssertionError):
-            i.walk(""" a """)
-
-    def test_bool_none(self):
-        assert i.walk(""" True """) is True
-        assert i.walk(""" False """) is False
-        assert i.walk(""" None """) is None
-
-    def test_paren(self):
-        assert i.walk(""" (2 + 3) * 4 """) == 20
-        assert i.walk(""" 2 * (3 + 4) """) == 14
-        assert i.walk(""" 2 * (3 + 4 * 5) """) == 46
-
-    def test_seq(self):
-        assert i.walk(""" 2; 3 """) == 3
-        assert i.walk(""" 2; 3; 4 """) == 4
-        assert i.walk(""" True; not True """) is False
-
-    def test_if(self):
-        assert i.walk(""" if True then 2 else 3 end """) == 2
-        assert i.walk(""" if False then 2 else 3 end """) == 3
-
-        assert i.walk(""" if not True then 2 + 3 else 4; 5 end """) == 5
-
-        assert i.walk(""" if True then 2 end """) == 2
-        assert i.walk(""" if False then 2 end """) is None
-
-        assert i.walk(""" if False then 2 elif True then 3 else 4 end """) == 3
-        assert i.walk(""" if False then 2 elif False then 3 else 4 end """) == 4
-
-        with pytest.raises(AssertionError):
-            i.walk(""" if True then 2 else 3 """)
-        with pytest.raises(AssertionError):
-            i.walk(""" if True else 2 end """)
-
-    def test_var_define(self):
-        assert i.walk(""" a := not True """) == False
-        assert i.walk(""" a """) == False
-        assert i.walk(""" a := b := not False """) == True
-        assert i.walk(""" a """) == True
-        assert i.walk(""" b """) == True
-
-    def test_assign(self):
-        assert i.walk(""" a := 1; a = 2; a """) == 2
-        assert i.walk(""" a := 1; b := 2; a = b = 3; a """) == 3
-        assert i.walk(""" a := 2; a = 3 """) == 3
-        assert i.walk(""" a := b := 2; a = b = 3 """) == 3
-
-    def test_scope_assign(self, capsys):
-        i.walk("""
-            a := b := 2;
-            print(a, b);
-            scope
-                print(a, b);
-                a := 3;
-                b = 4;
-                print(a, b);
-                c := 5;
-                print(a, b, c)
-            end;
-            print(a, b)
-        """)
-        assert capsys.readouterr().out == "2 2\n2 2\n3 4\n3 4 5\n2 4\n"
-
-        with pytest.raises(AssertionError):
-            i.walk(""" c """)
-
-    def test_while(self):
-        assert i.walk("""
-            a := [];
-            i := 0; while i < 3 do push(a, i); i = i + 1 end;
-            a
-        """) == [0, 1, 2]
-
-        assert i.walk("""
-            a := [];
-            i := 0; while i < 3 do push(a, i); i = i + 1 then a else 1/0 end
-        """) == [0, 1, 2]
-
-        assert i.walk("""
-            a := [];
-            i := 0; while i < 3 do push(a, i); i = i + 1 then a end
-        """) == [0, 1, 2]
-
-        assert i.walk(""" while False do 1 / 0 then 3 else 4 end """) == 3
-
-        with pytest.raises(AssertionError, match="Expected do"):
-            i.walk(""" while do 2 then 3 else 4 end """)
-        with pytest.raises(AssertionError, match="Expected do"):
-            i.walk(""" while True 2 then 3 else 4 end """)
-        with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(""" while True do 2 3 else 4 end """)
-        with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(""" while True do 2 then 3 4 end """)
-        with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(""" while True do 2 then 3 else end """)
-        with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(""" while True do 2 then 3 else 4 """)
-
-    def test_continue(self):
-        assert i.walk("""
-            a := [];
-            i := 0; while i < 3 do
-                i = i + 1; if i == 2 then continue() end;
-                push(a, i)
-            then a end
-        """) == [1, 3]
-
-        assert i.walk("""
-            a := []; i := 0; while i < 2 do
-                j := 0; while j < 3 do
-                    j = j + 1; if j == 2 then continue() end;
-                    push(a, [i, j])
-                end;
-                i = i + 1
-            then a end
-        """) == [[0, 1], [0, 3], [1, 1], [1, 3]]
-
-        assert i.walk("""
-            a := []; for i in [0, 1, 2] do
-                if i == 1 then continue() end;
-                push(a, i)
-            then a end
-        """) == [0, 2]
-
-        assert i.walk("""
-            a := []; for i in [0, 1] do
-                for j in [0, 1, 2] do
-                    if j == 1 then continue() end;
-                    push(a, [i, j])
-                end
-            then a end
-        """) == [[0, 0], [0, 2], [1, 0], [1, 2]]
-
-        with pytest.raises(AssertionError, match="Continue at top level"):
-            i.walk(""" continue() """)
-
-    def test_break(self):
-        assert i.walk("""
-            a := [];
-            i := 0; while i < 3 do
-                if i == 1 then break() end;
-                push(a, i); i = i + 1
-            then 1/0 else a end
-        """) == [0]
-
-        assert i.walk("""
-            a := [];
-            i := 0; while i < 3 do
-                if i == 1 then break() end;
-                push(a, i); i = i + 1
-            else a end
-        """) == [0]
-
-        assert i.walk("""
-            a := [];
-            i := 0; while i < 2 do
-                j := 0; while j < 3 do
-                    if i == 0 and j == 1 then break() end;
-                    push(a, [i, j]);
-                    j = j + 1
-                end;
-                i = i + 1
-            then a end
-        """) == [[0, 0], [1, 0], [1, 1], [1, 2]]
-
-        assert i.walk("""
-            a := [];
-            i := 0; while i < 2 do
-                j := 0; while j < 3 do
-                    if i == 1 and j == 1 then break() end;
-                    push(a, [i, j]);
-                    j = j + 1
-                else break() end;
-                i = i + 1
-            else a end
-        """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
-
-        assert i.walk(""" while True do break() end """) is None
-        assert i.walk(""" while True do break() else 2 end """) == 2
-
-        assert i.walk("""
-            a := []; for i in [0, 1, 2] do
-                if i == 1 then break() end;
-                push(a, i)
-            then 1/0 else a end
-        """) == [0]
-
-        assert i.walk("""
-            a := []; for i in [0, 1, 2] do
-                if i == 1 then break() end;
-                push(a, i)
-            else a end
-        """) == [0]
-
-        assert i.walk("""
-            a := [];
-            for i in [0, 1] do
-                for j in [0, 1, 2] do
-                    if i == 0 and j == 1 then break() end;
-                    push(a, [i, j])
-                end
-            then a end
-        """) == [[0, 0], [1, 0], [1, 1], [1, 2]]
-
-        assert i.walk("""
-            a := [];
-            for i in [0, 1] do
-                for j in [0, 1, 2] do
-                    if i == 1 and j == 1 then break() end;
-                    push(a, [i, j])
-                else break() end
-            else a end
-        """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
-
-        with pytest.raises(AssertionError, match="Break at top level"):
-            i.walk(""" break() """)
-
-    def test_for(self):
-        assert i.walk(""" a := []; for i in [0, 1, 2] do push(a, i) end; a """) == [0, 1, 2]
-
-        assert i.walk("""
-            a := []; for i in [0, 1, 2] do push(a, i) then [i, a] else 1/0 end
-        """) == [2, [0, 1, 2]]
-
-        assert i.walk("""
-            a := []; for i in [0, 1, 2] do push(a, i) then a end
-        """) == [0, 1, 2]
-
-        assert i.walk("""
-            a := []; for [i, j] in [[1, 2], [3, 4]] do push(a, [i, j]) then a end
-        """) == [[1, 2], [3, 4]]
-
-        assert i.walk("""
-            a := [];
-            for [k, v] in {"a": 2, "b": 3}.items() do push(a, [k, v]) then a end
-        """) == [['a', 2], ['b', 3]]
-
-        assert i.walk(""" for i in [] do 1/0 then 2 end """) == 2
-
-        with pytest.raises(AssertionError):
-            i.walk(""" for in [] do 2 then 3 else 4 end """)
-        with pytest.raises(AssertionError):
-            i.walk(""" for i [] do 2 then 3 else 4 end """)
-        with pytest.raises(AssertionError, match="Expected do"):
-            i.walk(""" for i in do 2 then 3 else 4 end """)
-        with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(""" for i in [] do then 3 else 4 end """)
-        with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(""" for i in [] do 2 3 else 4 end """)
-        with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(""" for i in [] do 2 then else 4 end """)
-        with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(""" for i in [] do 2 then 3 4 end """)
-        with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(""" for i in [] do 2 then 3 else end """)
-        with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(""" for i in [] do 2 then 3 else 4 """)
-
-
-    def test_call(self, capsys):
-        assert i.walk(""" add(2, 3) """) == 5
-        assert i.walk(""" add(2, mul(3, 4)) """) == 14
-        i.walk(""" print(5) """)
-        assert capsys.readouterr().out == "5\n"
-        i.walk(""" print(6, 7) """)
-        assert capsys.readouterr().out == "6 7\n"
-        i.walk(""" print() """)
-        assert capsys.readouterr().out == "\n"
-
-    def test_func(self):
-        assert i.walk(""" func do 2 end () """) == 2
-        assert i.walk(""" func a do a + 2 end (3) """) == 5
-        assert i.walk(""" func a, b do a + b end (2, 3) """) == 5
-
-    def test_def_usage(self):
-        i.walk(""" def two do 2 end """)
-        assert i.walk(""" two() """) == 2
-        i.walk(""" def add2(a) do a + 2 end """)
-        assert i.walk(""" add2(3) """) == 5
-        i.walk(""" def sum(a, b, c) do a + b + c end """)
-        assert i.walk(""" sum(2, 3, 4) """) == 9
-
-    def test_fac(self):
-        assert i.walk("""
-            def fac(n) do
-                if n == 1 then 1 else n * fac(n - 1) end
-            end;
-            fac(5)
-        """) == 120
-
-    def test_fib(self):
-        i.walk("""
-            def fib(n) do
-                if n == 0 then 0
-                elif n == 1 then 1
-                else fib(n - 1) + fib(n - 2)
-                end
-            end
-        """)
-        assert i.walk(""" fib(0) """) == 0
-        assert i.walk(""" fib(1) """) == 1
-        assert i.walk(""" fib(7) """) == 13
-        assert i.walk(""" fib(9) """) == 34
-
-    def test_gcd_recursive(self):
-        assert i.walk("""
-            def gcd(a, b) do
-                if a == 0 then b else gcd(b % a, a) end
-            end;
-            gcd(24, 36)
-        """) == 12
-
-    def test_mutual_recursion(self):
-        i.walk("""
-            def is_even(n) do if n == 0 then True else is_odd(n - 1) end end;
-            def is_odd(n) do if n == 0 then False else is_even(n - 1) end end
-        """)
-        assert i.walk(""" is_even(10) """) is True
-        assert i.walk(""" is_odd(10) """) is False
-
-    def test_gcd_iterative(self):
-        assert i.walk("""
-            def gcd(a, b) do
-                while a != 0 do
-                    [a, b] := [b % a, a]
-                end;
-                b
-            end;
-            gcd(24, 36)
-        """) == 12
-
-    def test_no_code(self):
-        with pytest.raises(AssertionError):
-            i.walk("""  """)
-
-    def test_extra_token(self):
-        with pytest.raises(AssertionError):
-            i.walk(""" 7 8 """)
-
-    def test_list(self):
-        assert i.walk(""" [] """) == []
-        assert i.walk(""" [2 + 3] """) == [5]
-        assert i.walk(""" [2][0] """) == 2
-        assert i.walk(""" [2, 3, [4, 5]] """) == [2, 3, [4, 5]]
-
-        i.walk(""" a := [2, 3, [4, 5]] """)
-        assert i.walk(""" a[2][0] """) == 4
-        assert i.walk(""" a[2][-1] """) == 5
-
-        i.walk(""" b := [2, 3, [4, 5]] """)
-        i.walk(""" b[0] = 6 """)
-        assert i.walk(""" b[0] """) == 6
-        i.walk(""" b[2][1] = 7 """)
-        assert i.walk(""" b[2][1] """) == 7
-        assert i.walk(""" b """) == [6, 3, [4, 7]]
-
-        i.walk(""" c := func do [add, sub] end """)
-        assert i.walk(""" c()[0](2, 3) """) == 5
-
-        i.walk(""" d := [2, 3, 4] """)
-        assert i.walk(""" len(d) """) == 3
-        assert i.walk(""" slice(d, 1, None) """) == [3, 4]
-        assert i.walk(""" slice(d, 1, 2) """) == [3]
-        assert i.walk(""" slice(d, None, 2) """) == [2, 3]
-        assert i.walk(""" slice(d, None, None) """) == [2, 3, 4]
-        assert i.walk(""" push(d, 5) """) is None
-        assert i.walk(""" d """) == [2, 3, 4, 5]
-        assert i.walk(""" pop(d) """) == 5
-        assert i.walk(""" d """) == [2, 3, 4]
-
-        assert i.walk(""" [2, 3] + [4, 5] """) == [2, 3, 4, 5]
-        assert i.walk(""" [2, 3] * 3 """) == [2, 3, 2, 3, 2, 3]
-
-        i.walk(""" e := [1] """)
-        with pytest.raises(AssertionError):
-            i.walk(""" e[None] = 2 """)
-        with pytest.raises(AssertionError):
-            i.walk(""" None[2] = 3 """)
-
-    def test_stdlib(self):
-        assert i.walk(""" a := range(2, 10, 1) """) == [2, 3, 4, 5, 6, 7, 8, 9]
-        assert i.walk(""" b := range(2, 10, 3) """) == [2, 5, 8]
-        assert i.walk(""" first(a) """) == 2
-        assert i.walk(""" rest(a) """) == [3, 4, 5, 6, 7, 8, 9]
-        assert i.walk(""" last(a) """) == 9
-        assert i.walk(""" map(a, n -> n * 2) """) == [4, 6, 8, 10, 12, 14, 16, 18]
-        assert i.walk(""" filter(a, n -> n % 2 == 0) """) == [2, 4, 6, 8]
-        assert i.walk(""" reduce(a, add, 0) """) == 44
-        assert i.walk(""" reverse(a) """) == [9, 8, 7, 6, 5, 4, 3, 2]
-        assert i.walk(""" zip(a, [4, 5, 6]) """) == [[2, 4], [3, 5], [4, 6]]
-        assert i.walk(""" enumerate(a) """) == [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
-
-    def test_list_sieve(self):
-        assert i.walk("""
-            sieve := [False, False] + [True] * 98;
-            i := 2; while i * i < 100 do
-                if sieve[i] then
-                    j := i * i; while j < 100 do
-                        sieve[j] = False;
-                        j = j + i
-                    end
-                end;
-                i = i + 1
-            end;
-
-            map(filter(enumerate(sieve), last), first)
-        """) == [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]
-
-    def test_string(self):
-        assert i.walk(""" 'Hello, world!' """) == "Hello, world!"
-        assert i.walk(""" '
-multi
-line
-text
-'       """) == "\nmulti\nline\ntext\n"
-        assert i.walk(""" 'Hello, world!'[1] """) == "e"
-        assert i.walk(""" 'Hello, ' + 'world!' """) == "Hello, world!"
-        assert i.walk(""" 'Hello, ' * 3 """) == "Hello, Hello, Hello, "
-
-        assert i.walk(""" len('Hello, world!') """) == 13
-        assert i.walk(""" first('Hello, world!') """) == "H"
-        assert i.walk(""" rest('Hello, world!') """) == "ello, world!"
-        assert i.walk(""" last('Hello, world!') """) == "!"
-
-        assert i.walk(""" join(['H', 'e', 'l', 'l', 'o'], ' ') """) == "H e l l o"
-        assert i.walk(""" ord('A') """) == 65
-        assert i.walk(""" chr(65) """) == "A"
-
-        assert i.walk(""" "Hello, world!" """) == "Hello, world!"
-        assert i.walk(r""" "Hello,\nworld!" """) == "Hello,\nworld!"
-        assert i.walk(r""" "Hello,\\world!" """) == "Hello,\\world!"
-        assert i.walk(r""" "Hello,\"world!" """) == 'Hello,"world!'
+        assert i.walk(r""" a := 2 """) == 2
+        assert i.walk(r""" a """) == 2
+
+        assert i.walk(r""" a = 3 """) == 3
+        assert i.walk(r""" a """) == 3
+
+        assert i.walk(r""" a := b := 4 """) == 4
+        assert i.walk(r""" a """) == 4
+        assert i.walk(r""" b """) == 4
+
+        assert i.walk(r""" a = b = 5 """) == 5
+        assert i.walk(r""" a """) == 5
+        assert i.walk(r""" b """) == 5
+
+        assert i.walk(r""" a = c := 6 """) == 6
+        assert i.walk(r""" a """) == 6
+        assert i.walk(r""" c """) == 6
+
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            i.walk(r""" undefined_variable """)
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            i.walk(r""" undefined_variable = 2 """)
+        with pytest.raises(AssertionError, match="Unexpected token"):
+            i.walk(r""" a := """)
 
     def test_destructure_variable_and_literal(self):
+        # Variable pattern
         assert i.walk(r""" a := 2; a """) == 2
         assert i.walk(r""" _ := 2; _ """) == 2
 
+        # Literal pattern
         assert i.walk(r""" a := 2; 2 := a """) == 2
         assert i.walk(r""" None := None """) is None
         assert i.walk(r""" True := True """) is True
         assert i.walk(r""" "hello" := "hello" """) == "hello"
 
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" "hello" := "world" """)
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" a := 3; 2 := a """)
 
     def test_destructure_list(self):
@@ -877,15 +74,16 @@ text
         assert i.walk(r""" [] := [] """) == []
         assert i.walk(r""" [_, b, _] := [2, 3, 4]; b """) == 3
 
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" [a, b] := [2] """)
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" [a, b] := [4, 5, 6] """)
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" [] := [1] """)
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" [a] := 2 """)
 
+        # Rest parameters
         assert i.walk(r""" [a, *b] := [2]; [a, b] """) == [2, []]
         assert i.walk(r""" [a, *b] := [3, 4]; [a, b] """) == [3, [4]]
         assert i.walk(r""" [a, *b] := [4, 5, 6]; [a, b] """) == [4, [5, 6]]
@@ -899,13 +97,13 @@ text
         assert i.walk(r""" [a, *b, c] := [4, 5, 6]; [a, b, c] """) == [4, [5], 6]
         assert i.walk(r""" [a, *b, c] := [5, 6, 7, 8]; [a, b, c] """) == [5, [6, 7], 8]
 
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" [a, *b] := [] """)
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" [*a, b] := [] """)
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" [a, *b, c] := [2] """)
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" [a, *b, *c, d] := [5, 6, 7, 8] """)
 
     def test_destructure_dict(self):
@@ -920,119 +118,499 @@ text
         assert i.walk(r""" {a, *rest} := {a: 2, b: 3}; [a, rest] """) == [2, {'b': 3}]
         assert i.walk(r""" {a, *rest} := {a: 2, b: 3, c: 4}; [a, rest] """) == [2, {'b': 3, 'c': 4}]
 
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" {a} := {b: 2} """)
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" {a, b, c} := {a: 2, b: 3} """)
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" {a, *rest} := {b: 2} """)
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" {a} := 2 """)
 
     def test_destructure_ident_and_expr(self):
-        assert str(i.walk(r""" Ident("aaa") := Ident("aaa") """)) == "aaa"
-        assert str(i.walk(r""" Ident(a) := Ident("aaa"); a """)) == "aaa"
+        assert i.walk(r""" Ident("aaa") := Ident("aaa") """) == Ident("aaa")
+        assert i.walk(r""" Ident(a) := Ident("aaa"); a """) == "aaa"
 
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" Ident("aaa") := Ident("bbb") """)
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" Ident(a) := "aaa" """)
 
         assert i.walk(r""" tuple(Ident("add"), [int(a), int(b)]) := quote 2 + 3 end; [a, b] """) == [2, 3]
         assert i.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := quote a + b end; [name1, name2] """) == ['a', 'b']
 
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
-            i.walk(r""" tuple(Ident('add'), [Ident(name1), Ident(name2)]) := quote 2 + 3 end """)
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
-            i.walk(r""" tuple(Ident('add'), [Ident(name1), Ident(name2)]) := tuple(Ident('add')) """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            i.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := 2 + 3 """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            i.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := tuple(Ident("add")) """)
 
     def test_destructure_type(self):
         assert i.walk(r""" int(a) := 2; a """) == 2
         assert i.walk(r""" str(a) := "aaa"; a """) == "aaa"
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" int(a) := "2" """)
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" str(a) := [] """)
 
     def test_destructure_or(self):
         assert i.walk(r""" int(a) or str(a) := 2; a """) == 2
         assert i.walk(r""" int(a) or str(a) := "aaa"; a """) == "aaa"
         assert i.walk(r""" int(a) or str(a) or list(a):= [2]; a """) == [2]
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" int(a) or str(a) := [2] """)
 
     def test_destructure_combination(self):
         assert i.walk(r""" [{a: b}, c] := [{a: 2, b: 3}, 4]; [b, c] """) == [2, 4]
         assert i.walk(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """) == [5, 6]
 
-    def test_argument_destructuring(self, capsys):
-        i.walk(""" def f(a, [b, c]) do [a, b, c] end """)
-        assert i.walk(""" f(2, [3, 4]) """) == [2, 3, 4]
+    def test_list_assign(self):
+        i.walk(""" b := [2, 3, [4, 5]] """)
+        i.walk(""" b[0] = 6 """)
+        assert i.walk(""" b[0] """) == 6
+        i.walk(""" b[2][1] = 7 """)
+        assert i.walk(""" b[2][1] """) == 7
+        assert i.walk(""" b """) == [6, 3, [4, 7]]
 
-        i.walk(""" def g(*a) do a end""")
-        assert i.walk(""" g() """) == []
-        assert i.walk(""" g(2 + 3) """) == [5]
-        assert i.walk(""" g(2, 3, 4) """) == [2, 3, 4]
+        assert i.walk(""" a := [1, 2]; b := [3, 4]; a[0] = b[1] = 5; [a, b] """) == [[5, 2], [3, 5]]
 
-        i.walk(""" def h(a, *b) do [a, b] end """)
-        assert i.walk(""" h(2 + 3) """) == [5, []]
-        assert i.walk(""" h(2, 3, 4) """) == [2, [3, 4]]
-        with pytest.raises(AssertionError, match="Argument mismatch"):
-            i.walk(""" h() """)
+    def test_arrow_function(self):
+        assert i.walk(""" ([] -> 2)() """) == 2
+        assert i.walk(""" ([a] -> a + 2)(3) """) == 5
+        assert i.walk(""" (a -> a + 2)(3) """) == 5
+        assert i.walk(""" ([[a, b]] -> a + b)([2, 3]) """) == 5
+        assert i.walk(""" ([a, b] -> a + b)(2, 3) """) == 5
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            i.walk(""" ([a, b] -> a + b)(2) """)
 
+        assert i.walk(""" ([a, *b] -> b)(2, 3, 4) """) == [3, 4]
+        assert i.walk(""" ({a} -> a + 2)({a: 3}) """) == 5
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            i.walk(""" ({a} -> a + 2)({b: 3}) """)
+
+        assert i.walk(""" (int(a) -> a + 2)(3) """) == 5
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            i.walk(""" (int(a) -> a + 2)("aaa") """)
+
+        assert i.walk(""" (x -> x or 2)(False) """) == 2
+        assert i.walk(""" (a -> b -> a + b)(2)(3) """) == 5
+
+        assert i.walk(""" inc := a -> a + 1; inc(2) """) == 3
+        assert i.walk(""" myadd := [a, b] -> a + b; myadd(2, 3) """) == 5
+
+    def test_logical_operations(self, capsys):
+        assert i.walk(r""" True and False """) is False
+        assert i.walk(r""" False and True """) is False
+        assert i.walk(r""" True or False """) is True
+        assert i.walk(r""" False or True """) is True
+
+        assert i.walk(r""" True and 2 """) == 2
+        assert i.walk(r""" 0 and 2 / 0 """) == 0
+        assert i.walk(r""" False or 2 """) == 2
+        assert i.walk(r""" 1 or 2 / 0 """) == 1
+
+        assert i.walk(r""" print(2) and 3 """) is None
+        assert capsys.readouterr().out == "2\n"
+        assert i.walk(r""" not print(2) or 3 """) is True
+        assert capsys.readouterr().out == "2\n"
+
+        assert i.walk(r""" not True """) is False
+        assert i.walk(r""" not False """) is True
+        assert i.walk(r""" not not True """) is True
+
+        assert i.walk(r""" a := not 2 == 2 or True """) is True
+
+    def test_comparison_operations(self):
+        assert i.walk(r""" 2 + 5 == 3 + 4 """) is True
+        assert i.walk(r""" 2 + 3 == 3 + 4 """) is False
+        assert i.walk(r""" 2 + 5 != 3 + 4 """) is False
+        assert i.walk(r""" 2 + 3 != 3 + 4 """) is True
+
+        assert i.walk(r""" 2 + 4 < 3 + 4 """) is True
+        assert i.walk(r""" 2 + 5 < 3 + 4 """) is False
+        assert i.walk(r""" 2 + 5 < 2 + 4 """) is False
+
+        assert i.walk(r""" 2 + 4 > 3 + 4 """) is False
+        assert i.walk(r""" 2 + 5 > 3 + 4 """) is False
+        assert i.walk(r""" 2 + 5 > 2 + 4 """) is True
+
+        assert i.walk(r""" 2 + 4 <= 3 + 4 """) is True
+        assert i.walk(r""" 2 + 5 <= 3 + 4 """) is True
+        assert i.walk(r""" 2 + 5 <= 2 + 4 """) is False
+
+        assert i.walk(r""" 2 + 4 >= 3 + 4 """) is False
+        assert i.walk(r""" 2 + 5 >= 3 + 4 """) is True
+        assert i.walk(r""" 2 + 5 >= 2 + 4 """) is True
+
+        assert i.walk(r""" 2 == 2 == 2 """) is False
+        assert i.walk(r""" a := 2 == 3 + 4 """) is False
+
+        assert i.walk(r""" True == True """) is True
+        assert i.walk(r""" None == None """) is True
+        assert i.walk(r""" False != True """) is True
+
+    def test_arithmetic_operations(self):
+        assert i.walk(r""" 2 + 3 """) == 5
+        assert i.walk(r""" 2 + 3 - 4 """) == 1
+        assert i.walk(r""" a := 2 + sub(4, 3) """) == 3
+
+    def test_mul_div_mod(self):
+        assert i.walk(r""" 2 * 3 """) == 6
+        assert i.walk(r""" 4 / 2 * 3 """) == 6
+        assert i.walk(r""" 2 * 3 % 4 """) == 2
+        assert i.walk(r""" 2 + 3 * add(4, 5) """) == 29
+
+    def test_unary_operations(self):
+        assert i.walk(r""" -2 """) == -2
+        assert i.walk(r""" --2 """) == 2
+        assert i.walk(r""" 3--2 """) == 5
+        assert i.walk(r""" -add(2, 3) * 4 """) == -20
+
+    def test_call_index(self):
+        assert i.walk(r""" neg(2) """) == -2
+        assert i.walk(r""" add(2, 3) """) == 5
+
+        i.walk(""" a := [2, 3, [4, 5]] """)
+        assert i.walk(""" a[2][0] """) == 4
+        assert i.walk(""" a[2][-1] """) == 5
+
+        i.walk(""" c := func do [add, sub] end """)
+        assert i.walk(""" c()[0](2, 3) """) == 5
+
+        i.walk(""" e := [1] """)
+        with pytest.raises(Exception):
+            i.walk(""" e[None] = 2 """)
+        with pytest.raises(Exception):
+            i.walk(""" None[2] = 3 """)
+        with pytest.raises(Exception):
+            i.walk(""" [1, 2][5] """)
+        with pytest.raises(Exception):
+            i.walk(""" [1, 2][None] """)
+        with pytest.raises(Exception):
+            i.walk(""" None[0] """)
+
+    def test_dot_notation(self):
+        i.walk(r""" a := {aaa: 2, bbb: 3} """)
+        assert i.walk(r""" a.aaa """) == 2
+
+        i.walk(r""" a.bbb = 4 """)
+        assert i.walk(r""" a """) == {'aaa': 2, 'bbb': 4}
+        i.walk(r""" a.ccc = 5 """)
+        assert i.walk(r""" a """) == {'aaa': 2, 'bbb': 4, 'ccc': 5}
+
+        with pytest.raises(AssertionError):
+            i.walk(r""" a.not_found """)
+        with pytest.raises(AssertionError, match="Invalid attribute"):
+            i.walk(r""" a.1 """)
+        with pytest.raises(Exception):
+            i.walk(r""" [2, 3].aaa """)
+        with pytest.raises(Exception):
+            i.walk(r""" [2, 3].aaa = 4 """)
+
+    def test_ufcs(self):
+        assert i.walk(r""" 2.add(3) """) == 5
+        assert i.walk(r""" [2, 3, 4].len() """) == 3
+        assert i.walk(r""" [2, 3, 4].len().add(5) """) == 8
+
+        i.walk(r""" def myadd(a, b) do a + b end """)
+        assert i.walk(r""" 2.myadd(3) """) == 5
+
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            i.walk(r""" 2.not_found() """)
+        with pytest.raises(AssertionError, match="Invalid operator"):
+            i.walk(r""" foo := 2; 3.foo() """)
+
+    def test_method_notation(self):
+        i.walk(r""" obj := {
+            set: func self, val do self.val = val end,
+            add: func self, a do self.val + a end,
+            val: None
+        } """)
+        i.walk(r""" obj.set(2) """)
+        assert i.walk(r""" obj.val """) == 2
+        assert i.walk(r""" obj.add(3) """) == 5
+
+        assert i.walk(r""" {a: 2, b: 3}.keys() """) == ['a', 'b']
+        assert i.walk(r""" { len: func self do "local" end }.len() """) == "local"
+
+    def test_none_bool(self):
+        assert i.walk(r""" None """) is None
+        assert i.walk(r""" True """) is True
+        assert i.walk(r""" False """) is False
+
+    def test_numbers(self):
+        assert i.walk(r"""2""") == 2
+        assert i.walk(r"""23""") == 23
+        assert i.walk(r"""0""") == 0
+        assert i.walk(r"""023""") == 23
+
+    def test_raw_string(self):
+        assert i.walk(r""" 'hello, world' """) == "hello, world"
+        assert i.walk(r""" '' """) == ""
+        assert i.walk(r""" 'if ; #"\n' """) == r"""if ; #"\n"""
+        assert i.walk(""" 'a\nb' """) == "a\nb"
+
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            i.walk(r""" ' """)
+
+    def test_string(self):
+        assert i.walk(r""" "hello, world" """) == "hello, world"
+        assert i.walk(r""" "" """) == ""
+        assert i.walk(r""" "if ; #\"\\\n" """) == 'if ; #"\\\n'
+        assert i.walk(""" \"a\nb\" """) == "a\nb"
+
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            i.walk(r""" " """)
+
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            i.walk(r""" "\" """)
+
+    def test_string_functions(self):
+        assert i.walk(r""" join(["ab", "cd", "ef"], ",") """) == "ab,cd,ef"
+
+    def test_grouping(self):
+        assert i.walk(r""" (2 + 3) * 4 """) == 20
+        assert i.walk(r""" (2) * 3 """) == 6
+
+    def test_list(self, capsys):
+        assert i.walk(""" [] """) == []
+        assert i.walk(""" [2 + 3] """) == [5]
+        assert i.walk(""" [2, 3, [4, 5]] """) == [2, 3, [4, 5]]
+        i.walk(""" [print(2), print(3)] """)
+        assert capsys.readouterr().out == "2\n3\n"
+
+    def test_list_functions(self, capsys):
+        i.walk(""" d := [2, 3, 4] """)
+        assert i.walk(""" len(d) """) == 3
+        assert i.walk(""" index(d, 2) """) == 4
+        assert i.walk(""" slice(d, 1, None) """) == [3, 4]
+        assert i.walk(""" slice(d, 1, 2) """) == [3]
+        assert i.walk(""" slice(d, None, 2) """) == [2, 3]
+        assert i.walk(""" slice(d, None, None) """) == [2, 3, 4]
+        assert i.walk(""" push(d, 5) """) is None
+        assert i.walk(""" d """) == [2, 3, 4, 5]
+        assert i.walk(""" pop(d) """) == 5
+        assert i.walk(""" d """) == [2, 3, 4]
+        assert i.walk(""" in(2, d) """) is True
+        assert i.walk(""" in(5, d) """) is False
+        assert i.walk(""" dd := copy(d); dd[0] = 6; [d, dd] """) == [[2, 3, 4], [6, 3, 4]]
+
+        assert i.walk(""" [2, 3] + [4, 5] """) == [2, 3, 4, 5]
+        assert i.walk(""" [2, 3] * 3 """) == [2, 3, 2, 3, 2, 3]
+
+    def test_dict(self):
+        assert i.walk(r""" {} """) == {}
+
+        i.walk(r""" ccc := 1 """)
+        assert i.walk(r""" a := {"aaa": 2 + 3, bbb: 4, ccc} """) == {'aaa': 5, 'bbb': 4, 'ccc': 1}
+        assert i.walk(r""" a["aaa"] """) == 5
+
+        i.walk(r""" a["aaa"] = 6 """)
+        i.walk(r""" a["ddd"] = 7 """)
+        assert i.walk(r""" a """) == {'aaa': 6, 'bbb': 4, 'ccc': 1, 'ddd': 7}
+
+        assert i.walk(r""" {outer: {inner: 1}} """) == {'outer': {'inner': 1}}
+
+        with pytest.raises(AssertionError, match="Expected :"):
+            i.walk(r""" {"aaa"} """)
+        with pytest.raises(AssertionError, match="Invalid key"):
+            i.walk(r""" {2: 3} """)
+        with pytest.raises(KeyError):
+            i.walk(r""" a["eee"] """)
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            i.walk(r""" {undefined_var} """)
+
+    def test_dict_functions(self):
+        assert i.walk(r""" a := dict([["aaa", 2], ["bbb", 3], ["ccc", 4]]) """) == {'aaa': 2, 'bbb': 3, 'ccc': 4}
+        assert i.walk(r""" len(a) """) == 3
+        assert i.walk(r""" in("aaa", a) """) is True
+        assert i.walk(r""" in("ddd", a) """) is False
+        assert i.walk(r""" keys(a) """) == ['aaa', 'bbb', 'ccc']
+        assert i.walk(r""" items(a) """) == [['aaa', 2], ['bbb', 3], ['ccc', 4]]
+
+    def test_type_functions(self):
+        assert i.walk(r""" type(None) """) == "NoneType"
+        assert i.walk(r""" type(True) """) == "bool"
+        assert i.walk(r""" type(5) """) == "int"
+        assert i.walk(r""" type("") """) == "str"
+        assert i.walk(r""" type([]) """) == "list"
+        assert i.walk(r""" type({}) """) == "dict"
+
+        assert i.walk(r""" bool(True) """) is True
+        assert i.walk(r""" bool(1) """) is True
+        assert i.walk(r""" int(2) """) == 2
+        assert i.walk(r""" int("2") """) == 2
+        assert i.walk(r""" str("a") """) == "a"
+        assert i.walk(r""" str(2) """) == "2"
+        assert i.walk(r""" list([2, 3]) """) == [2, 3]
+        assert i.walk(r""" list({a: 2, b: 3}) """) == ["a", "b"]
+        assert i.walk(r""" dict({a: 2, b: 3}) """) == {"a": 2, "b": 3}
+        assert i.walk(r""" dict([["a", 2], ["b", 3]]) """) == {"a": 2, "b": 3}
+
+    def test_quote(self, capsys):
+        assert i.walk(r""" quote hello_world end """) == Ident("hello_world")
+        assert i.walk(r""" quote scope 2 == 3 end end """) == (
+            Ident("__core_scope"), [(Ident("equal"), [2, 3])]
+        )
+
+    def test_scope(self):
+        assert i.walk(r""" a := 2; scope a end """) == 2
+        assert i.walk(r""" a := 2; scope scope a end end """) == 2
+
+        assert i.walk(r""" a := 2; scope a := 3 end """) == 3
+        assert i.walk(r""" a """) == 2
+
+        assert i.walk(r""" a := 2; scope a = 3 end """) == 3
+        assert i.walk(r""" a """) == 3
+
+        assert i.walk(r""" a := 2; scope d := 3 end """) == 3
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            i.walk(r""" d """)
+
+    def test_func(self):
+        assert i.walk("func do 2 end ()") == 2
+        assert i.walk("func a do add(a, 2) end (3)") == 5
+        assert i.walk("func a, b do add(a, b) end (2, 3)") == 5
+
+        assert i.walk("func a, b do add(a, b) end (add(2, 3), 4; 5)") == 10
+        assert i.walk("""
+           myadd := func a, b do add(a, b) end;
+           myadd(2, 3)
+        """) == 5
+
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            i.walk("func a, b do add(a, b) end (2)")
+
+        with pytest.raises(AssertionError, match="Expected do @ consume: add"):
+            i.walk("func a add(a, 2) end")
+
+        with pytest.raises(AssertionError, match="Expected end @ consume: \\$EOF"):
+            i.walk("func a do add(a, 2)")
+
+    def test_destructure_function_arguments(self):
+        assert i.walk(r""" func a, *rest do [a, rest] end (2, 3, 4) """) == [2, [3, 4]]
         assert i.walk(r""" func {a: d, *rest}, e do [d, e, rest] end ({a: 2, b: 3, c: 4}, 5) """) == [2, 5, {'b': 3, 'c': 4}]
 
-        i.walk(r""" def foo(int(a), str(b)) do [a, b] end """)
-        assert i.walk(r""" foo(2, "a") """) == [2, "a"]
+        assert i.walk(r""" def foo(int(a), str(b)) do [a, b] end; foo(2, "a") """) == [2, "a"]
 
-        with pytest.raises(AssertionError, match="Argument mismatch"):
-            i.walk(r""" foo(2, 3) """)
-        with pytest.raises(AssertionError, match="Argument mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            i.walk(r""" def bar(int(a), str(b)) do [a, b] end; bar(2, 3) """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" func a, b do [a, b] end (2) """)
-        with pytest.raises(AssertionError, match="Argument mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" func a do a end (2, 3) """)
-        with pytest.raises(AssertionError, match="Argument mismatch"):
+        with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" func do 2 end (2) """)
 
         assert i.walk(r""" func do "ok" end () """) == "ok"
 
-    def test_match(self):
+    def test_return(self):
         i.walk("""
-            f := func val do
-                match val
-                    case 2 then "two"
-                    case "two" then 3
-                    case [a] then a
-                    case [a, 3] then -a
-                    case [a, [3, b]] then (a + b) * 2
-                    case [a, [b, c]] then a + b + c
-                    case [a, b] then a + b
-                    case _ then "not match"
-                end
+            def f(a) do
+                if a == 2 then return(3) end;
+                4
             end
         """)
-        assert i.walk(""" f(2) """) == "two"
-        assert i.walk(""" f("two") """) == 3
-        assert i.walk(""" f([2]) """) == 2
-        assert i.walk(""" f([2, 3]) """) == -2
-        assert i.walk(""" f([2, [3, 4]]) """) == 12
-        assert i.walk(""" f([2, [2, 4]]) """) == 8
-        assert i.walk(""" f([2, 4]) """) == 6
-        assert i.walk(""" f([2, 3, 4]) """) == "not match"
+        assert i.walk(""" f(2) """) == 3
+        assert i.walk(""" f(3) """) == 4
 
-        with pytest.raises(AssertionError):
-            i.walk(""" a """)
+        i.walk("""
+            def fib(n) do
+                if n == 0 then return(0) end;
+                if n == 1 then return(1) end;
+                fib(n - 1) + fib(n - 2)
+            end
+        """)
+        assert i.walk(""" fib(0) """) == 0
+        assert i.walk(""" fib(1) """) == 1
+        assert i.walk(""" fib(6) """) == 8
+
+        assert i.walk(""" func do return() end () """) is None
+
+        with pytest.raises(Exception):
+            i.walk(""" return() """)
+
+    def test_overload_def(self, capsys):
+        i.walk("""
+            def foo(x) do print("Not supported: " + str(x))  end;
+            def foo({kind: "Person", name: str(name)}) do print("Person: " + name) end;
+            def foo(str(s)) do print("string: " + s) end;
+            def foo(int(n)) do print("int: " + str(n)) end
+        """)
+        i.walk(""" foo(2) """)
+        assert capsys.readouterr().out == "int: 2\n"
+        i.walk(""" foo("bar") """)
+        assert capsys.readouterr().out == "string: bar\n"
+        i.walk(""" foo({kind: "Person", name: "John"}) """)
+        assert capsys.readouterr().out == "Person: John\n"
+        i.walk(""" foo([2]) """)
+        assert capsys.readouterr().out == "Not supported: [2]\n"
+
+    def test_overload_arrow_func(self):
+        i.walk("""
+            fib := n -> fib(n - 1) + fib(n - 2);
+            fib := 1 -> 1;
+            fib := 0 -> 0
+        """)
+        assert i.walk(""" fib(0) """) == 0
+        assert i.walk(""" fib(1) """) == 1
+        assert i.walk(""" fib(4) """) == 3
+
+    def test_def(self):
+        i.walk(r""" def myadd(a, b) do a + b end """)
+        assert i.walk(r""" myadd(2, 3) """) == 5
+
+        i.walk(r""" def say_hello do "hello" end """)
+        assert i.walk(r""" say_hello() """) == "hello"
+
+        i.walk(r"""
+            def fact(n) do n * fact(n - 1) end;
+            def fact(0) do 1 end
+        """)
+        assert i.walk(r""" fact(0) """) == 1
+        assert i.walk(r""" fact(3) """) == 6
+
+        with pytest.raises(Exception, match="Invalid def syntax"):
+            i.walk(r""" def 2 do 3 end """)
+
+    def test_if(self):
+        assert i.walk(r""" if True then 2 end """) == 2
+        assert i.walk(r""" if False then 2 end """) is None
+        assert i.walk(r""" if True then 2 else 3 end """) == 2
+        assert i.walk(r""" if False then 2 else 3 end """) == 3
+        assert i.walk(r""" if True then 2 elif True then 3 end """) == 2
+        assert i.walk(r""" if False then 2 elif True then 3 end """) == 3
+        assert i.walk(r""" if False then 2 elif False then 3 end """) is None
+        assert i.walk(r""" if False then 2 elif True then 3 else 4 end """) == 3
+        assert i.walk(r""" if True then 2 elif True then 3 else 4 end """) == 2
+        assert i.walk(r""" if False then 2 elif False then 3 else 4 end """) == 4
+        assert i.walk(r""" if False then 2 elif False then 3 elif True then 4 else 5 end """) == 4
+
+        assert i.walk(r""" if 2; True then 1; 2 else 2; 3 end """) == 2
+        assert i.walk(r""" if 2; False then 1; 2 else 2; 3 end """) == 3
+
+        with pytest.raises(AssertionError, match="Expected then"):
+            i.walk(r""" if True 2 end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            i.walk(r""" if True then 2 """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            i.walk(r""" if True then 2 3 end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            i.walk(r""" if True then 2 else 3 """)
+        with pytest.raises(AssertionError, match="Expected then"):
+            i.walk(r""" if False then 2 elif True 3 end """)
+        with pytest.raises(AssertionError, match="Expected end"):
+            i.walk(r""" if False then 2 elif True then 3 """)
 
     def test_match_syntax(self):
         assert i.walk(r""" match 2 end """) is None
 
-        with pytest.raises(AssertionError, match="Expected end"):
+        with pytest.raises(Exception, match="Expected end"):
             i.walk(r""" match end """)
-        with pytest.raises(AssertionError, match="Expected end"):
+        with pytest.raises(Exception, match="Expected end"):
             i.walk(r""" match 2 case 2 then 3 """)
-        with pytest.raises(AssertionError, match="Expected end"):
+        with pytest.raises(Exception, match="Expected end"):
             i.walk(r""" match 2 then 3 end """)
-        with pytest.raises(AssertionError, match="Expected then"):
+        with pytest.raises(Exception, match="Expected then"):
             i.walk(r""" match 2 case then 3 end """)
 
     def test_match_variable_and_literal(self):
@@ -1124,290 +702,293 @@ text
         assert i.walk(r""" match [2, 3] case [a, b] then "ok" end; a + b """) == 5
         assert i.walk(r""" match [2, 3] case [a, 4] then "no" case _ then a end """) == 2
 
-    def test_match_copy(self):
+    def test_while(self):
         assert i.walk("""
-            a := [2, 3, 4];
-            match a
-                case b then b[0] = 5
-            end;
+            a := [];
+            i := 0; while i < 3 do push(a, i); i = i + 1 end;
             a
-        """) == [5, 3, 4]
+        """) == [0, 1, 2]
 
         assert i.walk("""
-            a := [2, 3, 4];
-            match a
-                case [*b] then b[0] = 5
-            end;
-            a
-        """) == [2, 3, 4]
+            a := [];
+            i := 0; while i < 3 do push(a, i); i = i + 1 then a else 1/0 end
+        """) == [0, 1, 2]
 
-    def test_return(self):
-        i.walk("""
-            def f(a) do
-                if a == 2 then return(3) end;
-                4
-            end
-        """)
-        assert i.walk(""" f(2) """) == 3
-        assert i.walk(""" f(3) """) == 4
+        assert i.walk("""
+            a := [];
+            i := 0; while i < 3 do push(a, i); i = i + 1 then a end
+        """) == [0, 1, 2]
 
-        i.walk("""
-            def fib(n) do
-                if n == 0 then return(0) end;
-                if n == 1 then return(1) end;
-                fib(n - 1) + fib(n - 2)
-            end
-        """)
-        assert i.walk(""" fib(0) """) == 0
-        assert i.walk(""" fib(1) """) == 1
-        assert i.walk(""" fib(7) """) == 13
-        assert i.walk(""" fib(9) """) == 34
+        assert i.walk(""" while False do 1 / 0 then 3 else 4 end """) == 3
 
-        with pytest.raises(AssertionError, match="Return takes zero or one argument"):
-            i.walk(""" func do return(2, 3) end () """)
+        with pytest.raises(Exception, match="Expected do"):
+            i.walk(""" while do 2 then 3 else 4 end """)
+        with pytest.raises(Exception, match="Expected do"):
+            i.walk(""" while True 2 then 3 else 4 end """)
+        with pytest.raises(Exception, match="Expected end"):
+            i.walk(""" while True do 2 3 else 4 end """)
+        with pytest.raises(Exception, match="Expected end"):
+            i.walk(""" while True do 2 then 3 4 end """)
+        with pytest.raises(Exception, match="Expected end"):
+            i.walk(""" while True do 2 then 3 else end """)
+        with pytest.raises(Exception, match="Expected end"):
+            i.walk(""" while True do 2 then 3 else 4 """)
 
-        with pytest.raises(AssertionError, match="Return from top level"):
-            i.walk(""" return() """)
+    def test_continue(self):
+        assert i.walk("""
+            a := [];
+            i := 0; while i < 3 do
+                i = i + 1; if i == 2 then continue() end;
+                push(a, i)
+            then a end
+        """) == [1, 3]
 
-    def test_load(self, tmp_path):
-        i.walk(""" fib := load("scripts/fib.toil") """)
-        assert i.walk(""" fib(9) """) == 34
+        assert i.walk("""
+            a := []; i := 0; while i < 2 do
+                j := 0; while j < 3 do
+                    j = j + 1; if j == 2 then continue() end;
+                    push(a, [i, j])
+                end;
+                i = i + 1
+            then a end
+        """) == [[0, 1], [0, 3], [1, 1], [1, 3]]
 
-        i.walk(""" [gcd_recur, gcd_iter] := load("scripts/gcd.toil") """)
-        assert i.walk(""" gcd_recur(24, 36) """) == 12
-        assert i.walk(""" gcd_iter(24, 36) """) == 12
+        with pytest.raises(Exception, match="Continue at top level"):
+            i.walk(""" continue() """)
 
-    def test_load_isolation(self, tmp_path):
-        mod_a_path = tmp_path / "mod_a.toil"
-        mod_a_path.write_text("a_private := 100; func do a_private end")
+    def test_break(self):
+        assert i.walk("""
+            a := [];
+            i := 0; while i < 3 do
+                if i == 1 then break() end;
+                push(a, i); i = i + 1
+            then 1/0 else a end
+        """) == [0]
 
-        i.walk(f""" f := load("{mod_a_path}") """)
-        assert i.walk("f()") == 100
-        with pytest.raises(AssertionError, match="Undefined variable"):
-            i.walk("a_private")
+        assert i.walk("""
+            a := [];
+            i := 0; while i < 3 do
+                if i == 1 then break() end;
+                push(a, i); i = i + 1
+            else a end
+        """) == [0]
 
-        mod_b_path = tmp_path / "mod_b.toil"
-        mod_b_path.write_text("b_private := 200; a_private")
-        with pytest.raises(AssertionError, match="Undefined variable"):
-            i.walk(f""" load("{mod_b_path}") """)
+        assert i.walk("""
+            a := [];
+            i := 0; while i < 2 do
+                j := 0; while j < 3 do
+                    if i == 0 and j == 1 then break() end;
+                    push(a, [i, j]);
+                    j = j + 1
+                end;
+                i = i + 1
+            then a end
+        """) == [[0, 0], [1, 0], [1, 1], [1, 2]]
 
-    def test_dict(self):
-        assert i.walk(""" {} """) == {}
-        assert i.walk(""" {"aaa": 2} """) == {'aaa': 2}
-        i.walk(""" bbb := 4 """)
-        assert i.walk(""" {aaa: 2 + 3, bbb} """) == {'aaa': 5, 'bbb': 4}
+        assert i.walk("""
+            a := [];
+            i := 0; while i < 2 do
+                j := 0; while j < 3 do
+                    if i == 1 and j == 1 then break() end;
+                    push(a, [i, j]);
+                    j = j + 1
+                else break() end;
+                i = i + 1
+            else a end
+        """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
 
-        i.walk(""" a := {aaa: 2 + 3, bbb} """)
-        assert i.walk(""" a["aaa"] """) == 5
-        assert i.walk(""" a["bbb"] """) == 4
-        with pytest.raises(KeyError):
-            i.walk(""" a["ccc"] """)
+        assert i.walk(""" while True do break() end """) is None
+        assert i.walk(""" while True do break() else 2 end """) == 2
 
-        i.walk(""" a["aaa"] = 2 """)
-        assert i.walk(""" a """) == {'aaa': 2, 'bbb': 4}
-        i.walk(""" a["ccc"] = 5 """)
-        assert i.walk(""" a """) == {'aaa': 2, 'bbb': 4, 'ccc': 5}
+        with pytest.raises(Exception, match="Break at top level"):
+            i.walk(""" break() """)
 
-        assert i.walk(""" len(a) """) == 3
-        assert i.walk(""" in("aaa", a) """) is True
-        assert i.walk(""" in("bbb", a) """) is True
-        assert i.walk(""" in("ddd", a) """) is False
-        assert i.walk(""" keys(a) """) == ['aaa', 'bbb', 'ccc']
-        assert i.walk(""" items(a) """) == [['aaa', 2], ['bbb', 4], ['ccc', 5]]
+    def test_for(self):
+        assert i.walk(""" a := []; for i in [0, 1, 2] do push(a, i) end; a """) == [0, 1, 2]
 
-        i.walk(""" [k, v] := items(a)[0] """)
-        assert i.walk(""" k """) == 'aaa'
-        assert i.walk(""" v """) == 2
+        assert i.walk("""
+            a := []; for i in [0, 1, 2] do push(a, i) then [i, a] else 1/0 end
+        """) == [2, [0, 1, 2]]
 
-        with pytest.raises(AssertionError, match="Invalid key"):
-            i.walk(""" {1: 2} """)
+        assert i.walk("""
+            a := []; for i in [0, 1, 2] do push(a, i) then a end
+        """) == [0, 1, 2]
 
-        with pytest.raises(AssertionError, match="Invalid indexing"):
-            i.walk(""" a[0] = 1 """)
+        assert i.walk("""
+            a := []; for [i, j] in [[1, 2], [3, 4]] do push(a, [i, j]) then a end
+        """) == [[1, 2], [3, 4]]
 
-    def test_dot_notation(self):
-        i.walk(""" a := {aaa: 2, bbb: 4} """)
-        i.walk(""" a.aaa = 2 """)
-        assert i.walk(""" a.aaa """) == 2
-        i.walk(""" a.ddd = 6 """)
-        assert i.walk(""" a """) == {'aaa': 2, 'bbb': 4, 'ddd': 6}
+        assert i.walk("""
+            a := [];
+            for [k, v] in {"a": 2, "b": 3}.items() do push(a, [k, v]) then a end
+        """) == [['a', 2], ['b', 3]]
 
-        with pytest.raises(AssertionError, match="Invalid attribute"):
-            i.walk(""" a.1 """)
+        assert i.walk("""
+            a := [];
+            keys := ["a", "b", "c"];
+            values := [2, 3, 4];
+            for [k, v] in zip(keys, values) do push(a, [k, v]) then a end
+        """) == [['a', 2], ['b', 3], ['c', 4]]
 
-        with pytest.raises(AssertionError):
-            i.walk(""" [1, 2].foo """)
+        assert i.walk(""" for i in [] do 1/0 then 2 end """) == 2
 
-    def test_dict_destructuring(self):
-        assert i.walk("""{a, b} := {a: 2, b: 3}; [a, b] """) == [2, 3]
-        assert i.walk("""{a, *b} := {a: 2, b: 3, c: 4, d: 5}; [a, b] """) == [2, {'b': 3, 'c': 4, 'd': 5}]
-        assert i.walk("""{*a, b} := {a: 2, b: 3, c: 4, d: 5}; [a, b] """) == [{'a': 2, 'c': 4, 'd': 5}, 3]
-        assert i.walk("""{a, *b, c} := {a: 2, b: 3, c: 4, d: 5}; [a, b, c] """) == [2, {'b': 3, 'd': 5}, 4]
+        with pytest.raises(Exception):
+            i.walk(""" for in [] do 2 then 3 else 4 end """)
+        with pytest.raises(Exception):
+            i.walk(""" for i [] do 2 then 3 else 4 end """)
+        with pytest.raises(Exception, match="Expected do"):
+            i.walk(""" for i in do 2 then 3 else 4 end """)
+        with pytest.raises(Exception, match="Expected end"):
+            i.walk(""" for i in [] do then 3 else 4 end """)
+        with pytest.raises(Exception, match="Expected end"):
+            i.walk(""" for i in [] do 2 3 else 4 end """)
+        with pytest.raises(Exception, match="Expected end"):
+            i.walk(""" for i in [] do 2 then else 4 end """)
+        with pytest.raises(Exception, match="Expected end"):
+            i.walk(""" for i in [] do 2 then 3 4 end """)
+        with pytest.raises(Exception, match="Expected end"):
+            i.walk(""" for i in [] do 2 then 3 else end """)
+        with pytest.raises(Exception, match="Expected end"):
+            i.walk(""" for i in [] do 2 then 3 else 4 """)
 
-    def test_dict_pattern_match(self):
-        assert i.walk(""" match {a: 2, b: 3} case {a, b} then [a, b] end """) == [2, 3]
-        assert i.walk(""" match {a: 2, b: 3} case {a: aa, b: bb} then [aa, bb] end """) == [2, 3]
-        assert i.walk(""" match {a: 2, b: 3, c: 4} case {a, b} then [a, b] end """) == [2, 3]
-        assert i.walk(""" match {a: 2, b: {c: 3, d: 4}} case {a, b: {c, d}} then [a, c, d] end """) == [2, 3, 4]
-        assert i.walk(""" match {a: 2, b: [3, 4]} case {a, b: [c, d]} then [a, c, d] end """) == [2, 3, 4]
-        assert i.walk(""" match {a: 2, b: 3, c: 4} case {a, *rest} then [a, rest] end """) == [2, {'b': 3, 'c': 4}]
-        assert i.walk(""" match {a: 2, b: 3, c: 4} case {*rest, b} then [rest, b] end """) == [{'a': 2, 'c': 4}, 3]
-        assert i.walk(""" match {a: 2, b: 3, c: 4} case {a, *rest, c} then [a, rest, c] end """) == [2, {'b': 3}, 4]
-        assert i.walk(""" match {a: 2} case {b: 3} then 4 end """) is None
+    def test_for_continue(self):
+        assert i.walk("""
+            a := []; for i in [0, 1, 2] do
+                if i == 1 then continue() end;
+                push(a, i)
+            then a end
+        """) == [0, 2]
 
-    def test_ast_pattern_match(self):
-        i.walk("""
-            f := func ast do
-                match ast
-                    case tuple(Ident("add"), [left, right]) then left + right
-                    case tuple(Ident("sub"), [left, right]) then left - right
-                    case tuple(op, args) then [op, args]
-                    case _ then None
+        assert i.walk("""
+            a := []; for i in [0, 1] do
+                for j in [0, 1, 2] do
+                    if j == 1 then continue() end;
+                    push(a, [i, j])
                 end
+            then a end
+        """) == [[0, 0], [0, 2], [1, 0], [1, 2]]
+
+    def test_for_break(self):
+        assert i.walk("""
+            a := []; for i in [0, 1, 2] do
+                if i == 1 then break() end;
+                push(a, i)
+            then 1/0 else a end
+        """) == [0]
+
+        assert i.walk("""
+            a := []; for i in [0, 1, 2] do
+                if i == 1 then break() end;
+                push(a, i)
+            else a end
+        """) == [0]
+
+        assert i.walk("""
+            a := [];
+            for i in [0, 1] do
+                for j in [0, 1, 2] do
+                    if i == 0 and j == 1 then break() end;
+                    push(a, [i, j])
+                end
+            then a end
+        """) == [[0, 0], [1, 0], [1, 1], [1, 2]]
+
+        assert i.walk("""
+            a := [];
+            for i in [0, 1] do
+                for j in [0, 1, 2] do
+                    if i == 1 and j == 1 then break() end;
+                    push(a, [i, j])
+                else break() end
+            else a end
+        """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
+
+    def test_try_except(self):
+        assert i.walk(""" try 2; 3 end """) == 3
+        assert i.walk(""" try 2; 3 except e then e end """) == 3
+        assert i.walk(""" try 2; raise(2 + 3); 3 except e then e end """) == 5
+
+        assert i.walk("""
+            try
+                raise(["foo", 3])
+            except ["foo", val] then ["foo", val]
+            except ["bar", val] then ["bar", val]
             end
-        """)
-        assert i.walk(""" f(quote 2 + 3 end) """) == 5
-        assert i.walk(""" f(quote 5 - 2 end) """) == 3
-        assert i.walk(""" f(quote 2 * 3 end) """) == [Ident("mul"), [2, 3]]
-        assert i.walk(""" f(2) """) is None
+        """) == ['foo', 3]
 
-        assert i.walk(""" f(tuple(Ident("add"), [2, 3])) """) == 5
-        assert i.walk(""" f(tuple("add", [2, 3])) """) == ["add", [2, 3]]
-        assert i.walk(""" f([Ident("add"), [2, 3]]) """) == None
-
-    def test_dict_module(self):
-        i.walk(""" gcd := load("scripts/gcd_dict.toil") """)
-        assert i.walk(""" gcd.recur(24, 36) """) == 12
-        assert i.walk(""" gcd.iter(24, 36) """) == 12
-
-        i.walk(""" {recur, iter} := load("scripts/gcd_dict.toil") """)
-        assert i.walk(""" recur(24, 36) """) == 12
-        assert i.walk(""" iter(24, 36) """) == 12
-
-        i.walk(""" {recur: gcd_recur, iter: gcd_iter} := load("scripts/gcd_dict.toil") """)
-        assert i.walk(""" gcd_recur(24, 36) """) == 12
-        assert i.walk(""" gcd_iter(24, 36) """) == 12
-
-    def test_ufcs(self):
-        # Case 1: Namespace
-        i.walk(""" foo := { add: func a, b do a + b end } """)
-        assert i.walk(""" foo.add(2, 3) """) == 5
-
-        # Case 2: Method
-        i.walk(""" foo := { add: func self, a do self.val + a end, val: 2 } """)
-        assert i.walk(""" foo.add(3) """) == 5
-
-        # Case 3: UFCS
-        i.walk(""" foo := 2 """)
-        assert i.walk(""" add(foo, 3) """) == 5
-        assert i.walk(""" foo.add(3) """) == 5
-
-        i.walk(""" myadd := func a, b do a + b end """)
-        assert i.walk(""" myadd(foo, 3) """) == 5
-        assert i.walk(""" foo.myadd(3) """) == 5
-
-        # UFCS priority
-        i.walk(""" d := { len: func self do "local" end } """)
-        assert i.walk(""" d.len() """) == "local"
-
-        with pytest.raises(AssertionError, match="Invalid operator"):
-            i.walk(""" d := { val: 123 }; d.val() """)
-        with pytest.raises(AssertionError, match="Undefined variable"):
-            i.walk(""" 2.non_existent() """)
-
-    def test_oo_style(self, capsys):
-        i.walk("""
-            def Animal(name) do
-                self := {};
-                self._name = name;
-                self.introduce = func self do print("I'm", self._name) end;
-                self.make_sound = func self do print("crying") end;
-                self
+        assert i.walk("""
+            try
+                raise(["bar", 3])
+            except ["foo", val] then ["foo", val]
+            except ["bar", val] then ["bar", val]
             end
-        """)
-        i.walk("""
-            animal1 := Animal("Rocky");
-            animal2 := Animal("Lucy");
-            animal1.introduce();
-            animal1.make_sound();
-            animal2.introduce();
-            animal2.make_sound()
-        """)
-        assert capsys.readouterr().out == "I'm Rocky\ncrying\nI'm Lucy\ncrying\n"
+        """) == ['bar', 3]
 
-        i.walk("""
-            def Dog(name) do
-                self := Animal(name);
-                self.make_sound = func self do print("woof") end;
-                self
+        with pytest.raises(Exception):
+            i.walk("""
+                try
+                    raise(["baz", 3])
+                except ["foo", val] then ["foo", val]
+                end
+            """)
+
+        assert i.walk(""" try raise(2) except _ then 3 end """) == 3
+
+        assert i.walk(""" func do try return(2) except _ then 3 end end () """) == 2
+
+        assert i.walk("""
+            a := 0; while a < 5 do
+                try a = a + 1; if a == 3 then break() end
+                except _ then a = 10 end
+            end; a
+        """) == 3
+
+        assert i.walk("""
+            try
+                try
+                    raise(2)
+                except e then
+                    raise(e + 1)
+                end
+            except e then
+                e
             end
-        """)
-        i.walk("""
-            dog1 := Dog("Leo");
-            dog1.introduce();
-            dog1.make_sound()
-        """)
-        assert capsys.readouterr().out == "I'm Leo\nwoof\n"
+        """) == 3
 
-    def test_oo_style_with_defclass(self, capsys):
-        i.walk("""
-            defclass Animal(name) do
-                self._name = name;
-                defmethod introduce do print("I'm", self._name) end;
-                defmethod new_name(name) do self._name = name end;
-                defmethod make_sound do print("crying") end
+        assert i.walk("""
+            try
+                try
+                    raise("outer")
+                except "inner" then "caught inner"
+                end
+            except "outer" then "caught outer"
             end
-        """)
-        i.walk("""
-            animal1 := Animal("Rocky");
-            animal2 := Animal("Lucy");
-            animal1.introduce();
-            animal1.make_sound();
-            animal2.introduce();
-            animal2.new_name("Bella");
-            animal2.introduce();
-            animal2.make_sound()
-        """)
-        assert capsys.readouterr().out == "I'm Rocky\ncrying\nI'm Lucy\nI'm Bella\ncrying\n"
+        """) == "caught outer"
 
-        i.walk("""
-            defclass Dog(name) do
-                inherits(Animal(name));
-                defmethod make_sound do print("woof") end
-            end
-        """)
-        i.walk("""
-            dog1 := Dog("Leo");
-            dog1.introduce();
-            dog1.make_sound()
-        """)
-        assert capsys.readouterr().out == "I'm Leo\nwoof\n"
+    def test_defclass(self):
+        assert i.walk(r"""
+            defclass Counter(start) do
+                self.count = start;
+                defmethod inc(step) do
+                    self.count = self.count + step
+                end;
+                defmethod get do
+                    self.count
+                end
+            end;
+            c1 := Counter(10);
+            c2 := Counter(20);
+            c1.inc(2);
+            c2.inc(5);
+            [c1.get(), c2.get()]
+        """) == [12, 25]
 
-    def test_overload_def(self, capsys):
-        i.walk("""
-            def foo(x) do print("Not supported: " + str(x))  end;
-            def foo({kind: "Person", name: str(name)}) do print("Person: " + name) end;
-            def foo(str(s)) do print("string: " + s) end;
-            def foo(int(n)) do print("int: " + str(n)) end
-        """)
-        i.walk(""" foo(2) """)
-        assert capsys.readouterr().out == "int: 2\n"
-        i.walk(""" foo("bar") """)
-        assert capsys.readouterr().out == "string: bar\n"
-        i.walk(""" foo({kind: "Person", name: "John"}) """)
-        assert capsys.readouterr().out == "Person: John\n"
-        i.walk(""" foo([2]) """)
-        assert capsys.readouterr().out == "Not supported: [2]\n"
-
-    def test_overload_arrow_func(self):
-        i.walk("""
-            fib := n -> fib(n - 1) + fib(n - 2);
-            fib := 1 -> 1;
-            fib := 0 -> 0
-        """)
-        assert i.walk(""" fib(0) """) == 0
-        assert i.walk(""" fib(1) """) == 1
-        assert i.walk(""" fib(4) """) == 3
+        with pytest.raises(Exception, match="Invalid defclass syntax"):
+            i.walk(""" defclass 2 do 2 end """)
+        with pytest.raises(Exception, match="Expected do"):
+            i.walk(""" defclass Foo(x) end """)
+        with pytest.raises(Exception, match="Expected end "):
+            i.walk(""" defclass Foo do defmethod 2 do end end """)
 
     def test_defmethod_overloading(self):
         i.walk("""
@@ -1424,419 +1005,237 @@ text
         """)
         assert i.walk(""" acc.total """) == 100
 
-    def test_sieve_ufcs(self):
-        result = i.walk("""
-            sieve := [False, False] + [True] * 98;
-            i := 2; while i * i < 100 do
-                if sieve[i] then
-                    j := i * i; while j < 100 do
-                        sieve[j] = False;
-                        j = j + i
-                    end
-                end;
-                i = i + 1
-            end;
-            sieve.enumerate().filter(last).map(first)
-        """)
-        assert result == [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97]
+    def test_assert(self):
+        assert i.walk(""" assert 2 == 2 else 1/0 end """) is None
 
-    def test_test_framework(self, capsys):
-        i.walk("""
-            def Test(name) do
-                self := { name, failed: 0 };
-                self.assert = func self, cond, msg do
-                    if not cond then
-                        print("FAIL:", self.name, ":", msg);
-                        self.failed = self.failed + 1
-                    end;
-                    self
-                end;
-                self.report = func self do
-                    if self.failed == 0 then print("PASS:", self.name)
-                    else print("FAILED:", self.name, "(", self.failed, "errors )") end
-                end;
-                self
-            end;
+        with pytest.raises(Exception, match="Assert exception"):
+            i.walk(""" assert 2 == 3 else "Assert exception" end """)
 
-            t := Test("Math");
-            t.assert(2 + 2 == 4, "2+2 should be 4")
-             .assert(3 * 3 == 9, "3*3 should be 9")
-             .assert(1 > 2, "1 should be greater than 2")
-             .report()
-        """)
-        assert capsys.readouterr().out == "FAIL: Math : 1 should be greater than 2\nFAILED: Math ( 1 errors )\n"
+        with pytest.raises(Exception, match="Expected else"):
+            i.walk(""" assert 2 == 3 "Assert exception" end """)
 
-    def test_try_except(self, capsys):
-        # try without except
-        assert i.walk(""" try 2; 3 end """) == 3
-        i.walk(""" try print(2); print(3) end """)
-        assert capsys.readouterr().out == "2\n3\n"
+        with pytest.raises(Exception, match="Expected end"):
+            i.walk(""" assert 2 == 3 else "Assert exception" """)
 
-        # try with except, no raise
-        assert i.walk(""" try 2; 3 except e then print(e) end """) == 3
-        i.walk(""" try print(2); print(3) except e then print(e) end """)
-        assert capsys.readouterr().out == "2\n3\n"
+    def test_read_load(self, tmp_path):
+        assert i.walk(""" type(read("scripts/fib.toil")) """) == "str"
+        assert i.walk(""" load("scripts/fib.toil")(4) """) == 3
 
-        # try with raise and catch
-        i.walk(""" try print(2); raise(2 + 3); print(3) except e then print(e) end """)
-        assert capsys.readouterr().out == "2\n5\n"
-        assert i.walk(""" try 2; raise(2 + 3); 3 except e then e end """) == 5
-
-        # pattern match in except
-        i.walk("""
-            try
-                print(2); raise(["foo", 3]); print(4)
-            except ["foo", val] then print("foo", val)
-            except ["bar", val] then print("bar", val)
-            end
-        """)
-        assert capsys.readouterr().out == "2\nfoo 3\n"
-
-        i.walk("""
-            try
-                print(2); raise(["bar", 3]); print(4)
-            except ["foo", val] then print("foo", val)
-            except ["bar", val] then print("bar", val)
-            end
-        """)
-        assert capsys.readouterr().out == "2\nbar 3\n"
-
-        # unhandled exception
-        with pytest.raises(AssertionError, match="ToilException"):
-            i.walk("""
-                try
-                    raise(["baz", 3])
-                except ["foo", val] then print("foo", val)
-                end
-            """)
-
-        # nested try
-        i.walk("""
-            try
-                try
-                    raise("outer")
-                except "inner" then print("caught inner")
-                end
-            except "outer" then print("caught outer")
-            end
-        """)
-        assert capsys.readouterr().out == "caught outer\n"
-
-    def test_eval_apply(self, capsys):
-        # apply
+    def test_eval_apply(self):
+        assert i.walk(""" eval("2 + 3") """) == 5
+        assert i.walk(""" eval_expr(tuple(Ident("add"), [2, 3])) """) == 5
         assert i.walk(""" apply(add, [2, 3]) """) == 5
         assert i.walk(""" apply(func a, b do a + b end, [2, 3]) """) == 5
 
-        # eval
-        i.walk(""" a := 2; b := 3 """)
-        assert i.walk(""" eval("a + b") """) == 5
-        assert i.walk(""" scope a := 4; b := 5; eval("a + b") end """) == 5
-        assert i.walk(""" scope a := 4; b := 5; eval("a + b", __env) end """) == 9
-        assert i.walk(""" scope a := 4; b := 5; eval_expr(quote a + b end, __env) end """) == 9
+    def test_stdlib(self):
+        assert i.walk(""" a := range(2, 10, 1) """) == [2, 3, 4, 5, 6, 7, 8, 9]
+        assert i.walk(""" b := range(2, 10, 3) """) == [2, 5, 8]
+        assert i.walk(""" first(a) """) == 2
+        assert i.walk(""" rest(a) """) == [3, 4, 5, 6, 7, 8, 9]
+        assert i.walk(""" last(a) """) == 9
+        assert i.walk(""" map(a, n -> n * 2) """) == [4, 6, 8, 10, 12, 14, 16, 18]
+        assert i.walk(""" filter(a, n -> n % 2 == 0) """) == [2, 4, 6, 8]
+        assert i.walk(""" reduce(a, add, 0) """) == 44
+        assert i.walk(""" reverse(a) """) == [9, 8, 7, 6, 5, 4, 3, 2]
+        assert i.walk(""" reverse([]) """) == []
+        assert i.walk(""" zip(a, [4, 5, 6]) """) == [[2, 4], [3, 5], [4, 6]]
+        assert i.walk(""" enumerate(a) """) == [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
 
-        # Poor man's serialization
+    def test_whitespace(self):
+        assert i.walk(r"""   2 """) == 2
+        assert i.walk(r""" 2   """) == 2
+        assert i.walk("""\n  2  \n""") == 2
+
+    def test_empty_source(self):
+        with pytest.raises(AssertionError, match="Unexpected token"):
+            i.walk(r"""  """)
+
+    def test_invalid_character(self):
+        with pytest.raises(AssertionError, match="Invalid character"):
+            i.walk(r""" ~ """)
+
+    def test_extra_token(self):
+        with pytest.raises(AssertionError, match="Extra token"):
+            i.walk(r""" 2 3 """)
+
+class TestExamples:
+    def test_recursion_gcd(self):
         i.walk("""
-            org := { name: "Toil", id: 1 };
-            print(org);
-            serialized := str(org);
-            print(serialized);
-            deserialized := eval(serialized);
-            print(deserialized)
+            def gcd(a, b) do
+                if b == 0 then a else gcd(b, a % b) end
+            end
         """)
-        assert capsys.readouterr().out == "{'name': 'Toil', 'id': 1}\n{'name': 'Toil', 'id': 1}\n{'name': 'Toil', 'id': 1}\n"
+        assert i.walk("gcd(12, 18)") == 6
 
-        # Poor man's syntax sugar
-        assert i.walk("""
-            def mydef(name, params_, body) do
-                eval("def " + name + "(" + params_ + ") do " + body + " end")
+    def test_iteration_gcd(self):
+        i.walk("""
+            def gcd(a, b) do
+                while b > 0 do
+                    tmp := b; b = a % b; a = tmp
+                end;
+                a
+            end
+        """)
+        assert i.walk("gcd(12, 18)") == 6
+
+    def test_recursion_fac(self):
+        i.walk("""
+            def fac(n) do
+                if n == 0 then 1 else n * fac(n - 1) end
+            end
+        """)
+        assert i.walk("fac(0)") == 1
+        assert i.walk("fac(1)") == 1
+        assert i.walk("fac(4)") == 24
+
+    def test_iteration_fac(self):
+        i.walk("""
+            def fac(n) do
+                result := 1;
+                for n in range(1, n + 1, 1) do
+                    result = result * n
+                then result end
+            end
+        """)
+        assert i.walk("fac(0)") == 1
+        assert i.walk("fac(1)") == 1
+        assert i.walk("fac(4)") == 24
+
+    def test_recursion_fib(self):
+        i.walk("""
+            def fib(n) do
+                if n == 0 then 0
+                elif n == 1 then 1
+                else fib(n - 1) + fib(n - 2)
+                end
+            end
+        """)
+        assert i.walk("fib(0)") == 0
+        assert i.walk("fib(1)") == 1
+        assert i.walk("fib(6)") == 8
+
+    def test_iteration_fib(self):
+        i.walk("""
+            def fib(n) do
+                a := 0; b := 1;
+                for n in range(0, n, 1) do
+                    tmp := b; b = a + b; a = tmp
+                then a end
+            end
+        """)
+        assert i.walk("fib(0)") == 0
+        assert i.walk("fib(1)") == 1
+        assert i.walk("fib(6)") == 8
+
+    def test_mutual_recursion(self):
+        i.walk("""
+            def even(n) do if n == 0 then True else odd(n - 1) end end;
+            def odd(n) do if n == 0 then False else even(n - 1) end end
+        """)
+        assert i.walk("even(2)") is True
+        assert i.walk("even(3)") is False
+        assert i.walk("odd(2)") is False
+        assert i.walk("odd(3)") is True
+
+    def test_closure_counter(self):
+        i.walk("""
+            def make_counter do
+                count := 0;
+                func do count = count + 1 end
             end;
-            mydef("myadd", "a, b", "a + b");
-            myadd(2, 3)
-        """) == 5
 
-    def test_type(self):
-        assert i.walk(""" type(None) """) == "NoneType"
-        assert i.walk(""" type(True) """) == "bool"
-        assert i.walk(""" type(2) """) == "int"
-        assert i.walk(""" type("abc") """) == "str"
-        assert i.walk(""" type([2, 3]) """) == "list"
-        assert i.walk(""" type({a: 2}) """) == "dict"
-        assert i.walk(""" type(quote 2 + 3 end) """) == "tuple"
-        assert i.walk(""" type(quote a end) """) == "Ident"
+            c1 := make_counter();
+            c2 := make_counter()
+        """)
+        assert i.walk("c1()") == 1
+        assert i.walk("c1()") == 2
+        assert i.walk("c2()") == 1
+        assert i.walk("c2()") == 2
 
-    def test_gensym(self):
-        g1 = i.walk(""" gensym("foo") """)
-        g2 = i.walk(""" gensym("foo") """)
-        assert type(g1) is Ident
-        assert g1.name.startswith("__foo_")
-        assert g1 != g2
-
-    def test_env_exposure(self):
-        i.walk(""" a := 2 """)
-        assert i.walk(""" __env.vars.keys() """) == ["a"]
-        assert i.walk(""" __env.vars.items() """) == [["a", 2]]
-        assert i.walk(""" __env.val("a") """) == 2
-
-        assert i.walk(""" __env.define("b", 3) """) == 3
-        assert i.walk(""" __env.vars.keys() """) == ["a", "b"]
-        assert i.walk(""" b """) == 3
-
-        assert i.walk(""" scope c := 4; __env.vars.keys() end """) == ["c"]
-        assert i.walk(""" scope c := 4; __env.parent.vars.keys() end """) == ["a", "b"]
-        assert i.walk(""" scope a := 5; __env.parent.val("a") end """) == 2
-
-        i.walk(""" scope __env.assign("b", 6) end """)
-        assert i.walk(""" b """) == 6
-
-        assert i.walk(""" __env.lookup("add") != None """) is True
-        assert i.walk(""" __env.lookup("add").add(2, 3) """) == 5
-
-        # Error cases
-        with pytest.raises(AssertionError, match="Undefined variable"):
-            i.walk(""" __env.val("not_found") """)
-
-        with pytest.raises(AssertionError, match="Undefined variable"):
-            i.walk(""" __env.assign("not_found", 100) """)
-
-        # lookup not found returns None
-        assert i.walk(""" __env.lookup("not_found") """) is None
-
-        # Trace parents to None
-        assert i.walk(""" __env.parent.parent.parent.parent """) is None
-
-    def test_ast_primitives(self):
-        assert i.walk(""" quote if True then 2 else 3 end end """) == (Ident("__core_if_macro"), [True, 2, [], [3]])
-        assert i.walk(""" tuple(Ident("__core_if"), [True, 2, 3]) """) == (Ident("__core_if"), [True, 2, 3])
-        assert i.walk(""" eval_expr(tuple(Ident("__core_if"), [True, 2, 3])) """) == 2
-        assert i.walk(""" eval_expr(tuple(Ident("__core_if_macro"), [True, 2, [], [3]])) """) == 2
-
-        with pytest.raises(AssertionError):
-            i.walk(""" eval_expr(tuple(Ident("if"), [True, 2, 3] """)
-
-        assert i.walk(""" quote add(2, 3) end """) == (Ident("add"), [2, 3])
-        assert i.walk(""" tuple(Ident("add"), [2, 3]) """) == (Ident("add"), [2, 3])
-        assert i.walk(""" eval_expr(tuple(Ident("add"), [2, 3])) """) == 5
-
-        assert i.walk(""" quote
-            a := 2;
-            b := 3;
-            if a == b then a + b else a * b end
-        end """) == (Ident("seq"), [(Ident("define"), [Ident("a"), 2]), (Ident("define"), [Ident("b"), 3]), (Ident("__core_if_macro"), [(Ident("equal"), [Ident("a"), Ident("b")]), (Ident("add"), [Ident("a"), Ident("b")]), [], [(Ident("mul"), [Ident("a"), Ident("b")])]])])
+    def test_bubblesort(self):
         assert i.walk("""
-            tuple(Ident("seq"), [
-                tuple(Ident("define"), [Ident("a"), 2]),
-                tuple(Ident("define"), [Ident("b"), 3]),
-                tuple(Ident("__core_if"), [
-                    tuple(Ident("equal"), [Ident("a"), Ident("b")]),
-                    tuple(Ident("add"), [Ident("a"), Ident("b")]),
-                    tuple(Ident("mul"), [Ident("a"), Ident("b")])
-                ])
-            ])
-        """) == (Ident("seq"), [
-            (Ident("define"), [Ident("a"), 2]),
-            (Ident("define"), [Ident("b"), 3]),
-            (Ident("__core_if"), [
-                (Ident("equal"), [Ident("a"), Ident("b")]),
-                (Ident("add"), [Ident("a"), Ident("b")]),
-                (Ident("mul"), [Ident("a"), Ident("b")])
-            ])
-        ])
-        assert i.walk(""" eval_expr(
-            tuple(Ident("seq"), [
-                tuple(Ident("define"), [Ident("a"), 2]),
-                tuple(Ident("define"), [Ident("b"), 3]),
-                tuple(Ident("__core_if"), [
-                    tuple(Ident("equal"), [Ident("a"), Ident("b")]),
-                    tuple(Ident("add"), [Ident("a"), Ident("b")]),
-                    tuple(Ident("mul"), [Ident("a"), Ident("b")])
-                ])
-            ])
-        ) """) == 6
+            def bubblesort(a) do
+                n := len(a);
+                for i in range(0, n, 1) do
+                    for j in range(0, n - i - 1, 1) do
+                        if a[j] > a[j + 1] then
+                            tmp := a[j]; a[j] = a[j + 1]; a[j + 1] = tmp
+                        end
+                    end
+                then a end
+            end;
 
-    def test_macro(self, capsys):
-        # Basic macro (when) vs function (fwhen)
+            bubblesort([5, 3, 8, 4, 2])
+        """) == [2, 3, 4, 5, 8]
+
+    def test_quicksort(self):
+        assert i.walk("""
+            def quicksort(a) do
+                if len(a) <= 1 then a else
+                    pivot := first(a); rem := rest(a);
+                    left := rem.filter(x -> x < pivot);
+                    right := rem.filter(x -> x >= pivot);
+                    quicksort(left) + [pivot] + quicksort(right)
+                end
+            end;
+
+            quicksort([5, 3, 8, 4, 2])
+        """) == [2, 3, 4, 5, 8]
+
+    def test_sieve(self):
+        assert i.walk("""
+            def sieve(n) do
+                s := [False, False] + [True] * (n - 2);
+                i := 2; while i * i < n do
+                    if s[i] then
+                        for j in range(i * i, n, i) do s[j] = False end
+                    end;
+                    i = i + 1
+                end;
+
+                enumerate(s).filter(last).map(first)
+            end;
+
+            sieve(10)
+        """) == [2, 3, 5, 7]
+
+    def test_poor_mans_object(self, capsys):
         i.walk("""
-            defmacro when(cond, body) do tuple(Ident("__core_if"), [cond, body, None]) end;
-            def fwhen(cond, body) do if cond then body else None end end
-        """)
-        assert i.walk(""" expand(when(2 == 2, 3)) """) == (Ident("__core_if"), [(Ident("equal"), [2, 2]), 3, None])
-        assert i.walk(""" when(2 == 2, 3) """) == 3
-        assert i.walk(""" when(2 == 3, 4 / 0) """) is None
-
-        assert i.walk(""" fwhen(2 == 2, 3) """) == 3
-        with pytest.raises(ZeroDivisionError):
-            i.walk(""" fwhen(2 == 3, 4 / 0) """)
-
-        i.walk(""" defmacro mwhen(cond, body) do tuple(Ident("__core_if"), [cond, body, None]) end """)
-        assert i.walk(""" mwhen(2 == 2, 3) """) == 3
-        with pytest.raises(AssertionError, match="Argument mismatch"):
-            i.walk(""" mwhen(2 == 2) """)
-
-        # Macro for scope
-        i.walk("""
-            defmacro mscope(body) do tuple(tuple(Ident("__core_func"), [[], body]), []) end
-        """)
-        i.walk(""" a := 2; mscope(print(a); a := 3; print(a)); print(a) """)
-        assert capsys.readouterr().out == "2\n3\n2\n"
-
-        # Anaphoric if
-        i.walk("""
-            defmacro maif(cnd, thn, els) do tuple(Ident("__core_scope"), [tuple(Ident("__core_if"), [
-                tuple(Ident("define"), [Ident("it"), cnd]),
-                thn,
-                els
-            ])]) end
-        """)
-        assert i.walk(""" maif(2, [True, it], [False, it]) """) == [True, 2]
-        assert i.walk(""" maif(0, [True, it], [False, it]) """) == [False, 0]
-
-        # and/or using aif
-        i.walk("""
-            defmacro mand(a, b) do tuple(Ident("maif"), [a, b, Ident("it")]) end;
-            defmacro mor(a, b) do tuple(Ident("maif"), [a, Ident("it"), b]) end
-        """)
-        assert i.walk(""" mand(2, 3) """) == 3
-        assert i.walk(""" mand(0, 3) """) == 0
-        assert i.walk(""" mor(2, 3) """) == 2
-        assert i.walk(""" mor(0, 3) """) == 3
-
-        # Side effect in macro argument
-        i.walk("""
-            def ftwice(x) do x + x end;
-            defmacro mtwice(x) do tuple(Ident("add"), [x, x]) end
-        """)
-        i.walk(""" cnt := 0 """)
-        assert i.walk(""" ftwice(cnt = cnt + 1) """) == 2
-        assert i.walk(""" cnt """) == 1
-
-        i.walk(""" cnt := 0 """)
-        assert i.walk(""" mtwice(cnt = cnt + 1) """) == 3
-        assert i.walk(""" cnt """) == 2
-
-        # Variable capture (Non-hygienic)
-        i.walk(""" defmacro capture(val) do tuple(Ident("define"), [Ident("x"), val]) end """)
-        i.walk(""" x := 1 """)
-        i.walk(""" capture(2) """)
-        assert i.walk(""" x """) == 2
-
-class TestQuasiquote:
-    def test_basic(self):
-        i.walk(""" a := 2; b := ["A", "B"] """)
-        assert i.walk(""" quote 3 end """) == 3
-        assert i.walk(""" quote "A" end """) == "A"
-        assert i.walk(""" quote a end """) == Ident("a")
-        assert i.walk(""" quote !a end """) == 2
-        assert i.walk(""" quote !a + 2 end """) == (Ident("add"), [2, 2])
-        assert i.walk(""" quote !(a + 2) end """) == 4
-
-    def test_list(self):
-        i.walk(""" a := 2; b := ["A", "B"] """)
-        assert i.walk(""" quote [a, b] end """) == [Ident("a"), Ident("b")]
-        assert i.walk(""" quote [!a, !b] end """) == [2, ["A", "B"]]
-
-    def test_splicing(self):
-        i.walk(""" a := 2; b := ["A", "B"] """)
-        assert i.walk(""" quote [!!b] end """) == ["A", "B"]
-        assert i.walk(""" quote [a, !!b, 2] end """) == [Ident("a"), "A", "B", 2]
-
-    def test_nested(self):
-        i.walk(""" a := 2 """)
-        assert i.walk(""" quote if !a == 3 then 4 else 5 end end """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 3]), 4, [], [5]])
-        assert i.walk(""" eval_expr(quote if !a == 3 then 4 else 5 end end) """) == 5
-
-    def test_splicing_call(self, capsys):
-        i.walk(""" args := [2, 3] """)
-        assert i.walk(""" quote print(1, !!args, 4) end """) == (Ident("print"), [1, 2, 3, 4])
-        i.walk(""" eval_expr(quote print(1, !!args, 4) end) """)
-        assert capsys.readouterr().out == "1 2 3 4\n"
-
-    def test_splicing_seq(self, capsys):
-        i.walk(""" stmts := [quote print(2) end, quote print(3) end] """)
-        seq_ast = i.walk(""" quote print(1); !!stmts; print(4) end """)
-        i.walk(""" eval_expr(quote print(1); !!stmts; print(4) end) """)
-        assert capsys.readouterr().out == "1\n2\n3\n4\n"
-
-    def test_errors(self):
-        with pytest.raises(AssertionError, match="Undefined variable"):
-            i.walk(""" quote !c end """)
-        with pytest.raises(AssertionError):
-            i.walk(""" quote if end """)
-
-class TestMacroSamples:
-    def test_when(self):
-        i.walk("""
-            when := macro cond, body do quote if !cond then !body else None end end end
-        """)
-        assert i.walk(""" expand(when(2 == 2, 3)) """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 2]), 3, [], [None]])
-        assert i.walk(""" when(2 == 2, 3) """) == 3
-        assert i.walk(""" when(2 == 3, 4 / 0) """) is None
-
-    def test_fwhen_error(self):
-        i.walk("""
-            fwhen := func cond, body do if cond then body else None end end
-        """)
-        assert i.walk(""" fwhen(2 == 2, 3) """) == 3
-        with pytest.raises(ZeroDivisionError):
-            i.walk(""" fwhen(2 == 3, 4 / 0) """)
-
-    def test_mscope(self, capsys):
-        i.walk(""" mscope := macro body do quote func do !body end () end end """)
-        i.walk(""" a := 2; mscope(print(a); a := 3; print(a)); print(a) """)
-        assert capsys.readouterr().out == "2\n3\n2\n"
-
-    def test_anaphoric_if_and_or(self):
-        i.walk("""
-            maif := macro cnd, thn, els do
-                quote if it := !cnd then !thn else !els end end
+            def Animal(name) do
+                self := {};
+                self._name = name;
+                self.introduce = func self do print("I am", self._name) end;
+                self.make_sound = func self do print("crying") end;
+                self
             end
         """)
-        assert i.walk(""" maif(2, [True, it], [False, it]) """) == [True, 2]
-        assert i.walk(""" maif(0, [True, it], [False, it]) """) == [False, 0]
-
-        i.walk(""" mand := macro a, b do quote maif(!a, !b, it) end end """)
-        i.walk(""" mor := macro a, b do quote maif(!a, it, !b) end end """)
-
-        assert i.walk(""" mand(2, 3) """) == 3
-        assert i.walk(""" mand(0, 3) """) == 0
-        assert i.walk(""" mor(2, 3) """) == 2
-        assert i.walk(""" mor(0, 3) """) == 3
-
-        with pytest.raises(AssertionError, match="Undefined variable"):
-             i.walk(""" expand(expand(mand(2, 3))) """)
-
-    def test_side_effect_macro(self):
         i.walk("""
-            def ftwice(x) do x + x end;
-            mtwice := macro x do quote add(!x, !x) end end
+            animal1 := Animal("Rocky");
+            animal2 := Animal("Lucy");
+            animal1.introduce();
+            animal1.make_sound();
+            animal2.introduce();
+            animal2.make_sound()
         """)
-        i.walk(""" cnt := 0 """)
-        assert i.walk(""" ftwice(cnt = cnt + 1) """) == 2
-        assert i.walk(""" cnt """) == 1
-        i.walk(""" cnt := 0 """)
-        assert i.walk(""" mtwice(cnt = cnt + 1) """) == 3
-        assert i.walk(""" cnt """) == 2
+        assert capsys.readouterr().out == "I am Rocky\ncrying\nI am Lucy\ncrying\n"
 
-    def test_capture(self):
-        i.walk(""" capture := macro val do quote x := !val end end """)
-        i.walk(""" x := 1 """)
-        i.walk(""" capture(2) """)
-        assert i.walk(""" x """) == 2
-
-    def test_call_by_name(self):
         i.walk("""
-            call_by_name := macro name_str, *args do
-                quote (!Ident(quote !name_str end))(!!args) end
+            def Dog(name) do
+                self := Animal(name);
+                self.make_sound = func self do print("woof") end;
+                self
             end
         """)
-        assert i.walk(""" call_by_name("add", 2, 3) """) == 5
-        assert i.walk(""" call_by_name("sub", 10, 4) """) == 6
+        i.walk("""
+            dog1 := Dog("Leo");
+            dog1.introduce();
+            dog1.make_sound()
+        """)
+        assert capsys.readouterr().out == "I am Leo\nwoof\n"
 
-    def test_lazy_evaluation(self):
+    def test_lazy_evaluation_with_thunks(self):
         assert i.walk("""
-            defmacro delay(expr) do quote func do !expr end end end;
             def force(thunk) do thunk() end;
-
-            defmacro cons_stream(a, b) do quote tuple(!a, delay(!b)) end end;
             def stream_car(s) do s[0] end;
             def stream_cdr(s) do force(s[1]) end;
 
@@ -1849,299 +1248,11 @@ class TestMacroSamples:
             end;
 
             def count_from(n) do
-                cons_stream(n, count_from(n + 1))
+                tuple(n, [] -> count_from(n + 1))
             end;
 
             take(5, count_from(1))
         """) == [1, 2, 3, 4, 5]
-
-class TestCustomSyntax:
-    def test_when(self):
-        i.walk("""
-            _when := macro cond, body do quote if !cond then !body else None end end end
-            #rule {when: [_when, EXPR, do, EXPR, end]}
-        """)
-        assert i.walk(""" expand(_when(2 == 2, 3)) """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 2]), 3, [], [None]])
-        assert i.walk(""" _when(2 == 2, 3) """) == 3
-        assert i.walk(""" _when(2 == 3, 4 / 0) """) is None
-
-        assert i.walk(""" expand(when 2 == 2 do 3 end ) """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 2]), 3, [], [None]])
-        assert i.walk(""" when 2 == 2 do 3 end """) == 3
-        assert i.walk(""" when 2 == 3 do 4 / 0 end """) is None
-
-        with pytest.raises(AssertionError):
-            i.walk(""" when do 4 end """)
-        with pytest.raises(AssertionError):
-            i.walk(""" when 2 == 3 4 end """)
-        with pytest.raises(AssertionError):
-            i.walk(""" when 2 == 3 do end """)
-        with pytest.raises(AssertionError):
-            i.walk(""" when 2 == 3 do 4 """)
-
-    def test_mfor(self):
-        i.walk("""
-            _mfor := macro var, coll, body do quote scope
-                __for_coll := !coll;
-                __for_index := -1;
-                while __for_index + 1 < len(__for_coll) do
-                    __for_index = __for_index + 1;
-                    scope
-                        !var := __for_coll[__for_index];
-                        !body
-                    end
-                end
-            end end end
-            #rule {mfor: [_mfor, EXPR, in, EXPR, do, EXPR, end]}
-        """)
-        assert i.walk("""
-            sum := 0;
-            mfor n in [2, 3, 4] do sum = sum + n end;
-            sum
-        """) == 9
-
-    def test_aif_and_or(self):
-        i.walk("""
-            _aif := macro cnd, thn, els do quote if it := !cnd then !thn else !els end end end
-            #rule {aif: [_aif, EXPR, then, EXPR, else, EXPR, end]}
-        """)
-        assert i.walk(""" aif 2 then [True, it] else [False, it] end """) == [True, 2]
-        assert i.walk(""" aif 0 then [True, it] else [False, it] end """) == [False, 0]
-
-        i.walk("""
-            mand := macro a, b do quote aif !a then !b else it end end end;
-            mor := macro a, b do quote aif !a then it else !b end end end
-        """)
-        assert i.walk(""" mand(2, 3) """) == 3
-        assert i.walk(""" mand(0, 3) """) == 0
-        assert i.walk(""" mor(2, 3) """) == 2
-        assert i.walk(""" mor(0, 3) """) == 3
-
-        # Test short-circuiting
-        assert i.walk(""" mand(0, 2 / 0) """) == 0
-        assert i.walk(""" mor(2, 2 / 0) """) == 2
-        with pytest.raises(ZeroDivisionError): i.walk(""" mand(2, 2/0) """)
-        with pytest.raises(ZeroDivisionError): i.walk(""" mor(0, 2/0) """)
-
-    def test_def(self):
-        i.walk(r"""
-            def say_hello do "hello" end
-        """)
-        assert i.walk(r""" say_hello() """) == "hello"
-
-        i.walk(r"""
-            def fact(n) do n * fact(n - 1) end;
-            def fact(0) do 1 end
-        """)
-        assert i.walk(r""" fact(0) """) == 1
-        assert i.walk(r""" fact(3) """) == 6
-
-        with pytest.raises(AssertionError, match="Invalid def syntax"):
-            i.walk(r""" def 2 do 3 end """)
-
-    def test_defmacro(self):
-        i.walk(r"""
-            defmacro mwhen(cond, body) do
-                quote if !cond then !body else None end end
-            end
-        """)
-        assert i.walk(r""" expand(mwhen(2 == 2, 3)) """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 2]), 3, [], [None]])
-        assert i.walk(r""" mwhen(2 == 2, 3) """) == 3
-        assert i.walk(r""" mwhen(2 == 3, 4 / 0) """) is None
-
-        i.walk(r""" defmacro mzero() do quote 2 end end """)
-        assert i.walk(r""" mzero() """) == 2
-
-        i.walk(r""" defmacro mzero_no_paren do quote 3 end end """)
-        assert i.walk(r""" mzero_no_paren() """) == 3
-
-        with pytest.raises(AssertionError, match="Argument mismatch"):
-            i.walk(""" mwhen(2 == 2) """)
-        with pytest.raises(AssertionError, match="Invalid defmacro syntax"):
-            i.walk(r""" defmacro 2 do 3 end """)
-
-    def test_defclass_defmethod(self):
-        i.walk(r"""
-            defclass Counter(start) do
-                self.count = start;
-                defmethod inc(step) do
-                    self.count = self.count + step
-                end;
-                defmethod get do
-                    self.count
-                end
-            end
-        """)
-        assert i.walk(""" c := Counter(10); c.inc(2); c.get() """) == 12
-
-        with pytest.raises(AssertionError, match="Invalid defclass syntax"):
-            i.walk(r""" defclass 2 do 3 end """)
-        with pytest.raises(AssertionError, match="Invalid defmethod syntax"):
-            i.walk(r""" defclass ErrCounter() do defmethod 2 do 3 end end; ErrCounter() """)
-
-    def test_let_custom_rule(self):
-        # Setup for let_func and let_scope
-        i.walk("""
-            _let_func := macro bindings, body do quote
-                func !!map(bindings, pair -> pair[0]) do
-                    !body
-                end (!!map(bindings, pair -> pair[1]))
-            end end;
-            #rule {let_func: [_let_func, *[var, EXPR, be, EXPR], do, EXPR, end]}
-
-            _let_scope := macro bindings, body do quote
-                scope
-                    !!map(bindings, binding -> quote !binding[0] := !binding[1] end);
-                    !body
-                end
-            end end
-            #rule {let_scope: [_let_scope, *[var, EXPR, be, EXPR], do, EXPR, end]}
-        """)
-
-        # let_func tests (parallel binding)
-        assert i.walk(""" expand(let_func var a be 4 + 5 var b be 6 do [a, b] end) """) == \
-                ((Ident("__core_func"), [
-                   [Ident("a"), Ident("b")],
-                   [Ident("a"), Ident("b")]]
-                ), [(Ident("add"), [4, 5]), 6])
-
-        i.walk(""" a := 2 """)
-        # 'b' is bound to the outer 'a' (2), demonstrating parallel binding
-        assert i.walk(""" let_func var a be 3 var b be a + 4 do [a, b] end """) == [3, 6]
-        assert i.walk(""" a """) == 2 # Outer scope is not affected
-
-        # let_func with zero and one binding
-        assert i.walk(""" let_func do 2 end """) == 2
-        assert i.walk(""" let_func var a be 2 do a * 3 end """) == 6
-
-        # let_func nested
-        assert i.walk(""" let_func var a be 2 do let_func var b be 3 do a + b end end """) == 5
-
-        # let_scope tests (sequential binding)
-        assert i.walk(""" expand(let_scope var a be 4 + 5 var b be a + 6 do [a, b] end) """) == \
-               (Ident('__core_scope'), [(Ident('seq'), [(Ident('define'), [Ident('a'), (Ident('add'), [4, 5])]), (Ident('define'), [Ident('b'), (Ident('add'), [Ident('a'), 6])]), [Ident('a'), Ident('b')]])])
-
-        i.walk(""" a := 2 """)
-        # 'b' is bound to the inner 'a' (9), demonstrating sequential binding
-        assert i.walk(""" let_scope var a be 4 + 5 var b be a + 6 do [a, b] end """) == [9, 15]
-        assert i.walk(""" a """) == 2 # Outer scope is not affected
-
-        # Error cases for custom rule with repetition
-        with pytest.raises(AssertionError, match="Expected be @ consume: do"):
-            i.walk(""" let_func var a be 1 var b do a end """)
-
-        with pytest.raises(AssertionError, match="Expected be @ consume: do"):
-            i.walk(""" let_func var a = 1 do a end """)
-
-    def test_optional_arguments(self):
-        i.walk("""
-            #rule {foo: [_foo, +[opt, EXPR], do, EXPR, end]}
-            None
-        """)
-
-        assert i.ast(""" foo do 4 end """) == (Ident("_foo"), [[], 4])
-        assert i.ast(""" foo opt 2 + 3 do 4 end """) == (Ident("_foo"), [[(Ident("add"), [2, 3])], 4])
-        with pytest.raises(AssertionError, match="Expected do @ consume: opt"):
-            i.ast(""" foo opt 2 + 3 opt 4 + 5 do 6 end """)
-
-    def test_elif(self):
-        assert i.ast(""" if 2 == 3 then 4 end """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 3]), 4, [], []])
-        assert i.ast(""" if 2 == 3 then 4 else 5 end """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 3]), 4, [], [5]])
-        assert i.ast(""" if 2 == 3 then 4 elif 2 == 2 then 5 end """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 3]), 4, [[(Ident("equal"), [2, 2]), 5]], []])
-        assert i.ast(""" if 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 3]), 4, [[(Ident("equal"), [2, 2]), 5]], [6]])
-        assert i.ast(""" if 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 3]), 4, [[(Ident("equal"), [3, 4]), 5], [(Ident("equal"), [2, 2]), 6]], []])
-        assert i.ast(""" if 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """) == (Ident("__core_if_macro"), [(Ident("equal"), [2, 3]), 4, [[(Ident("equal"), [3, 4]), 5], [(Ident("equal"), [2, 2]), 6]], [7]])
-
-        assert i.walk(""" expand(if 2 == 3 then 4 end) """) == (Ident("__core_if"), [(Ident("equal"), [2, 3]), 4, None])
-        assert i.walk(""" expand(if 2 == 3 then 4 else 5 end) """) == (Ident("__core_if"), [(Ident("equal"), [2, 3]), 4, 5])
-        assert i.walk(""" expand(if 2 == 3 then 4 elif 2 == 2 then 5 end) """) == (Ident("__core_if"), [(Ident("equal"), [2, 3]), 4, (Ident("__core_if"), [(Ident("equal"), [2, 2]), 5, None])])
-        assert i.walk(""" expand(if 2 == 3 then 4 elif 2 == 2 then 5 else 6 end) """) == (Ident("__core_if"), [(Ident("equal"), [2, 3]), 4, (Ident("__core_if"), [(Ident("equal"), [2, 2]), 5, 6])])
-        assert i.walk(""" expand(if 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end) """) == (Ident("__core_if"), [(Ident("equal"), [2, 3]), 4, (Ident("__core_if"), [(Ident("equal"), [3, 4]), 5, (Ident("__core_if"), [(Ident("equal"), [2, 2]), 6, None])])])
-        assert i.walk(""" expand(if 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end) """) == (Ident("__core_if"), [(Ident("equal"), [2, 3]), 4, (Ident("__core_if"), [(Ident("equal"), [3, 4]), 5, (Ident("__core_if"), [(Ident("equal"), [2, 2]), 6, 7])])])
-
-        # Test mif evaluation
-        assert i.walk(""" if 2 == 3 then 4 end """) is None
-        assert i.walk(""" if 2 == 3 then 4 else 5 end """) == 5
-        assert i.walk(""" if 2 == 3 then 4 elif 2 == 2 then 5 end """) == 5
-        assert i.walk(""" if 2 == 3 then 4 elif 2 == 2 then 5 else 6 end """) == 5
-        assert i.walk(""" if 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 end """) == 6
-        assert i.walk(""" if 2 == 3 then 4 elif 3 == 4 then 5 elif 2 == 2 then 6 else 7 end """) == 6
-
-        # Test mif error cases
-        with pytest.raises(AssertionError, match="Expected then @ consume: 4"):
-            i.ast(""" if then 4 end """)
-        with pytest.raises(AssertionError, match="Expected then @ consume: 4"):
-            i.ast(""" if 2 == 3 4 end """)
-        with pytest.raises(AssertionError, match="Expected end @ consume"):
-            i.ast(""" if 2 == 3 then 4 else end """)
-        with pytest.raises(AssertionError, match="Expected end @ consume: else"):
-            i.ast(""" if 2 == 3 then 4 else 5 else 6 end """)
-
-    def test_module(self):
-        i.walk("""
-            defmodule Mod1 export {public_val, public_func} do
-                public_val := 2;
-                _private_val := 3;
-
-                def public_func(a) do a + 2 end;
-                def _private_func(a) do a end
-            end
-        """)
-
-        i.walk(""" import Mod1 as mod1 end """)
-        assert i.walk(""" mod1.public_val """) == 2
-        assert i.walk(""" mod1.public_func(3) """) == 5
-
-        with pytest.raises(AssertionError, match="Undefined variable"):
-            i.walk(""" mod1._private_val """)
-        with pytest.raises(AssertionError, match="Undefined variable"):
-            i.walk(""" mod1._private_func() """)
-
-        i.walk(""" from Mod1 import {public_val} end """)
-        assert i.walk(""" public_val """) == 2
-
-        i.walk(""" from Mod1 import {public_func: f} end """)
-        assert i.walk(""" f(0) """) == 2
-
-        with pytest.raises(AssertionError, match="Pattern mismatch"):
-            i.walk(""" from Mod1 import {not_found} end """)
-
-        i.walk("""
-            defmodule Mod2 export {mod1, public_val} do
-                import Mod1 as mod1 end;
-                public_val := mod1.public_func(3)
-            end
-        """)
-
-        i.walk(""" import Mod2 as mod2 end """)
-        assert i.walk(""" mod2.mod1.public_val """) == 2
-        assert i.walk(""" mod2.public_val """) == 5
-
-        i.walk("""
-            defmodule GCD export {recur, iter} do
-                def recur(a, b) do
-                    if a == 0 then b else recur(b % a, a) end
-                end;
-                def iter(a, b) do
-                    while a != 0 do [a, b] := [b % a, a] end;
-                    b
-                end
-            end
-        """)
-        i.walk(""" import GCD as gcd end """)
-        assert i.walk(""" gcd.recur(18, 24) """) == 6
-        assert i.walk(""" gcd.iter(18, 24) """) == 6
-
-    def test_assert(self):
-        assert i.walk(""" assert 2 == 2 else 1/0 end """) is None
-
-        with pytest.raises(AssertionError, match="Assert exception"):
-            i.walk(""" assert 2 == 3 else "Assert exception" end """)
-
-        with pytest.raises(AssertionError, match="Expected else"):
-            i.walk(""" assert 2 == 3 "Assert exception" end """)
-
-        with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(""" assert 2 == 3 else "Assert exception" """)
 
 if __name__ == "__main__":
     pytest.main([__file__])

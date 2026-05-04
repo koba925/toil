@@ -234,8 +234,8 @@ class TestToT:
         with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" Ident(a) := "aaa" """)
 
-        assert i.walk(r""" tuple(Ident("add"), [int(a), int(b)]) := quote(2 + 3); [a, b] """) == [2, 3]
-        assert i.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := quote(a + b); [name1, name2] """) == ['a', 'b']
+        assert i.walk(r""" tuple(Ident("add"), [int(a), int(b)]) := quote 2 + 3 end; [a, b] """) == [2, 3]
+        assert i.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := quote a + b end; [name1, name2] """) == ['a', 'b']
 
         with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := 2 + 3 """)
@@ -442,25 +442,25 @@ class TestToT:
         assert i.walk(r"""023""") == 23
 
     def test_raw_string(self):
-        assert i.walk(r""" tot.walk(" 'hello, world' ") """) == "hello, world"
-        assert i.walk(r""" tot.walk(" '' ") """) == ""
-        assert i.walk(r""" tot.walk(" 'if ; #\"\\n' ") """) == 'if ; #"\\n'
-        assert i.walk(" tot.walk(\" 'a\nb' \") ") == "a\nb"
+        assert t.walk(r""" tot.walk(" 'hello, world' ") """) == "hello, world"
+        assert t.walk(r""" tot.walk(" '' ") """) == ""
+        assert t.walk(r""" tot.walk(" 'if ; #\"\\n' ") """) == r"""if ; #"\n"""
+        assert t.walk(" tot.walk(\" 'a\nb' \") ") == "a\nb"
 
         with pytest.raises(AssertionError, match="Unterminated string"):
-            i.walk(r""" tot.walk(" ' ") """)
+            t.walk(r""" tot.walk(" ' ") """)
 
     def test_string(self):
-        assert i.walk(r""" tot.walk(' "hello, world" ') """) == "hello, world"
-        assert i.walk(r""" tot.walk(' "" ') """) == ""
-        assert i.walk(r""" tot.walk(' "if ; #\"\\\n" ') """) == 'if ; #"\\\n'
-        assert i.walk(" tot.walk(' \"a\nb\" ') ") == "a\nb"
+        assert t.walk(r""" tot.walk(' "hello, world" ') """) == "hello, world"
+        assert t.walk(r""" tot.walk(' "" ') """) == ""
+        assert t.walk(r""" tot.walk(' "if ; #\"\\\n" ') """) == 'if ; #"\\\n'
+        assert t.walk(" tot.walk(' \"a\nb\" ') ") == "a\nb"
 
         with pytest.raises(AssertionError, match="Unterminated string"):
-            i.walk(r""" tot.walk(' " ') """)
+            t.walk(r""" tot.walk(' " ') """)
 
         with pytest.raises(AssertionError, match="Unterminated string"):
-            i.walk(r""" tot.walk(' "\" ') """)
+            t.walk(r""" tot.walk(' "\" ') """)
 
     def test_string_functions(self):
         assert i.walk(r""" join(["ab", "cd", "ef"], ",") """) == "ab,cd,ef"
@@ -545,9 +545,9 @@ class TestToT:
         assert i.walk(r""" dict([["a", 2], ["b", 3]]) """) == {"a": 2, "b": 3}
 
     def test_quote(self, capsys):
-        assert i.walk(r""" quote(hello_world) """) == Ident("hello_world")
-        assert i.walk(r""" quote(if 2 == 3 then 4 else 5 end) """) == (
-            Ident("if"), [(Ident("equal"), [2, 3]), 4, 5]
+        assert i.walk(r""" quote hello_world end """) == Ident("hello_world")
+        assert i.walk(r""" quote scope 2 == 3 end end """) == (
+            Ident("scope"), [(Ident("equal"), [2, 3])]
         )
 
     def test_scope(self):
@@ -776,7 +776,7 @@ class TestToT:
         assert i.walk(r""" match Ident("aaa") case Ident("bbb") then "yes" end """) is None
         assert i.walk(r""" match Ident("aaa") case Ident(a) then [a] end """) == ['aaa']
 
-        assert i.walk(r""" match quote(a + b) case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) == ["a", "b"]
+        assert i.walk(r""" match quote a + b end case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) == ["a", "b"]
         assert i.walk(r""" match 2 + 3 case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
         assert i.walk(r""" match tuple(Ident("add")) case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
 

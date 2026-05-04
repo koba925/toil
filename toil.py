@@ -621,7 +621,7 @@ class Evaluator:
             try:
                 return self.eval(body_expr, env)
             except ReturnException as e: return e.val
-        assert False, f"Argument mismatch @ expand(): {params}, {args_expr}"
+        assert False, f"Pattern mismatch @ expand(): {params}, {args_expr}"
 
     def apply(self, op_val, args_val):
         match op_val:
@@ -635,7 +635,7 @@ class Evaluator:
                     except ReturnException as e: return e.val
                 if fallback is not None:
                     return self.apply(fallback, args_val)
-                assert False, f"Argument mismatch @ apply(): {params}, {args_val}"
+                assert False, f"Pattern mismatch @ apply(): {params}, {args_val}"
             case _:
                 assert False, f"Invalid operator @ apply(): {op_val}"
 
