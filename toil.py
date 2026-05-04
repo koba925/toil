@@ -987,9 +987,14 @@ class Interpreter:
 
             defmacro __core_import(mod_expr, name_expr) do
                 quote !name_expr := (!mod_expr)() end
-            end
+            end;
             #rule {import: [__core_import, EXPR, as, EXPR, end]}
             #rule {from: [__core_import, EXPR, import, EXPR, end]}
+
+            defmacro __core_assert(cond_expr, exc_expr) do
+                quote if not !cond_expr then raise(!exc_expr) end end
+            end
+            #rule {assert: [__core_assert, EXPR, else, EXPR, end]}
         """)
 
         self._env = Environment(self._env)
@@ -1150,12 +1155,6 @@ if __name__ == "__main__":
 
     # Example
 
-    # Sequence
-
-    print_code(i.code(r""" print(2); print(3); 4 """))
-    print(i.run(r""" print(2); print(3); 4 """)) # -> -> 2\n3\n4
-
-    print_code(i.code(r""" (2; 3); (4; 5) """))
-    print(i.run(r""" (2; 3); (4; 5) """)) # -> -> 5
-
-    # i.compile((Ident("seq"), [])) # -> Empty sequence
+    # Assert
+    print(i.walk(""" assert 2 == 2 else 1/0 end """)) # -> None
+    # i.walk(""" assert 2 == 3 else "Assert exception" end """) # ->  Assert exception

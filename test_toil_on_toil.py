@@ -1,6 +1,6 @@
 import pytest
 from toil import Ident
-from toil_on_toil import i as t
+from toil_on_toil import t, i
 
 
 class TestFunctions:
@@ -97,22 +97,23 @@ class TestFunctions:
         assert t.walk(""" 'a'.in({'a': 2, 'b': 3}) """) is True
         assert t.walk(""" 'c'.in({'a': 2, 'b': 3}) """) is False
 
-
-class ToTWrapper:
-    def scan(self, src): return t.walk(f""" tot.scan('{src}') """)
-    def parse(self, tokens): return t.walk(f""" tot.parse({tokens}) """)
-    def ast(self, src): return t.walk(f""" tot.ast('{src}') """)
-    def eval(self, ast): return t.walk(f""" tot.eval({ast}) """)
-    def walk(self, src): return t.walk(f""" tot.walk('{src}') """)
-
-i = ToTWrapper()
+# Reset environments between each test methods without total initialization
+t.walk(""" tot_base := tot """)
 
 @pytest.fixture()
 def reset_tot_env():
-    t.walk(""" tot := Interpreter().init_env().stdlib() """)
+    t.walk(""" tot := Interpreter(); tot._env = Environment(tot_base._env) """)
 
 @pytest.mark.usefixtures("reset_tot_env")
 class TestToT:
+
+    # Ensure test independence
+    def test_env_isolation_step1(self):
+        assert i.walk(r""" a := 2 """) == 2
+    def test_env_isolation_step2(self):
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            i.walk(r""" a """)
+
     def test_overall_structure(self):
         assert i.scan(r""" 2 """) == [2, Ident('$EOF')]
         assert i.parse(r""" [2, Ident('$EOF')] """) == 2
@@ -441,25 +442,25 @@ class TestToT:
         assert i.walk(r"""023""") == 23
 
     def test_raw_string(self):
-        assert t.walk(r""" tot.walk(" 'hello, world' ") """) == "hello, world"
-        assert t.walk(r""" tot.walk(" '' ") """) == ""
-        assert t.walk(r""" tot.walk(" 'if ; #\"\\n' ") """) == 'if ; #"\\n'
-        assert t.walk(" tot.walk(\" 'a\nb' \") ") == "a\nb"
+        assert i.walk(r""" tot.walk(" 'hello, world' ") """) == "hello, world"
+        assert i.walk(r""" tot.walk(" '' ") """) == ""
+        assert i.walk(r""" tot.walk(" 'if ; #\"\\n' ") """) == 'if ; #"\\n'
+        assert i.walk(" tot.walk(\" 'a\nb' \") ") == "a\nb"
 
         with pytest.raises(AssertionError, match="Unterminated string"):
-            t.walk(r""" tot.walk(" ' ") """)
+            i.walk(r""" tot.walk(" ' ") """)
 
     def test_string(self):
-        assert t.walk(r""" tot.walk(' "hello, world" ') """) == "hello, world"
-        assert t.walk(r""" tot.walk(' "" ') """) == ""
-        assert t.walk(r""" tot.walk(' "if ; #\"\\\n" ') """) == 'if ; #"\\\n'
-        assert t.walk(" tot.walk(' \"a\nb\" ') ") == "a\nb"
+        assert i.walk(r""" tot.walk(' "hello, world" ') """) == "hello, world"
+        assert i.walk(r""" tot.walk(' "" ') """) == ""
+        assert i.walk(r""" tot.walk(' "if ; #\"\\\n" ') """) == 'if ; #"\\\n'
+        assert i.walk(" tot.walk(' \"a\nb\" ') ") == "a\nb"
 
         with pytest.raises(AssertionError, match="Unterminated string"):
-            t.walk(r""" tot.walk(' " ') """)
+            i.walk(r""" tot.walk(' " ') """)
 
         with pytest.raises(AssertionError, match="Unterminated string"):
-            t.walk(r""" tot.walk(' "\" ') """)
+            i.walk(r""" tot.walk(' "\" ') """)
 
     def test_string_functions(self):
         assert i.walk(r""" join(["ab", "cd", "ef"], ",") """) == "ab,cd,ef"
@@ -528,7 +529,6 @@ class TestToT:
         assert i.walk(r""" type(None) """) == "NoneType"
         assert i.walk(r""" type(True) """) == "bool"
         assert i.walk(r""" type(5) """) == "int"
-        assert t.walk(r""" tot.walk(" type('') ") """) == "str"
         assert i.walk(r""" type("") """) == "str"
         assert i.walk(r""" type([]) """) == "list"
         assert i.walk(r""" type({}) """) == "dict"
@@ -1102,6 +1102,18 @@ class TestToT:
             acc.add(10); acc.add([20, 30]); acc.add("40")
         """)
         assert i.walk(""" acc.total """) == 100
+
+    def test_assert(self):
+        assert i.walk(""" assert 2 == 2 else 1/0 end """) is None
+
+        with pytest.raises(Exception, match="Assert exception"):
+            i.walk(""" assert 2 == 3 else "Assert exception" end """)
+
+        with pytest.raises(Exception, match="Expected else"):
+            i.walk(""" assert 2 == 3 "Assert exception" end """)
+
+        with pytest.raises(Exception, match="Expected end"):
+            i.walk(""" assert 2 == 3 else "Assert exception" """)
 
     def test_read_load(self, tmp_path):
         assert i.walk(""" type(read("scripts/fib.toil")) """) == "str"

@@ -2131,5 +2131,17 @@ class TestCustomSyntax:
         assert i.walk(""" gcd.recur(18, 24) """) == 6
         assert i.walk(""" gcd.iter(18, 24) """) == 6
 
+    def test_assert(self):
+        assert i.walk(""" assert 2 == 2 else 1/0 end """) is None
+
+        with pytest.raises(AssertionError, match="Assert exception"):
+            i.walk(""" assert 2 == 3 else "Assert exception" end """)
+
+        with pytest.raises(AssertionError, match="Expected else"):
+            i.walk(""" assert 2 == 3 "Assert exception" end """)
+
+        with pytest.raises(AssertionError, match="Expected end"):
+            i.walk(""" assert 2 == 3 else "Assert exception" """)
+
 if __name__ == "__main__":
     pytest.main([__file__])

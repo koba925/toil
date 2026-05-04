@@ -5,9 +5,9 @@ sys.setrecursionlimit(200000)
 
 from toil import Interpreter
 
-i = Interpreter().init_env().stdlib()
+t = Interpreter().init_env().stdlib()
 
-i.walk(r"""
+t.walk(r"""
     def isalpha(c) do
        type(c) == 'str' and ('a' <= c and c <= 'z') or ('A' <= c and c <= 'Z')
     end;
@@ -20,7 +20,7 @@ i.walk(r"""
     def is_ident(s) do is_ident_first(s[0]) end
 """)
 
-i.walk(r"""
+t.walk(r"""
     defclass Scanner(src) do
         self._src = src;
         self._pos = 0;
@@ -65,7 +65,7 @@ i.walk(r"""
             self._advance();
             start := self._pos;
             while (c := self._current_char()) != "'" do
-                if c == '$EOF' then raise('Unterminated string @ _raw_string()') end;
+                assert c != '$EOF' else 'Unterminated string @ _raw_string()' end;
                 self._advance()
             end;
             self._tokens.push(self._src.slice(start, self._pos));
@@ -76,11 +76,11 @@ i.walk(r"""
             self._advance();
             s := [];
             while (ch := self._current_char()) != '"' do
-                if ch == '$EOF' then raise('Unterminated string @ _string()') end;
+                assert ch != '$EOF' else 'Unterminated string @ _string()' end;
                 if ch == '\' then
                     self._advance();
                     ch := self._current_char();
-                    if ch == '$EOF' then raise('Unterminated string @ _string()') end;
+                    assert ch != '$EOF' else 'Unterminated string @ _string()' end;
                     match ch
                         case 'n' then s.push("\n")
                         case _ then s.push(ch)
@@ -130,7 +130,7 @@ i.walk(r"""
     end
 """)
 
-i.walk(r"""
+t.walk(r"""
     defclass Parser(tokens) do
         self._tokens = tokens;
         self._pos = 0;
@@ -138,8 +138,8 @@ i.walk(r"""
         defmethod parse do
             # print(self._tokens);
             expr := self._expression();
-            if self._current() != Ident('$EOF') then
-                raise('Extra token @ parse: ' + str(self._current()))
+            assert self._current() == Ident('$EOF') else
+                'Extra token @ parse: ' + str(self._current())
             end;
             expr
         end;
@@ -225,8 +225,8 @@ i.walk(r"""
                 else
                     self._current_and_advance();
                     attr_name := self._current_and_advance();
-                    if attr_name.type() != 'Ident' then
-                        raise('Invalid attribute @ _call_index_dot(): ' + str(attr_name))
+                    assert attr_name.type() == 'Ident' else
+                        'Invalid attribute @ _call_index_dot(): ' + str(attr_name)
                     end;
                     target = tuple(Ident('dot'), [target, str(attr_name)])
                 end
@@ -251,13 +251,14 @@ i.walk(r"""
                 case Ident('try') then self._try()
                 case Ident('defclass') then self._defclass()
                 case Ident('defmethod') then self._defmethod()
+                case Ident('assert') then self._assert()
                 case Ident(name) then
-                    if name.is_ident() then
-                        self._current_and_advance()
-                    else
-                        raise('Unexpected token @ primary(): ' + str(self._current()))
-                    end
-                case _ then raise('Unexpected token: @ primary(): ' + str(self._current()))
+                    assert name.is_ident() else
+                        'Unexpected token @ primary(): ' + str(self._current())
+                    end;
+                    self._current_and_advance()
+                case _ then
+                    raise('Unexpected token: @ primary(): ' + str(self._current()))
             end
         end;
 
@@ -428,6 +429,19 @@ i.walk(r"""
             tuple(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr])
         end;
 
+        defmethod _assert do
+            self._current_and_advance();
+            cond_expr := self._expression();
+            self._consume(Ident('else'));
+            exc_expr := self._expression();
+            self._consume(Ident('end'));
+            tuple(Ident('if'), [
+                tuple(Ident('not'), [cond_expr]),
+                tuple(Ident('raise'), [exc_expr]),
+                None
+            ])
+        end;
+
         defmethod _defclass do
             self._current_and_advance();
             call_expr := self._expression();
@@ -531,12 +545,10 @@ i.walk(r"""
         end;
 
         defmethod _consume(expected) do
-            if self._current() == expected then
-                self._current_and_advance()
-            else
-                raise('Expected ' + str(expected) + ' @ consume: '
-                      + str(self._current()))
-            end
+            assert self._current() == expected else
+                'Expected ' + str(expected) + ' @ consume: ' + str(self._current())
+            end;
+            self._current_and_advance()
         end;
 
         defmethod _current do self._tokens[self._pos] end;
@@ -548,7 +560,7 @@ i.walk(r"""
     end
 """)
 
-i.walk(r"""
+t.walk(r"""
     defclass Environment(parent) do
         self._parent = parent;
         self._vars = {};
@@ -569,19 +581,19 @@ i.walk(r"""
 
         defmethod val(name) do
             vars := self.lookup(name);
-            if vars == None then raise('Undefined variable @ val: ' + name) end;
+            assert vars != None else 'Undefined variable @ val: ' + name end;
             vars[name]
         end;
 
         defmethod assign(name, val) do
             vars := self.lookup(name);
-            if vars == None then raise('Undefined variable @ assign: ' + name) end;
+            assert vars != None else 'Undefined variable @ assign: ' + name end;
             vars[name] = val
         end
     end
 """)
 
-i.walk(r"""
+t.walk(r"""
     defclass Evaluator do
         defmethod eval(expr, env) do
             # print(expr);
@@ -662,11 +674,10 @@ i.walk(r"""
                         right_val = self._overload_closure(right_val, old_val_dict, name)
                     end
             end;
-            if self._match_pattern(left_expr, right_val, env) then
-                right_val
-            else
-                raise('Pattern mismatch @ _define(): ' + str(left_expr) + ', ' + str(right_val))
-            end
+            assert self._match_pattern(left_expr, right_val, env) else
+                'Pattern mismatch @ _define(): ' + str(left_expr) + ', ' + str(right_val)
+            end;
+            right_val
         end;
 
         defmethod _assign(left_expr, right_expr, env) do
@@ -746,12 +757,12 @@ i.walk(r"""
         end;
 
         defmethod _for(
-            var_expr, coll_expr, body_expr, then_expr, else_expr, env)
-        do
+            var_expr, coll_expr, body_expr, then_expr, else_expr, env
+        ) do
             coll_val := self.eval(coll_expr, env);
             for val in coll_val do
-                if not self._match_pattern(var_expr, val, env) then
-                    raise('Pattern mismatch @ _for: ' + str(var_expr) + ', ' + str(val))
+                assert self._match_pattern(var_expr, val, env) else
+                    'Pattern mismatch @ _for: ' + str(var_expr) + ', ' + str(val)
                 end;
                 try
                     self.eval(body_expr, env)
@@ -797,7 +808,9 @@ i.walk(r"""
         defmethod apply(op_val, args_val) do
             match op_val
                 case tuple(Ident('hostfunc'), f) then f(args_val)
-                case tuple(Ident('closure'), [params_, body_expr, closure_env, fallback]) then
+                case tuple(Ident('closure'), [
+                    params_, body_expr, closure_env, fallback
+                ]) then
                     new_env := Environment(closure_env);
                     if self._match_pattern(params_, args_val, new_env) then
                         try
@@ -806,10 +819,10 @@ i.walk(r"""
                             return(val)
                         end
                     end;
-                    if fallback != None then
-                        return(self.apply(fallback, args_val))
+                    assert fallback != None else
+                        'Pattern mismatch @ apply: ' + str(params_) + ', ' + str(args_val)
                     end;
-                    raise('Pattern mismatch @ apply: ' + str(params_) + ', ' + str(args_val))
+                    self.apply(fallback, args_val)
                 case _ then raise('Invalid operator @ apply: ' + str(op_val))
             end
         end;
@@ -899,7 +912,7 @@ i.walk(r"""
     end
 """)
 
-i.walk(r"""
+t.walk(r"""
     defclass Interpreter do
         self._env = Environment(None);
 
@@ -1049,33 +1062,23 @@ i.walk(r"""
     end
 """)
 
+
+class ToTWrapper:
+    def scan(self, src): return t.walk(f""" tot.scan('{src}') """)
+    def parse(self, tokens): return t.walk(f""" tot.parse({tokens}) """)
+    def ast(self, src): return t.walk(f""" tot.ast('{src}') """)
+    def eval(self, ast): return t.walk(f""" tot.eval({ast}) """)
+    def walk(self, src): return t.walk(f""" tot.walk('{src}') """)
+
+t.walk(r""" tot := Interpreter().init_env().stdlib() """)
+i = ToTWrapper()
+
 if __name__ == "__main__":
-    i.walk(r"""
-        tot := Interpreter().init_env().stdlib()
-    """)
-    def scan(src): return i.walk(f""" tot.scan('{src}') """)
-    def ast(src): return i.walk(f""" tot.ast('{src}') """)
-    def walk(src): return i.walk(f""" tot.walk('{src}') """)
 
     # Example
 
-    # Lazy evaluation
-    print(walk("""
-        def force(thunk) do thunk() end;
-        def stream_car(s) do s[0] end;
-        def stream_cdr(s) do force(s[1]) end;
-
-        def take(n, s) do
-            if n == 0 then
-                []
-            else
-                [stream_car(s)] + take(n - 1, stream_cdr(s))
-            end
-        end;
-
-        def count_from(n) do
-            [n, [] -> count_from(n + 1)]
-        end;
-
-        take(5, count_from(1))
-    """)) # -> [1, 2, 3, 4, 5]
+    # Assert
+    print(i.walk(""" assert 2 == 2 else 1/0 end """)) # -> None
+    # walk(""" assert 2 == 3 else "Assert exception" end """) # ->  Assert exception
+    # walk(""" assert 2 == 3 "Assert exception" end """) # -> Expected else
+    # walk(""" assert 2 == 3 else "Assert exception" """) # -> Expected end
