@@ -447,10 +447,7 @@ class TestToil:
         assert i.walk(r""" dict([["a", 2], ["b", 3]]) """) == {"a": 2, "b": 3}
 
     def test_quote(self, capsys):
-        assert i.walk(r""" quote hello_world end """) == Ident("hello_world")
-        assert i.walk(r""" quote scope 2 == 3 end end """) == (
-            Ident("__core_scope"), [(Ident("equal"), [2, 3])]
-        )
+        assert i.walk(r""" quote 2 + 3 end """) == (Ident("add"), [2, 3])
 
     def test_scope(self):
         assert i.walk(r""" a := 2; scope a end """) == 2

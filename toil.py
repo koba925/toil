@@ -246,6 +246,7 @@ class Parser:
             case Ident("quote"): return self._quote()
             case Ident("func"): return self._func()
             case Ident("def"): return self._def()
+            case Ident("scope"): return self._scope()
             case Ident(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
             case Ident(name) if is_ident(name): return self._current_and_advance()
@@ -324,6 +325,12 @@ class Parser:
                 return (Ident('define'), [call_expr, (Ident('func'), [[], body_expr])])
             case _:
                 assert False, 'Invalid def syntax @ _def(): ' + str(call_expr)
+
+    def _scope(self):
+        self._current_and_advance()
+        body_expr = self._expression()
+        self._consume(Ident("end"))
+        return (Ident("scope"), [body_expr])
 
     def _custom(self, rule):
         def match_args(rule):
@@ -497,7 +504,7 @@ class Evaluator:
                 assert len(args) <= 1, \
                     f"Raise takes zero or one argument @ evaluate(): {args}"
                 raise ToilException(self.eval(args[0], env) if args else None)
-            case (Ident("__core_scope"), [expr]):
+            case (Ident("scope"), [expr]):
                 return self.eval(expr, Environment(env))
             case (Ident("dot"), [target_expr, attr_expr]):
                 return self._dot(target_expr, attr_expr, env)
@@ -901,8 +908,6 @@ class Interpreter:
             __corelib := None;
 
             #rule {macro: [__core_macro, EXPRS, do, EXPR, end]}
-
-            #rule {scope: [__core_scope, EXPR, end]}
 
             __core_defmacro := macro call_expr, body do
                 match call_expr
