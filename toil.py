@@ -182,7 +182,7 @@ class Parser:
             self.current_and_advance()
             right = self._arrow()
             params = left if isinstance(left, list) else [left]
-            return (Ident("__core_func"), [params, right])
+            return (Ident("func"), [params, right])
         return left
 
     def _and_or(self):
@@ -244,6 +244,7 @@ class Parser:
             case Ident("["): return self._list()
             case Ident("{"): return self._dict()
             case Ident("quote"): return self._quote()
+            case Ident("func"): return self._func()
             case Ident(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
             case Ident(name) if is_ident(name): return self.current_and_advance()
@@ -300,6 +301,14 @@ class Parser:
         expr = self._expression()
         self._consume(Ident("end"))
         return (Ident("quote"), [expr])
+
+    def _func(self):
+        self.current_and_advance()
+        params = self._comma_separated_exprs(Ident("do"))
+        self._consume(Ident("do"))
+        body_expr = self._expression()
+        self._consume(Ident("end"))
+        return (Ident("func"), [params, body_expr])
 
     def _custom(self, rule):
         def match_args(rule):
@@ -441,6 +450,12 @@ class Evaluator:
                 return env.val(name)
             case (Ident("quote"), [expr]):
                 return self._quote(expr, env)
+            case (Ident("func"), [params, body]):
+                return (Ident("closure"), [params, body, env, None])
+            case (Ident("return"), args):
+                assert len(args) <= 1, \
+                    f"Return takes zero or one argument @ evaluate(): {args}"
+                raise ReturnException(self.eval(args[0], env) if args else None)
             case (Ident("define"), [left_expr, right_expr]):
                 return self._define(left_expr, right_expr, env)
             case (Ident("assign"), [left_expr, right_expr]):
@@ -457,12 +472,6 @@ class Evaluator:
                 raise ContinueException()
             case (Ident("break"), []):
                 raise BreakException()
-            case (Ident("__core_func"), [params, body]):
-                return (Ident("closure"), [params, body, env, None])
-            case (Ident("return"), args):
-                assert len(args) <= 1, \
-                    f"Return takes zero or one argument @ evaluate(): {args}"
-                raise ReturnException(self.eval(args[0], env) if args else None)
             case (Ident("expand"), [(op_expr, args_expr)]):
                 return self._expand(op_expr, args_expr, env)
             case (Ident("__core_macro"), [params, body]):
@@ -876,7 +885,6 @@ class Interpreter:
         self.walk("""
             __corelib := None;
 
-            #rule {func: [__core_func, EXPRS, do, EXPR, end]}
             #rule {macro: [__core_macro, EXPRS, do, EXPR, end]}
 
             #rule {scope: [__core_scope, EXPR, end]}
