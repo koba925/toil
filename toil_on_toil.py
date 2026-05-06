@@ -138,19 +138,17 @@ t.walk(r"""
         defmethod parse do
             # print(self._tokens);
             expr := self._expression();
-            assert self._current() == Ident('$EOF') else
-                'Extra token @ parse: ' + str(self._current())
+            assert self._current_token() == Ident('$EOF') else
+                'Extra token @ parse: ' + str(self._current_token())
             end;
             expr
         end;
 
-        defmethod _expression do
-            self._sequence()
-        end;
+        defmethod _expression do self._sequence() end;
 
         defmethod _sequence do
             exprs := [self._define_assign()];
-            while self._current() == Ident(';') do
+            while self._current_token() == Ident(';') do
                 self._current_and_advance();
                 exprs.push(self._define_assign())
             end;
@@ -165,14 +163,12 @@ t.walk(r"""
 
         defmethod _arrow do
             left := self._and_or();
-            if self._current() == Ident('->') then
+            if self._current_token() == Ident('->') then
                 self._current_and_advance();
                 right := self._arrow();
                 params_ := if left.type() == 'list' then left else [left] end;
                 tuple(Ident('func'), [params_, right])
-            else
-                left
-            end
+            else left end
         end;
 
         defmethod _and_or do
@@ -213,7 +209,9 @@ t.walk(r"""
 
         defmethod _call_index_dot do
             target := self._primary();
-            while (op := self._current()).in([Ident('('), Ident('['), Ident('.')]) do
+            while (op := self._current_token()).in([
+                Ident('('), Ident('['), Ident('.')
+            ]) do
                 if op == Ident('(') then
                     self._current_and_advance();
                     target = tuple(target, self._comma_separated_exprs(Ident(')')));
@@ -235,7 +233,7 @@ t.walk(r"""
         end;
 
         defmethod _primary do
-            match self._current()
+            match self._current_token()
                 case None then self._current_and_advance()
                 case bool(_) or int(_) or str(_) then self._current_and_advance()
                 case Ident('(') then self._group()
@@ -255,11 +253,11 @@ t.walk(r"""
                 case Ident('assert') then self._assert()
                 case Ident(name) then
                     assert name.is_ident() else
-                        'Unexpected token @ primary(): ' + str(self._current())
+                        'Unexpected token @ primary(): ' + str(self._current_token())
                     end;
                     self._current_and_advance()
                 case _ then
-                    raise('Unexpected token: @ primary(): ' + str(self._current()))
+                    raise('Unexpected token: @ primary(): ' + str(self._current_token()))
             end
         end;
 
@@ -279,13 +277,13 @@ t.walk(r"""
 
         defmethod _dict do
             def _parse_key_value(dic) do
-                match self._current()
+                match self._current_token()
                     case Ident('*') then
                         self._current_and_advance();
                         dic['*'] = self._current_and_advance()
                     case Ident(key) then
                         self._current_and_advance();
-                        if self._current() == Ident(':') then
+                        if self._current_token() == Ident(':') then
                             self._current_and_advance();
                             dic[key] = self._expression()
                         else
@@ -296,15 +294,15 @@ t.walk(r"""
                         self._consume(Ident(':'));
                         dic[key] = self._expression()
                     case _ then
-                        raise('Invalid key @ _dict(): ' + str(self._current()))
+                        raise('Invalid key @ _dict(): ' + str(self._current_token()))
                 end
             end;
 
             self._current_and_advance();
             dic := {};
-            if self._current() != Ident('}') then
+            if self._current_token() != Ident('}') then
                 _parse_key_value(dic);
-                while self._current() != Ident('}') do
+                while self._current_token() != Ident('}') do
                     self._consume(Ident(','));
                     _parse_key_value(dic)
                 end
@@ -358,9 +356,9 @@ t.walk(r"""
             self._consume(Ident('then'));
             then_expr := self._expression();
             else_expr := None;
-            if self._current() == Ident('elif') then
+            if self._current_token() == Ident('elif') then
                 else_expr = self._if()
-            elif self._current() == Ident('else') then
+            elif self._current_token() == Ident('else') then
                 self._current_and_advance();
                 else_expr = self._expression();
                 self._consume(Ident('end'))
@@ -375,7 +373,7 @@ t.walk(r"""
             self._current_and_advance();
             val_expr := self._expression();
             cases := [];
-            while self._current() == Ident('case') do
+            while self._current_token() == Ident('case') do
                 self._current_and_advance();
                 pattern := self._expression();
                 self._consume(Ident('then'));
@@ -391,11 +389,11 @@ t.walk(r"""
             cond_expr := self._expression();
             self._consume(Ident('do'));
             body_expr := self._expression();
-            then_expr := if self._current() == Ident('then') then
+            then_expr := if self._current_token() == Ident('then') then
                 self._current_and_advance();
                 [self._expression()]
             else [] end;
-            else_expr := if self._current() == Ident('else') then
+            else_expr := if self._current_token() == Ident('else') then
                 self._current_and_advance();
                 [self._expression()]
             else [] end;
@@ -407,7 +405,7 @@ t.walk(r"""
             self._current_and_advance();
             body_expr := self._expression();
             clauses := [];
-            while self._current() == Ident('except') do
+            while self._current_token() == Ident('except') do
                 self._current_and_advance();
                 cond_expr := self._expression();
                 self._consume(Ident('then'));
@@ -425,11 +423,11 @@ t.walk(r"""
             coll_expr := self._expression();
             self._consume(Ident('do'));
             body_expr := self._expression();
-            then_expr := if self._current() == Ident('then') then
+            then_expr := if self._current_token() == Ident('then') then
                 self._current_and_advance();
                 [self._expression()]
             else [] end;
-            else_expr := if self._current() == Ident('else') then
+            else_expr := if self._current_token() == Ident('else') then
                 self._current_and_advance();
                 [self._expression()]
             else [] end;
@@ -512,7 +510,7 @@ t.walk(r"""
 
         defmethod _binary_left(ops, sub_elem) do
             left := sub_elem();
-            while type(op := self._current()) == 'Ident' and str(op).in(ops) do
+            while type(op := self._current_token()) == 'Ident' and str(op).in(ops) do
                 self._current_and_advance();
                 right := sub_elem();
                 left = tuple(ops[str(op)], [left, right])
@@ -522,7 +520,7 @@ t.walk(r"""
 
         defmethod _binary_right(ops, sub_elem) do
             left := sub_elem();
-            if type(op := self._current()) == 'Ident' and str(op).in(ops) then
+            if type(op := self._current_token()) == 'Ident' and str(op).in(ops) then
                 self._current_and_advance();
                 right := self._binary_right(ops, sub_elem);
                 tuple(ops[str(op)], [left, right])
@@ -532,7 +530,7 @@ t.walk(r"""
         end;
 
         defmethod _unary(ops, sub_elem) do
-            if type(op := self._current()) == 'Ident' and str(op).in(ops) then
+            if type(op := self._current_token()) == 'Ident' and str(op).in(ops) then
                 self._current_and_advance();
                 tuple(ops[str(op)], [self._unary(ops, sub_elem)])
             else
@@ -542,9 +540,9 @@ t.walk(r"""
 
         defmethod _comma_separated_exprs(terminator) do
             cse := [];
-            if self._current() != terminator then
+            if self._current_token() != terminator then
                 cse.push(self._expression());
-                while self._current() == Ident(',') do
+                while self._current_token() == Ident(',') do
                     self._current_and_advance();
                     cse.push(self._expression())
                 end
@@ -553,18 +551,18 @@ t.walk(r"""
         end;
 
         defmethod _consume(expected) do
-            assert self._current() == expected else
-                'Expected ' + str(expected) + ' @ consume: ' + str(self._current())
+            assert self._current_token() == expected else
+                'Expected ' + str(expected) + ' @ consume: ' + str(self._current_token())
             end;
             self._current_and_advance()
         end;
 
-        defmethod _current do self._tokens[self._pos] end;
-
         defmethod _current_and_advance do
             self._pos = self._pos + 1;
             self._tokens[self._pos - 1]
-        end
+        end;
+
+        defmethod _current_token do self._tokens[self._pos] end
     end
 """)
 

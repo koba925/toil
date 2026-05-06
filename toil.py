@@ -167,7 +167,7 @@ class Parser:
     def _sequence(self):
         exprs = [self._define_assign()]
         while self._current_token() == Ident(";"):
-            self._advance()
+            self.current_and_advance()
             exprs.append(self._define_assign())
         return exprs[0] if len(exprs) == 1 else (Ident("seq"), exprs)
 
@@ -179,7 +179,7 @@ class Parser:
     def _arrow(self):
         left = self._and_or()
         if self._current_token() == Ident("->"):
-            self._advance()
+            self.current_and_advance()
             right = self._arrow()
             params = left if isinstance(left, list) else [left]
             return (Ident("__core_func"), [params, right])
@@ -191,9 +191,7 @@ class Parser:
         }, self._not)
 
     def _not(self):
-        return self._unary({
-            Ident("not"): Ident("not")
-        }, self._comparison)
+        return self._unary({ Ident("not"): Ident("not") }, self._comparison)
 
     def _comparison(self):
         return self._binary_left({
@@ -223,42 +221,43 @@ class Parser:
         while self._current_token() in (Ident("("), Ident("["), Ident(".")):
             match self._current_token():
                 case Ident("("):
-                    self._advance()
+                    self.current_and_advance()
                     target = (target, self._comma_separated_exprs(Ident(")")))
                     self._consume(Ident(")"))
                 case Ident("["):
-                    self._advance()
+                    self.current_and_advance()
                     index = self._expression()
                     self._consume(Ident("]"))
                     target = (Ident("index"), [target, index])
                 case Ident("."):
-                    self._advance()
-                    assert type(self._current_token()) is Ident, \
+                    self.current_and_advance()
+                    attr_name = self.current_and_advance()
+                    assert type(attr_name) is Ident, \
                         f"Invalid attribute @ _call_index_dot(): {self._current_token()}"
-                    attr = self._advance()
-                    target = (Ident("dot"), [target, str(attr)])
+                    target = (Ident("dot"), [target, str(attr_name)])
         return target
 
     def _primary(self):
         match self._current_token():
+            case None | bool() | int() | str(): return self.current_and_advance()
             case Ident("("): return self._group()
             case Ident("["): return self._list()
             case Ident("{"): return self._dict()
-            case None | bool() | int() | str(): return self._advance()
+            case Ident("quote"): return self._quote()
             case Ident(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
-            case Ident(name) if is_ident(name): return self._advance()
+            case Ident(name) if is_ident(name): return self.current_and_advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
 
     def _group(self):
-        self._advance()
+        self.current_and_advance()
         expr = self._expression()
         self._consume(Ident(")"))
         return expr
 
     def _list(self):
-        self._advance()
+        self.current_and_advance()
         exprs = self._comma_separated_exprs(Ident("]"))
         self._consume(Ident("]"))
         return exprs
@@ -267,34 +266,40 @@ class Parser:
         def _parse_key_value(dic):
             match self._current_token():
                 case Ident("*"):
-                    self._advance()
-                    rest_name = self._advance()
+                    self.current_and_advance()
+                    rest_name = self.current_and_advance()
                     assert isinstance(rest_name, Ident), \
                         f"Expected rest pattern name @ _dict(): {rest_name}"
                     dic["*"] = rest_name
                 case Ident(key):
-                    self._advance()
+                    self.current_and_advance()
                     if self._current_token() == Ident(":"):
-                        self._advance()
+                        self.current_and_advance()
                         dic[key] = self._expression()
                     else:
                         dic[key] = Ident(key)
                 case str():
-                    key = self._advance()
+                    key = self.current_and_advance()
                     self._consume(Ident(":"))
                     dic[key] = self._expression()
                 case invalid:
                     assert False, f"Invalid key @ _dict(): {invalid}"
 
-        self._advance()
+        self.current_and_advance()
         dic = {}
         if self._current_token() != Ident("}"):
             _parse_key_value(dic)
             while self._current_token() != Ident("}"):
                 self._consume(Ident(","))
                 _parse_key_value(dic)
-        self._advance()
+        self.current_and_advance()
         return dic
+
+    def _quote(self):
+        self.current_and_advance()
+        expr = self._expression()
+        self._consume(Ident("end"))
+        return (Ident("quote"), [expr])
 
     def _custom(self, rule):
         def match_args(rule):
@@ -319,14 +324,14 @@ class Parser:
                         self._consume(delimiter)
             return args
 
-        self._advance()
+        self.current_and_advance()
         return (rule[0], match_args(rule[1:]))
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
         while type(self._current_token()) is Ident and \
                 (op := self._current_token()) in ops:
-            self._advance()
+            self.current_and_advance()
             right = sub_elem()
             left = (ops[op], [left, right])
         return left
@@ -335,7 +340,7 @@ class Parser:
         left = sub_elem()
         if type(self._current_token()) is Ident and \
                 (op := self._current_token()) in ops:
-            self._advance()
+            self.current_and_advance()
             right = self._binary_right(ops, sub_elem)
             return (ops[op], [left, right])
         return left
@@ -343,7 +348,7 @@ class Parser:
     def _unary(self, ops, sub_elem):
         if type(self._current_token()) is Ident and \
                 (op := self._current_token()) in ops:
-            self._advance()
+            self.current_and_advance()
             return (ops[op], [self._unary(ops, sub_elem)])
         else:
             return sub_elem()
@@ -353,19 +358,19 @@ class Parser:
         if self._current_token() != terminator:
             cse.append(self._expression())
             while self._current_token() == Ident(","):
-                self._advance()
+                self.current_and_advance()
                 cse.append(self._expression())
         return cse
 
     def _consume(self, expected):
         assert self._current_token() == expected, \
             f"Expected {expected} @ consume: {self._current_token()}"
-        return self._advance()
+        return self.current_and_advance()
 
     def _current_token(self):
         return self._tokens[self._pos]
 
-    def _advance(self):
+    def current_and_advance(self):
         self._pos += 1
         return self._tokens[self._pos - 1]
 
@@ -422,6 +427,7 @@ class BreakException(Exception): pass
 
 class Evaluator:
     def eval(self, expr: Expr, env: Environment) -> Value:
+        # print(expr)
         match expr:
             case None | bool() | int() | str():
                 return expr
@@ -433,7 +439,7 @@ class Evaluator:
                 return env
             case Ident(name):
                 return env.val(name)
-            case (Ident("__core_quote"), [expr]):
+            case (Ident("quote"), [expr]):
                 return self._quote(expr, env)
             case (Ident("define"), [left_expr, right_expr]):
                 return self._define(left_expr, right_expr, env)
@@ -875,8 +881,6 @@ class Interpreter:
 
             #rule {scope: [__core_scope, EXPR, end]}
 
-            #rule {quote: [__core_quote, EXPR, end]}
-
             __core_defmacro := macro call_expr, body do
                 match call_expr
                     case tuple(name, args) then
@@ -888,9 +892,6 @@ class Interpreter:
                 end
             end;
             #rule {defmacro: [__core_defmacro, EXPR, do, EXPR, end]}
-
-            defmacro __core_quotes(expr) do quote quote scope !expr end end end end;
-            #rule {quotes: [__core_quotes, EXPR, end]}
 
             defmacro __core_def(call_expr, body) do
                 match call_expr
