@@ -400,21 +400,6 @@ t.walk(r"""
             tuple(Ident('while'), [cond_expr, body_expr, then_expr, else_expr])
         end;
 
-        defmethod _try do
-            self._current_and_advance();
-            body_expr := self._expression();
-            clauses := [];
-            while self._current_token() == Ident('except') do
-                self._current_and_advance();
-                cond_expr := self._expression();
-                self._consume(Ident('then'));
-                except_expr := self._expression();
-                clauses.push([cond_expr, except_expr])
-            end;
-            self._consume(Ident('end'));
-            tuple(Ident('try'), [body_expr, clauses])
-        end;
-
         defmethod _for do
             self._current_and_advance();
             var_expr := self._expression();
@@ -432,6 +417,21 @@ t.walk(r"""
             else [] end;
             self._consume(Ident('end'));
             tuple(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr])
+        end;
+
+        defmethod _try do
+            self._current_and_advance();
+            body_expr := self._expression();
+            clauses := [];
+            while self._current_token() == Ident('except') do
+                self._current_and_advance();
+                cond_expr := self._expression();
+                self._consume(Ident('then'));
+                except_expr := self._expression();
+                clauses.push([cond_expr, except_expr])
+            end;
+            self._consume(Ident('end'));
+            tuple(Ident('try'), [body_expr, clauses])
         end;
 
         defmethod _assert do

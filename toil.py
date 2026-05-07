@@ -249,6 +249,7 @@ class Parser:
             case Ident("scope"): return self._scope()
             case Ident("if"): return self._if()
             case Ident("match"): return self._match()
+            case Ident("while"): return self._while()
             case Ident(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
             case Ident(name) if is_ident(name): return self._current_and_advance()
@@ -362,6 +363,24 @@ class Parser:
             cases.append((pattern, body_expr))
         self._consume(Ident("end"))
         return (Ident("match"), [val_expr, cases])
+
+    def _while(self):
+        self._current_and_advance()
+        cond_expr = self._expression()
+        self._consume(Ident("do"))
+        body_expr = self._expression()
+        if self._current_token() == Ident('then'):
+            self._current_and_advance();
+            then_expr = [self._expression()]
+        else:
+            then_expr = []
+        if self._current_token() == Ident('else'):
+            self._current_and_advance();
+            else_expr = [self._expression()]
+        else:
+            else_expr = []
+        self._consume(Ident("end"))
+        return (Ident("while"), [cond_expr, body_expr, then_expr, else_expr])
 
     def _custom(self, rule):
         def match_args(rule):
@@ -519,7 +538,7 @@ class Evaluator:
                 return self._if(cond_expr, then_expr, else_expr, env)
             case (Ident("match"), [val_expr, cases_expr]):
                 return self._match(val_expr, cases_expr, env)
-            case (Ident("__core_while"), [cond_expr, body_expr, then_expr, else_expr]):
+            case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
                 return self._while(cond_expr, body_expr, then_expr, else_expr, env)
             case (Ident("continue"), []):
                 raise ContinueException()
@@ -959,14 +978,12 @@ class Interpreter:
                 g := gensym('it'); quote if !g := !a then !g else !b end end
             end;
 
-            #rule {while: [__core_while, EXPR, do, EXPR, +[then, EXPR], +[else, EXPR], end]}
-
             defmacro __core_for(var, coll, body, thn, els) do
                 _coll := gensym("coll");
                 _index := gensym("index");
                 quote
                     !_coll := !coll; !_index := -1;
-                    !tuple(Ident("__core_while"), [
+                    !tuple(Ident("while"), [
                         quote !_index + 1 < len(!_coll) end,
                         quote
                             !_index = !_index + 1;
