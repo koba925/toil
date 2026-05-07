@@ -250,6 +250,7 @@ class Parser:
             case Ident("if"): return self._if()
             case Ident("match"): return self._match()
             case Ident("while"): return self._while()
+            case Ident("for"): return self._for()
             case Ident(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
             case Ident(name) if is_ident(name): return self._current_and_advance()
@@ -381,6 +382,26 @@ class Parser:
             else_expr = []
         self._consume(Ident("end"))
         return (Ident("while"), [cond_expr, body_expr, then_expr, else_expr])
+
+    def _for(self):
+        self._current_and_advance()
+        var_expr = self._expression()
+        self._consume(Ident("in"))
+        coll_expr = self._expression()
+        self._consume(Ident("do"))
+        body_expr = self._expression();
+        if self._current_token() == Ident("then"):
+            self._current_and_advance();
+            then_expr = [self._expression()]
+        else:
+            then_expr = []
+        if self._current_token() == Ident("else"):
+            self._current_and_advance()
+            else_expr = [self._expression()]
+        else:
+            else_expr = []
+        self._consume(Ident("end"));
+        return (Ident("for"), [var_expr, coll_expr, body_expr, then_expr, else_expr])
 
     def _custom(self, rule):
         def match_args(rule):
@@ -540,6 +561,8 @@ class Evaluator:
                 return self._match(val_expr, cases_expr, env)
             case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
                 return self._while(cond_expr, body_expr, then_expr, else_expr, env)
+            case (Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr]):
+                return self._for(var_expr, coll_expr, body_expr, then_expr, else_expr, env)
             case (Ident("continue"), []):
                 raise ContinueException()
             case (Ident("break"), []):
@@ -656,6 +679,22 @@ class Evaluator:
             except BreakException:
                 return None if else_expr == [] else self.eval(else_expr[0], env)
         return None if then_expr == [] else self.eval(then_expr[0], env)
+
+    def _for(self, var_expr, coll_expr, body_expr, then_expr, else_expr, env):
+        coll_val = self.eval(coll_expr, env)
+        for val in coll_val:
+            assert self._match_pattern(var_expr, val, env), \
+                'Pattern mismatch @ _for: ' + str(var_expr) + ', ' + str(val)
+            try:
+                self.eval(body_expr, env)
+            except ContinueException: continue
+            except BreakException: break
+        else:
+            return self._eval_optional_arg(then_expr, env)
+        return self._eval_optional_arg(else_expr, env)
+
+    def _eval_optional_arg(self, args, env):
+        return None if len(args) == 0 else self.eval(args[0], env)
 
     def _try(self, body_expr, clauses_expr, env):
         try:
@@ -978,25 +1017,6 @@ class Interpreter:
                 g := gensym('it'); quote if !g := !a then !g else !b end end
             end;
 
-            defmacro __core_for(var, coll, body, thn, els) do
-                _coll := gensym("coll");
-                _index := gensym("index");
-                quote
-                    !_coll := !coll; !_index := -1;
-                    !tuple(Ident("while"), [
-                        quote !_index + 1 < len(!_coll) end,
-                        quote
-                            !_index = !_index + 1;
-                            !var := (!_coll)[!_index];
-                            !body
-                        end,
-                        thn,
-                        els
-                    ])
-                end
-            end;
-            #rule {for: [__core_for, EXPR, in, EXPR, do, EXPR, +[then, EXPR], +[else, EXPR], end]}
-
             #rule {try: [__core_try, EXPR, *[except, EXPR, then, EXPR], end]}
 
             # Object oriented notations
@@ -1205,5 +1225,6 @@ if __name__ == "__main__":
     # Example
 
     # Assert
-    print(i.walk(""" assert 2 == 2 else 1/0 end """)) # -> None
-    # i.walk(""" assert 2 == 3 else "Assert exception" end """) # ->  Assert exception
+    print(i.walk("""
+        a := []; for i in [0, 1, 2] do push(a, i) then [i, a] else 1/0 end
+    """)) # ->
