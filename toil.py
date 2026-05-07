@@ -247,6 +247,7 @@ class Parser:
             case Ident("func"): return self._func()
             case Ident("def"): return self._def()
             case Ident("scope"): return self._scope()
+            case Ident("if"): return self._if()
             case Ident(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
             case Ident(name) if is_ident(name): return self._current_and_advance()
@@ -331,6 +332,22 @@ class Parser:
         body_expr = self._expression()
         self._consume(Ident("end"))
         return (Ident("scope"), [body_expr])
+
+    def _if(self):
+        self._current_and_advance()
+        cond_expr = self._expression()
+        self._consume(Ident("then"))
+        then_expr = self._expression()
+        if self._current_token() == Ident("elif"):
+            else_expr = self._if()
+        elif self._current_token() == Ident("else"):
+            self._current_and_advance()
+            else_expr = self._expression()
+            self._consume(Ident("end"))
+        else:
+            else_expr = None
+            self._consume(Ident("end"))
+        return (Ident("if"), [cond_expr, then_expr, else_expr])
 
     def _custom(self, rule):
         def match_args(rule):
@@ -484,7 +501,7 @@ class Evaluator:
                 return self._assign(left_expr, right_expr, env)
             case (Ident("seq"), exprs):
                 return self._seq(exprs, env)
-            case (Ident("__core_if"), [cond_expr, then_expr, else_expr]):
+            case (Ident("if"), [cond_expr, then_expr, else_expr]):
                 return self._if(cond_expr, then_expr, else_expr, env)
             case (Ident("__core_match"), [val_expr, cases_expr]):
                 return self._match(val_expr, cases_expr, env)
@@ -921,27 +938,13 @@ class Interpreter:
             end;
             #rule {defmacro: [__core_defmacro, EXPR, do, EXPR, end]}
 
-            #rule {pif: [__core_if, EXPR, then, EXPR, else, EXPR, end]}
-
-            defmacro __core_if_macro(cnd, thn, elifs, els) do
-                expr := pif els == [] then None else els[0] end;
-                i := len(elifs) - 1;
-                while i >= 0 do
-                    [elif_cnd, elif_thn] := elifs[i];
-                    expr = quote pif !elif_cnd then !elif_thn else !expr end end;
-                    i = i - 1
-                end;
-                quote pif !cnd then !thn else !expr end end
-            end;
-            #rule {if: [__core_if_macro, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], +[else, EXPR], end]}
-
             #rule {match: [__core_match, EXPR, *[case, EXPR, then, EXPR], end]}
 
             defmacro and(a, b) do
-                g := gensym('it'); quote pif !g := !a then !b else !g end end
+                g := gensym('it'); quote if !g := !a then !b else !g end end
             end;
             defmacro or(a, b) do
-                g := gensym('it'); quote pif !g := !a then !g else !b end end
+                g := gensym('it'); quote if !g := !a then !g else !b end end
             end;
 
             #rule {while: [__core_while, EXPR, do, EXPR, +[then, EXPR], +[else, EXPR], end]}

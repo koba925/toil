@@ -355,15 +355,14 @@ t.walk(r"""
             cond_expr := self._expression();
             self._consume(Ident('then'));
             then_expr := self._expression();
-            else_expr := None;
             if self._current_token() == Ident('elif') then
-                else_expr = self._if()
+                else_expr := self._if()
             elif self._current_token() == Ident('else') then
                 self._current_and_advance();
-                else_expr = self._expression();
+                else_expr := self._expression();
                 self._consume(Ident('end'))
             else
-                else_expr = None;
+                else_expr := None;
                 self._consume(Ident('end'))
             end;
             tuple(Ident('if'), [cond_expr, then_expr, else_expr])
@@ -1084,7 +1083,4 @@ if __name__ == "__main__":
     # Example
 
     # Assert
-    print(i.walk(""" assert 2 == 2 else 1/0 end """)) # -> None
-    # walk(""" assert 2 == 3 else "Assert exception" end """) # ->  Assert exception
-    # walk(""" assert 2 == 3 "Assert exception" end """) # -> Expected else
-    # walk(""" assert 2 == 3 else "Assert exception" """) # -> Expected end
+    print(i.walk(""" [2, 3].map(x -> x + 1) """)) # -> None
