@@ -251,6 +251,7 @@ class Parser:
             case Ident("match"): return self._match()
             case Ident("while"): return self._while()
             case Ident("for"): return self._for()
+            case Ident("try"): return self._try()
             case Ident(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
             case Ident(name) if is_ident(name): return self._current_and_advance()
@@ -319,16 +320,16 @@ class Parser:
     def _def(self):
         self._current_and_advance()
         call_expr = self._expression()
-        self._consume(Ident('do'))
+        self._consume(Ident("do"))
         body_expr = self._expression()
-        self._consume(Ident('end'))
+        self._consume(Ident("end"))
         match call_expr:
             case (name, args) if isinstance(call_expr, tuple):
-                return (Ident('define'), [name, (Ident('func'), [args, body_expr])])
+                return (Ident("define"), [name, (Ident("func"), [args, body_expr])])
             case Ident(name):
-                return (Ident('define'), [call_expr, (Ident('func'), [[], body_expr])])
+                return (Ident("define"), [call_expr, (Ident("func"), [[], body_expr])])
             case _:
-                assert False, 'Invalid def syntax @ _def(): ' + str(call_expr)
+                assert False, "Invalid def syntax @ _def(): " + str(call_expr)
 
     def _scope(self):
         self._current_and_advance()
@@ -370,12 +371,12 @@ class Parser:
         cond_expr = self._expression()
         self._consume(Ident("do"))
         body_expr = self._expression()
-        if self._current_token() == Ident('then'):
+        if self._current_token() == Ident("then"):
             self._current_and_advance();
             then_expr = [self._expression()]
         else:
             then_expr = []
-        if self._current_token() == Ident('else'):
+        if self._current_token() == Ident("else"):
             self._current_and_advance();
             else_expr = [self._expression()]
         else:
@@ -402,6 +403,19 @@ class Parser:
             else_expr = []
         self._consume(Ident("end"));
         return (Ident("for"), [var_expr, coll_expr, body_expr, then_expr, else_expr])
+
+    def _try(self):
+        self._current_and_advance()
+        body_expr = self._expression()
+        clauses = []
+        while self._current_token() == Ident("except"):
+            self._current_and_advance()
+            cond_expr = self._expression()
+            self._consume(Ident("then"))
+            except_expr = self._expression()
+            clauses.append((cond_expr, except_expr))
+        self._consume(Ident("end"))
+        return (Ident("try"), [body_expr, clauses])
 
     def _custom(self, rule):
         def match_args(rule):
@@ -491,7 +505,7 @@ class Environment(dict):
                   "__corelib" if "__corelib" in self["vars"] else \
                   "__stdlib" if "__stdlib" in self["vars"] else \
                   ", ".join(self["vars"])
-        return f"[{content}]" + (f" < {self['parent']}" if self["parent"] else "")
+        return f"[{content}]" + (f" < {self["parent"]}" if self["parent"] else "")
 
     def define(self, name: str, val):
         self["vars"][name] = val
@@ -561,7 +575,7 @@ class Evaluator:
                 return self._match(val_expr, cases_expr, env)
             case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
                 return self._while(cond_expr, body_expr, then_expr, else_expr, env)
-            case (Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr]):
+            case (Ident("for"), [var_expr, coll_expr, body_expr, then_expr, else_expr]):
                 return self._for(var_expr, coll_expr, body_expr, then_expr, else_expr, env)
             case (Ident("continue"), []):
                 raise ContinueException()
@@ -571,7 +585,7 @@ class Evaluator:
                 return self._expand(op_expr, args_expr, env)
             case (Ident("__core_macro"), [params, body]):
                 return (Ident("mclosure"), params, body, env)
-            case (Ident("__core_try"), [body_expr, clauses_expr]):
+            case (Ident("try"), [body_expr, clauses_expr]):
                 return self._try(body_expr, clauses_expr, env)
             case (Ident("raise"), args):
                 assert len(args) <= 1, \
@@ -684,7 +698,7 @@ class Evaluator:
         coll_val = self.eval(coll_expr, env)
         for val in coll_val:
             assert self._match_pattern(var_expr, val, env), \
-                'Pattern mismatch @ _for: ' + str(var_expr) + ', ' + str(val)
+                "Pattern mismatch @ _for: " + str(var_expr) + ", " + str(val)
             try:
                 self.eval(body_expr, env)
             except ContinueException: continue
@@ -769,7 +783,7 @@ class Evaluator:
         def _match_list():
             i = 0; lpat = len(pattern); lval = len(value)
 
-            # Before '*'
+            # Before "*"
             while i < lpat:
                 sub_pat = pattern[i]
                 match sub_pat:
@@ -780,16 +794,16 @@ class Evaluator:
                     return False
                 i += 1
             else:
-                # No '*'
+                # No "*"
                 return i == lval
 
-            # At '*'
+            # At "*"
             lrest = lval - lpat + 1
             if lrest < 0: return False
             env.define(rest_name, value[i:i + lrest])
             i += 1
 
-            # After '*'
+            # After "*"
             while i < lpat:
                 sub_pat = pattern[i]
                 match sub_pat:
@@ -826,18 +840,18 @@ class Evaluator:
                 env.define(name, value)
                 return True
             case list():
-                return toil_type(value) == 'list' and _match_list()
+                return toil_type(value) == "list" and _match_list()
             case dict():
-                return toil_type(value) == 'dict' and _match_dict()
+                return toil_type(value) == "dict" and _match_dict()
             case (Ident("or"), [left_pat, right_pat]):
                 return self._match_pattern(left_pat, value, env) or \
                        self._match_pattern(right_pat, value, env)
-            case (Ident('Ident'), [name_pat]):
-                return toil_type(value) == 'Ident' and \
+            case (Ident("Ident"), [name_pat]):
+                return toil_type(value) == "Ident" and \
                     self._match_pattern(name_pat, value.name, env)
-            case (Ident('tuple'), expr_pats):
+            case (Ident("tuple"), expr_pats):
                 return (
-                    toil_type(value) == 'tuple' and len(expr_pats) == len(value) and
+                    toil_type(value) == "tuple" and len(expr_pats) == len(value) and
                     all(self._match_pattern(p, v, env) for p, v in zip(expr_pats, value))
                 )
             case (Ident(typ), [val_pat]):
@@ -860,8 +874,8 @@ class Compiler:
         match expr:
             case None | bool() | int() | str():
                 self._code.append(("const", expr))
-            case (Ident('seq'), exprs): self._seq(exprs)
-            case (Ident('print'), [expr]):
+            case (Ident("seq"), exprs): self._seq(exprs)
+            case (Ident("print"), [expr]):
                 self._expression(expr)
                 self._code.append(("print",))
             case (Ident(op), [left, right]) if op in ("add", "mul", "equal"):
@@ -1016,8 +1030,6 @@ class Interpreter:
             defmacro or(a, b) do
                 g := gensym('it'); quote if !g := !a then !g else !b end end
             end;
-
-            #rule {try: [__core_try, EXPR, *[except, EXPR, then, EXPR], end]}
 
             # Object oriented notations
 
