@@ -252,6 +252,7 @@ class Parser:
             case Ident("while"): return self._while()
             case Ident("for"): return self._for()
             case Ident("try"): return self._try()
+            case Ident("assert"): return self._assert()
             case Ident(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
             case Ident(name) if is_ident(name): return self._current_and_advance()
@@ -416,6 +417,18 @@ class Parser:
             clauses.append((cond_expr, except_expr))
         self._consume(Ident("end"))
         return (Ident("try"), [body_expr, clauses])
+
+    def _assert(self):
+        self._current_and_advance()
+        cond_expr = self._expression()
+        self._consume(Ident('else'))
+        exc_expr = self._expression()
+        self._consume(Ident('end'))
+        return (Ident('if'), [
+            (Ident('not'), [cond_expr]),
+            (Ident('raise'), [exc_expr]),
+            None
+        ])
 
     def _custom(self, rule):
         def match_args(rule):
@@ -1068,14 +1081,9 @@ class Interpreter:
 
             defmacro __core_import(mod_expr, name_expr) do
                 quote !name_expr := (!mod_expr)() end
-            end;
+            end
             #rule {import: [__core_import, EXPR, as, EXPR, end]}
             #rule {from: [__core_import, EXPR, import, EXPR, end]}
-
-            defmacro __core_assert(cond_expr, exc_expr) do
-                quote if not !cond_expr then raise(!exc_expr) end end
-            end
-            #rule {assert: [__core_assert, EXPR, else, EXPR, end]}
         """)
 
         self._env = Environment(self._env)
