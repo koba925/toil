@@ -248,9 +248,9 @@ t.walk(r"""
                 case Ident('while') then self._while()
                 case Ident('for') then self._for()
                 case Ident('try') then self._try()
+                case Ident('assert') then self._assert()
                 case Ident('defclass') then self._defclass()
                 case Ident('defmethod') then self._defmethod()
-                case Ident('assert') then self._assert()
                 case Ident(name) then
                     assert name.is_ident() else
                         'Unexpected token @ primary(): ' + str(self._current_token())

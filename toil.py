@@ -252,6 +252,8 @@ class Parser:
             case Ident("while"): return self._while()
             case Ident("for"): return self._for()
             case Ident("try"): return self._try()
+            case Ident("defclass"): return self._defclass()
+            case Ident("defmethod"): return self._defmethod()
             case Ident("assert"): return self._assert()
             case Ident(name) if name in self._custom_rules:
                 return self._custom(self._custom_rules[name])
@@ -421,14 +423,66 @@ class Parser:
     def _assert(self):
         self._current_and_advance()
         cond_expr = self._expression()
-        self._consume(Ident('else'))
+        self._consume(Ident("else"))
         exc_expr = self._expression()
-        self._consume(Ident('end'))
-        return (Ident('if'), [
-            (Ident('not'), [cond_expr]),
-            (Ident('raise'), [exc_expr]),
+        self._consume(Ident("end"))
+        return (Ident("if"), [
+            (Ident("not"), [cond_expr]),
+            (Ident("raise"), [exc_expr]),
             None
         ])
+
+    def _defclass(self):
+        self._current_and_advance()
+        call_expr = self._expression()
+        self._consume(Ident("do"))
+        body_expr = self._expression()
+        self._consume(Ident("end"))
+
+        match call_expr:
+            case (name, args):
+                return (Ident("define"), [name,
+                    (Ident("func"), [args,
+                        (Ident("seq"), [
+                            (Ident("define"), [Ident("self"), {}]),
+                            body_expr,
+                            Ident("self")
+                        ])
+                    ])
+                ])
+            case Ident(name):
+                return (Ident("define"), [call_expr,
+                    (Ident("func"), [[],
+                        (Ident("seq"), [
+                            (Ident("define"), [Ident("self"), {}]),
+                            body_expr,
+                            Ident("self")
+                        ])
+                    ])
+                ])
+            case _:
+                assert False, f"Invalid defclass syntax @ _defclass(): {call_expr}"
+
+    def _defmethod(self):
+        self._current_and_advance()
+        call_expr = self._expression()
+        self._consume(Ident("do"))
+        body_expr = self._expression()
+        self._consume(Ident("end"))
+
+        match call_expr:
+            case(name, args):
+               return (Ident('assign'), [
+                   (Ident('dot'), [Ident('self'), str(name)]),
+                   (Ident('func'), [[Ident('self')] + args, body_expr])
+                ])
+            case Ident(name):
+               return (Ident('assign'), [
+                   (Ident('dot'), [Ident('self'), str(name)]),
+                   (Ident('func'), [[Ident('self')], body_expr])
+                ])
+            case _:
+                assert False, f"Invalid defmethod syntax @ _defclass(): {call_expr}"
 
     def _custom(self, rule):
         def match_args(rule):
@@ -608,6 +662,10 @@ class Evaluator:
                 return self.eval(expr, Environment(env))
             case (Ident("dot"), [target_expr, attr_expr]):
                 return self._dot(target_expr, attr_expr, env)
+            case (Ident("and"), [left_expr, right_expr]):
+                return self.eval(left_expr, env) and self.eval(right_expr, env)
+            case (Ident("or"), [left_expr, right_expr]):
+                return self.eval(left_expr, env) or self.eval(right_expr, env)
             case (op_expr, args_expr) if isinstance(expr, tuple):
                 return self._op(op_expr, args_expr, env)
             case unexpected:
@@ -947,8 +1005,6 @@ class Interpreter:
         self._gensym_counter = 0
         self._env = Environment()
         self._builtins()
-        self._corelib()
-
         return self
 
     def _builtins(self):
@@ -1008,8 +1064,6 @@ class Interpreter:
         self._env.define("Ident", lambda args: Ident(args[0]))
         self._env.define("tuple", lambda args: tuple(args))
 
-        self._env.define("gensym", lambda args: self._gensym(args))
-
         self._env.define("print", lambda args: print(*args))
 
         self._env = Environment(self._env)
@@ -1018,75 +1072,6 @@ class Interpreter:
         self._gensym_counter += 1
         name = args[0] if args else "gensym"
         return Ident(f"__{name}_{self._gensym_counter}")
-
-    def _corelib(self):
-        self.walk("""
-            __corelib := None;
-
-            #rule {macro: [__core_macro, EXPRS, do, EXPR, end]}
-
-            __core_defmacro := macro call_expr, body do
-                match call_expr
-                    case tuple(name, args) then
-                        quote !name := macro !!args do !body end end
-                    case Ident(name) then
-                        quote !call_expr := macro do !body end end
-                    case _ then
-                        raise("Invalid defmacro syntax")
-                end
-            end;
-            #rule {defmacro: [__core_defmacro, EXPR, do, EXPR, end]}
-
-            defmacro and(a, b) do
-                g := gensym('it'); quote if !g := !a then !b else !g end end
-            end;
-            defmacro or(a, b) do
-                g := gensym('it'); quote if !g := !a then !g else !b end end
-            end;
-
-            # Object oriented notations
-
-            defmacro inherits(super) do
-                quote self = !super end
-            end;
-
-            defmacro __core_defclass(call_expr, body) do
-                match call_expr
-                    case tuple(name, args) then
-                        quote def (!name)(!!args) do self := {}; !body; self end end
-                    case Ident(name) then
-                        quote def (!call_expr)() do self := {}; !body; self end end
-                    case _ then
-                        raise("Invalid defclass syntax")
-                end
-            end;
-            #rule {defclass: [__core_defclass, EXPR, do, EXPR, end]}
-
-            defmacro __core_defmethod(call_expr, body) do
-                match call_expr
-                    case tuple(name, args) then
-                        quote self[!str(name)] = func self, !!args do !body end end
-                    case Ident(name) then
-                        quote self[!str(name)] = func self do !body end end
-                    case _ then
-                        raise("Invalid defmethod syntax")
-                end
-            end;
-            #rule {defmethod: [__core_defmethod, EXPR, do, EXPR, end]}
-
-            defmacro __core_defmodule(name_expr, export_expr, body_expr) do
-                quote def !name_expr do !body_expr; !export_expr end end
-            end;
-            #rule {defmodule: [__core_defmodule, EXPR, export, EXPR, do, EXPR, end]}
-
-            defmacro __core_import(mod_expr, name_expr) do
-                quote !name_expr := (!mod_expr)() end
-            end
-            #rule {import: [__core_import, EXPR, as, EXPR, end]}
-            #rule {from: [__core_import, EXPR, import, EXPR, end]}
-        """)
-
-        self._env = Environment(self._env)
 
     def stdlib(self):
         self.walk("""

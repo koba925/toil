@@ -984,7 +984,7 @@ class TestToil:
             i.walk(""" defclass 2 do 2 end """)
         with pytest.raises(Exception, match="Expected do"):
             i.walk(""" defclass Foo(x) end """)
-        with pytest.raises(Exception, match="Expected end "):
+        with pytest.raises(Exception, match="Invalid defmethod syntax"):
             i.walk(""" defclass Foo do defmethod 2 do end end """)
 
     def test_defmethod_overloading(self):
