@@ -160,8 +160,8 @@ t.walk(r"""
             if self._current_token() == Ident('->') then
                 self._current_and_advance();
                 right := self._arrow();
-                params_ := if left.type() == 'list' then left else [left] end;
-                tuple(Ident('func'), [params_, right])
+                params := if left.type() == 'list' then left else [left] end;
+                tuple(Ident('func'), [params, right])
             else left end
         end;
 
@@ -772,16 +772,16 @@ t.walk(r"""
         defmethod apply(op_val, args_val) do
             match op_val
                 case tuple(Ident('hostfunc'), f) then f(args_val)
-                case tuple(Ident('closure'), [params_, body_expr, closure_env]) then
+                case tuple(Ident('closure'), [params, body_expr, closure_env]) then
                     new_env := Environment(closure_env);
-                    if self._match_pattern(params_, args_val, new_env) then
+                    if self._match_pattern(params, args_val, new_env) then
                         try
                             return(self.eval(body_expr, new_env))
                         except ['ReturnException', val] then
                             return(val)
                         end
                     end;
-                    raise('Pattern mismatch @ apply: ' + str(params_) + ', ' + str(args_val))
+                    raise('Pattern mismatch @ apply: ' + str(params) + ', ' + str(args_val))
                 case _ then raise('Invalid operator @ apply: ' + str(op_val))
             end
         end;
@@ -884,8 +884,6 @@ t.walk(r"""
         defmethod _builtins do
             def make_hostfunc(f) do tuple(Ident('hostfunc'), args -> f(args)) end;
 
-            self._env.define('__builtins', None);
-
             self._env.define('add', tuple(Ident('hostfunc'), args -> args[0] + args[1]));
             self._env.define('sub', tuple(Ident('hostfunc'), args -> args[0] - args[1]));
             self._env.define('mul', tuple(Ident('hostfunc'), args -> args[0] * args[1]));
@@ -909,8 +907,6 @@ t.walk(r"""
             self._env.define('in', tuple(Ident('hostfunc'), args -> in(args[0], args[1])));
             self._env.define('copy', tuple(Ident('hostfunc'), args -> copy(args[0])));
 
-            self._env.define('chr', tuple(Ident('hostfunc'), args -> chr(args[0])));
-            self._env.define('ord', tuple(Ident('hostfunc'), args -> ord(args[0])));
             self._env.define('join', tuple(Ident('hostfunc'), args -> join(args[0], args[1])));
 
             self._env.define('keys', tuple(Ident('hostfunc'), args -> keys(args[0])));
@@ -967,11 +963,6 @@ t.walk(r"""
                     i := 0; while i < la and i < lb do
                         push(z, [a[i], b[i]]); i = i + 1
                     then z end
-                end;
-
-                def reduce(a, f, init) do
-                    acc := init;
-                    for x in a do acc = f(acc, x) then acc end
                 end;
 
                 def reverse(a) do
@@ -1038,18 +1029,4 @@ if __name__ == "__main__":
 
     # Example
 
-    print(i.walk("""
-        a := [];
-        i := 0; while i < 3 do
-            i = i + 1; if i == 2 then continue end;
-            push(a, i)
-        then a end
-    """))
-
-    print(i.walk("""
-        a := [];
-        i := 0; while i < 3 do
-            if i == 1 then break end;
-            push(a, i); i = i + 1
-        then 1/0 else a end
-    """))
+    i.walk(""" print("hello, world") """)

@@ -983,7 +983,6 @@ class TestToil:
         assert i.walk(""" last(a) """) == 9
         assert i.walk(""" map(a, n -> n * 2) """) == [4, 6, 8, 10, 12, 14, 16, 18]
         assert i.walk(""" filter(a, n -> n % 2 == 0) """) == [2, 4, 6, 8]
-        assert i.walk(""" reduce(a, add, 0) """) == 44
         assert i.walk(""" reverse(a) """) == [9, 8, 7, 6, 5, 4, 3, 2]
         assert i.walk(""" reverse([]) """) == []
         assert i.walk(""" zip(a, [4, 5, 6]) """) == [[2, 4], [3, 5], [4, 6]]

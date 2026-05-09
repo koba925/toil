@@ -16,7 +16,6 @@ class Ident:
 Token = Ident | int | str | bool | None
 Expr = Any
 Inst = tuple
-Code = list[Inst]
 Value = Any
 SymbolTable = dict[str, Value]
 
@@ -344,12 +343,12 @@ class Parser:
         self._consume(Ident("do"))
         body_expr = self._expression()
         if self._current_token() == Ident("then"):
-            self._current_and_advance();
+            self._current_and_advance()
             then_expr = [self._expression()]
         else:
             then_expr = []
         if self._current_token() == Ident("else"):
-            self._current_and_advance();
+            self._current_and_advance()
             else_expr = [self._expression()]
         else:
             else_expr = []
@@ -364,7 +363,7 @@ class Parser:
         self._consume(Ident("do"))
         body_expr = self._expression();
         if self._current_token() == Ident("then"):
-            self._current_and_advance();
+            self._current_and_advance()
             then_expr = [self._expression()]
         else:
             then_expr = []
@@ -441,14 +440,14 @@ class Parser:
 
         match call_expr:
             case(name, args):
-               return (Ident('assign'), [
-                   (Ident('dot'), [Ident('self'), str(name)]),
-                   (Ident('func'), [[Ident('self')] + args, body_expr])
+                return (Ident('assign'), [
+                    (Ident('dot'), [Ident('self'), str(name)]),
+                    (Ident('func'), [[Ident('self')] + args, body_expr])
                 ])
             case Ident(name):
-               return (Ident('assign'), [
-                   (Ident('dot'), [Ident('self'), str(name)]),
-                   (Ident('func'), [[Ident('self')], body_expr])
+                return (Ident('assign'), [
+                    (Ident('dot'), [Ident('self'), str(name)]),
+                    (Ident('func'), [[Ident('self')], body_expr])
                 ])
             case _:
                 assert False, f"Invalid defmethod syntax @ _defclass(): {call_expr}"
@@ -793,64 +792,6 @@ class Evaluator:
             case _:
                 return type(pattern) is type(value) and pattern == value
 
-class Compiler:
-    def __init__(self):
-        self._code = []
-
-    def compile(self,expr: Expr) -> Code:
-        self._code = []
-        self._expression(expr)
-        self._code.append(("halt",))
-        return self._code
-
-    def _expression(self, expr):
-        match expr:
-            case None | bool() | int() | str():
-                self._code.append(("const", expr))
-            case (Ident("seq"), exprs): self._seq(exprs)
-            case (Ident("print"), [expr]):
-                self._expression(expr)
-                self._code.append(("print",))
-            case (Ident(op), [left, right]) if op in ("add", "mul", "equal"):
-                self._expression(left)
-                self._expression(right)
-                self._code.append((op,))
-            case _:
-                assert False, f"Unsupported expression @ compile(): {expr}"
-
-    def _seq(self, exprs):
-        assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
-        for expr in exprs[:-1]:
-            self._expression(expr)
-            self._code.append(("pop",))
-        self._expression(exprs[-1])
-
-class VM:
-    def __init__(self):
-        self._code = []
-        self._ip = 0
-        self._stack = []
-
-    def load(self, code: Code) -> None:
-        self._code = code
-        self._ip = 0
-
-    def execute(self) -> Value:
-        while True:
-            inst = self._code[self._ip]; self._ip += 1
-            match inst:
-                case ("halt",): break
-                case ("const", val): self._stack.append(val)
-                case ("pop",): self._stack.pop()
-                case ("add",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l + r)
-                case ("mul",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l * r)
-                case ("equal",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l == r)
-                case ("print",): val = self._stack.pop(); print(val); self._stack.append(None)
-                case _:
-                    assert False, f"Invalid instruction @ execute(): {inst}"
-        assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
-        return self._stack.pop()
-
 
 class Interpreter:
     def __init__(self):
@@ -891,8 +832,6 @@ class Interpreter:
         self._env.define("in", lambda args: args[0] in args[1])
         self._env.define("copy", lambda args: args[0].copy())
 
-        self._env.define("chr", lambda args: chr(args[0]))
-        self._env.define("ord", lambda args: ord(args[0]))
         self._env.define("join", lambda args: str(args[1]).join(map(str, args[0])))
 
         self._env.define("keys", lambda args: list(args[0].keys()))
@@ -948,11 +887,6 @@ class Interpreter:
                 then z end
             end;
 
-            def reduce(a, f, init) do
-                acc := init;
-                for x in a do acc = f(acc, x) then acc end
-            end;
-
             def reverse(a) do
                 b := []; l := len(a);
                 for i in range(1, l + 1, 1) do push(b, a[l - i]) then b end
@@ -987,26 +921,13 @@ class Interpreter:
         try:
             return Evaluator().eval(ast, self._env)
         except ToilException as e: assert False, f"ToilException @ evaluate(): {e.e}"
-        except ReturnException as e: assert False, f"Return from top level @ evaluate(): {e.val}"
+        except ReturnException as e:
+            assert False, f"Return from top level @ evaluate(): {e.val}"
         except ContinueException: assert False, "Continue at top level @ evaluate()"
         except BreakException: assert False, f"Break at top level @ evaluate()"
 
     def walk(self, src: str) -> Value:
         return self.eval(self.ast(src))
-
-    def compile(self, ast: Expr) -> Code:
-        return Compiler().compile(ast)
-
-    def code(self, src: str) -> Code:
-        return self.compile(self.ast(src))
-
-    def execute(self, code: Code) -> Value:
-        vm = VM()
-        vm.load(code)
-        return vm.execute()
-
-    def run(self, src: str) -> Value:
-        return self.execute(self.code(src))
 
 
 if __name__ == "__main__":
@@ -1014,58 +935,29 @@ if __name__ == "__main__":
 
     i = Interpreter().init_env().stdlib()
 
-    def repl(walk_or_run):
+    def repl():
         while True:
             print("\nInput source and enter Ctrl+D:")
-            if (src := sys.stdin.read()) == "":
-                exit(0)
+            if (src := sys.stdin.read()) == "": exit(0)
             try:
                 expr = i.ast(src)
                 print("AST:", expr, sep="\n")
-                if walk_or_run == "walk":
-                    print("Output:")
-                    result = i.eval(expr)
-                else:
-                    code = i.code(src)
-                    print("Code:", code, "Output:", sep="\n")
-                    result = i.execute(code)
+                print("Output:")
+                result = i.eval(expr)
                 print("Result:", result, sep="\n")
             except AssertionError as e:
                 print("Error:", e, sep="\n")
 
-    def go_file(walk_or_run, filename):
-        with open(filename, "r") as f:
-            if walk_or_run == "walk":
-                result = i.walk(f.read())
-            else:
-                result = i.run(f.read())
+    def walk_file(filename):
+        with open(filename, "r") as f: result = i.walk(f.read())
         exit(result if isinstance(result, int) else 0)
 
     if len(sys.argv) > 1:
-        match sys.argv[1]:
-            case "--repl": repl("walk")
-            case "--rcepl": repl("run")
-            case "--walk": go_file("walk", sys.argv[2])
-            case "--run": go_file("run", sys.argv[2])
-
-    def print_code(code):
-        for addr, inst in enumerate(code):
-            print(f"{addr:3}: {list(inst)}")
+        if sys.argv[1] == "--repl":
+            repl()
+        else:
+            walk_file(sys.argv[1])
 
     # Example
 
-    print(i.walk("""
-        a := [];
-        i := 0; while i < 3 do
-            i = i + 1; if i == 2 then continue end;
-            push(a, i)
-        then a end
-    """))
-
-    print(i.walk("""
-        a := [];
-        i := 0; while i < 3 do
-            if i == 1 then break end;
-            push(a, i); i = i + 1
-        then 1/0 else a end
-    """))
+    i.walk(""" print("hello, world") """)

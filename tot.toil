@@ -866,8 +866,6 @@ defclass Interpreter do
     defmethod _builtins do
         def make_hostfunc(f) do tuple(Ident('hostfunc'), args -> f(args)) end;
 
-        self._env.define('__builtins', None);
-
         self._env.define('add', tuple(Ident('hostfunc'), args -> args[0] + args[1]));
         self._env.define('sub', tuple(Ident('hostfunc'), args -> args[0] - args[1]));
         self._env.define('mul', tuple(Ident('hostfunc'), args -> args[0] * args[1]));
@@ -891,8 +889,6 @@ defclass Interpreter do
         self._env.define('in', tuple(Ident('hostfunc'), args -> in(args[0], args[1])));
         self._env.define('copy', tuple(Ident('hostfunc'), args -> copy(args[0])));
 
-        self._env.define('chr', tuple(Ident('hostfunc'), args -> chr(args[0])));
-        self._env.define('ord', tuple(Ident('hostfunc'), args -> ord(args[0])));
         self._env.define('join', tuple(Ident('hostfunc'), args -> join(args[0], args[1])));
 
         self._env.define('keys', tuple(Ident('hostfunc'), args -> keys(args[0])));
@@ -949,11 +945,6 @@ defclass Interpreter do
                 i := 0; while i < la and i < lb do
                     push(z, [a[i], b[i]]); i = i + 1
                 then z end
-            end;
-
-            def reduce(a, f, init) do
-                acc := init;
-                for x in a do acc = f(acc, x) then acc end
             end;
 
             def reverse(a) do
