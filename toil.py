@@ -2,20 +2,19 @@
 
 from typing import Any
 
-
 class Ident:
     __match_args__ = ("name",)
 
-    def __init__(self, name: str): self.name = name
+    def __init__(self, name: str) -> None: self.name = name
     def __hash__(self): return hash(self.name)
     def __repr__(self): return self.name
     def __str__(self): return self.name
     def __eq__(self, other):
         return isinstance(other, Ident) and self.name == other.name
 
+Source = str
 Token = Ident | int | str | bool | None
 Expr = Any
-Inst = tuple
 Value = Any
 SymbolTable = dict[str, Value]
 
@@ -27,15 +26,14 @@ def toil_type(expr): return type(expr).__name__
 
 
 class Scanner:
-    def __init__(self, src):
+    def __init__(self, src: Source) -> None:
         self._src = src
         self._pos = 0
         self._tokens: list[Token] = []
 
     def tokenize(self) -> list[Token]:
         while True:
-            while self._current_char().isspace():
-                self._advance()
+            while self._current_char().isspace(): self._advance()
 
             if self._current_char() == "#":
                 while self._current_char() not in ("\n", "$EOF"):
@@ -46,20 +44,14 @@ class Scanner:
                 case "$EOF":
                     self._tokens.append(Ident("$EOF"))
                     break
-                case ch if ch.isnumeric():
-                    self._number()
-                case "'":
-                    self._raw_string()
-                case "\"":
-                    self._string()
-                case c if is_ident_first(c):
-                    self._ident()
-                case ch if ch in "=!<>:":
-                    self._two_char_operator("=")
-                case "-":
-                    self._two_char_operator(">")
-                case ch if ch in "+*/%()[]{}.;,":
-                    self._tokens.append(Ident(ch))
+                case c if c.isnumeric(): self._number()
+                case "'": self._raw_string()
+                case "\"": self._string()
+                case c if is_ident_first(c): self._ident()
+                case "-": self._two_char_operator(">")
+                case c if c in "=!<>:": self._two_char_operator("=")
+                case c if c in "+*/%()[]{}.,;":
+                    self._tokens.append(Ident(c))
                     self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
@@ -68,8 +60,7 @@ class Scanner:
 
     def _number(self):
         start = self._pos
-        while self._current_char().isnumeric():
-            self._advance()
+        while self._current_char().isnumeric(): self._advance()
         self._tokens.append(int(self._src[start:self._pos]))
 
     def _raw_string(self):
@@ -84,7 +75,7 @@ class Scanner:
     def _string(self):
         self._advance()
         s = []
-        while (c := self._current_char()) != "\"":
+        while (c := self._current_char()) != '"':
             assert c != "$EOF", f"Unterminated string @ _string()"
             if c == "\\":
                 self._advance()
@@ -102,8 +93,7 @@ class Scanner:
     def _ident(self):
         start = self._pos
         self._advance()
-        while is_ident_rest(self._current_char()):
-            self._advance()
+        while is_ident_rest(self._current_char()): self._advance()
         token = self._src[start:self._pos]
         match token:
             case "None": self._tokens.append(None)
@@ -114,12 +104,10 @@ class Scanner:
     def _two_char_operator(self, successors):
         start = self._pos
         self._advance()
-        if self._current_char() in successors:
-            self._advance()
+        if self._current_char() in successors: self._advance()
         self._tokens.append(Ident(self._src[start:self._pos]))
 
-    def _advance(self):
-        self._pos += 1
+    def _advance(self): self._pos += 1
 
     def _current_char(self):
         if self._pos < len(self._src):
@@ -129,7 +117,7 @@ class Scanner:
 
 
 class Parser:
-    def __init__(self, tokens: list[Token]):
+    def __init__(self, tokens: list[Token]) -> None:
         self._tokens = tokens
         self._pos = 0
 
@@ -139,8 +127,7 @@ class Parser:
             f"Extra token @ parse(): {self._current_token()}"
         return expr
 
-    def _expression(self):
-        return self._sequence()
+    def _expression(self): return self._sequence()
 
     def _sequence(self):
         exprs = [self._define_assign()]
@@ -158,9 +145,9 @@ class Parser:
         left = self._and_or()
         if self._current_token() == Ident("->"):
             self._current_and_advance()
-            right = self._arrow()
+            body_expr = self._arrow()
             params = left if isinstance(left, list) else [left]
-            return (Ident("func"), [params, right])
+            return (Ident("func"), [params, body_expr])
         return left
 
     def _and_or(self):
@@ -195,19 +182,17 @@ class Parser:
 
     def _call_index_dot(self):
         target = self._primary()
-        while self._current_token() in (Ident("("), Ident("["), Ident(".")):
-            match self._current_token():
+        while (op := self._current_token()) in (Ident("("), Ident("["), Ident(".")):
+            self._current_and_advance()
+            match op:
                 case Ident("("):
-                    self._current_and_advance()
                     target = (target, self._comma_separated_exprs(Ident(")")))
                     self._consume(Ident(")"))
                 case Ident("["):
-                    self._current_and_advance()
                     index = self._expression()
                     self._consume(Ident("]"))
                     target = (Ident("index"), [target, index])
                 case Ident("."):
-                    self._current_and_advance()
                     attr_name = self._current_and_advance()
                     assert type(attr_name) is Ident, \
                         f"Invalid attribute @ _call_index_dot(): {self._current_token()}"
@@ -228,9 +213,9 @@ class Parser:
             case Ident("while"): return self._while()
             case Ident("for"): return self._for()
             case Ident("try"): return self._try()
+            case Ident("assert"): return self._assert()
             case Ident("defclass"): return self._defclass()
             case Ident("defmethod"): return self._defmethod()
-            case Ident("assert"): return self._assert()
             case Ident(name) if is_ident(name): return self._current_and_advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
@@ -252,10 +237,7 @@ class Parser:
             match self._current_token():
                 case Ident("*"):
                     self._current_and_advance()
-                    rest_name = self._current_and_advance()
-                    assert isinstance(rest_name, Ident), \
-                        f"Expected rest pattern name @ _dict(): {rest_name}"
-                    dic["*"] = rest_name
+                    dic["*"] = self._current_and_advance()
                 case Ident(key):
                     self._current_and_advance()
                     if self._current_token() == Ident(":"):
@@ -295,8 +277,8 @@ class Parser:
         body_expr = self._expression()
         self._consume(Ident("end"))
         match call_expr:
-            case (name, args) if isinstance(call_expr, tuple):
-                return (Ident("define"), [name, (Ident("func"), [args, body_expr])])
+            case (name, params) if isinstance(call_expr, tuple):
+                return (Ident("define"), [name, (Ident("func"), [params, body_expr])])
             case Ident(name):
                 return (Ident("define"), [call_expr, (Ident("func"), [[], body_expr])])
             case _:
@@ -450,12 +432,11 @@ class Parser:
                     (Ident('func'), [[Ident('self')], body_expr])
                 ])
             case _:
-                assert False, f"Invalid defmethod syntax @ _defclass(): {call_expr}"
+                assert False, f"Invalid defmethod syntax @ _defmethod(): {call_expr}"
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
-        while type(self._current_token()) is Ident and \
-                (op := self._current_token()) in ops:
+        while type(op := self._current_token()) is Ident and op in ops:
             self._current_and_advance()
             right = sub_elem()
             left = (ops[op], [left, right])
@@ -489,19 +470,18 @@ class Parser:
 
     def _consume(self, expected):
         assert self._current_token() == expected, \
-            f"Expected {expected} @ consume: {self._current_token()}"
+            f"Expected {expected} @ _consume(): {self._current_token()}"
         return self._current_and_advance()
 
-    def _current_token(self):
-        return self._tokens[self._pos]
+    def _current_token(self): return self._tokens[self._pos]
 
     def _current_and_advance(self):
         self._pos += 1
         return self._tokens[self._pos - 1]
 
 
-class Environment(dict):
-    def __init__(self, parent=None):
+class Environment:
+    def __init__(self, parent: 'Environment | None' = None) -> None:
         self._parent = parent
         self._vars = {}
 
@@ -511,24 +491,21 @@ class Environment(dict):
                   ", ".join(self._vars)
         return f"[{content}]" + (f" < {self._parent}" if self._parent else "")
 
-    def define(self, name: str, val):
+    def define(self, name: str, val: Value) -> Value:
         self._vars[name] = val
         return val
 
-    def lookup(self, name: str):
-        if name in self._vars:
-            return self._vars
-        elif self._parent is not None:
-            return self._parent.lookup(name)
-        else:
-            return None
+    def lookup(self, name: str) -> SymbolTable | None:
+        if name in self._vars: return self._vars
+        elif self._parent is not None: return self._parent.lookup(name)
+        else: return None
 
-    def val(self, name: str):
+    def val(self, name: str) -> Value:
         vars = self.lookup(name)
         assert vars is not None, f"Undefined variable @ val(): {name}"
         return vars[name]
 
-    def assign(self, name: str, val):
+    def assign(self, name: str, val: Value) -> Value:
         vars = self.lookup(name)
         assert vars is not None, f"Undefined variable @ assign(): {name}"
         vars[name] = val
@@ -536,11 +513,10 @@ class Environment(dict):
 
 
 class ToilException(Exception):
-    def __init__(self, e=None):
-        self.e = e
+    def __init__(self, e: Value = None) -> None: self.e = e
 
 class ReturnException(Exception):
-    def __init__(self, val=None): self.val = val
+    def __init__(self, val: Value = None) -> None: self.val = val
 
 class ContinueException(Exception): pass
 class BreakException(Exception): pass
@@ -551,31 +527,29 @@ class Evaluator:
         match expr:
             case None | bool() | int() | str():
                 return expr
-            case exprs if type(exprs) is list:
+            case list() as exprs:
                 return [self.eval(expr, env) for expr in exprs]
-            case exprs if type(exprs) is dict:
+            case dict() as exprs:
                 return {key: self.eval(val, env) for key, val in exprs.items()}
             case Ident("continue"): raise ContinueException()
             case Ident("break"): raise BreakException()
             case Ident(name): return env.val(name)
-            case (Ident("func"), [params, body]):
-                return (Ident("closure"), [params, body, env])
+            case (Ident("func"), [params, body_expr]):
+                return (Ident("closure"), [params, body_expr, env])
             case (Ident("return"), args):
-                assert len(args) <= 1, \
-                    f"Return takes zero or one argument @ evaluate(): {args}"
                 raise ReturnException(self.eval(args[0], env) if args else None)
             case (Ident("define"), [left_expr, right_expr]):
                 return self._define(left_expr, right_expr, env)
             case (Ident("assign"), [left_expr, right_expr]):
                 return self._assign(left_expr, right_expr, env)
-            case (Ident("scope"), [expr]):
-                return self.eval(expr, Environment(env))
+            case (Ident("scope"), [body_expr]):
+                return self.eval(body_expr, Environment(env))
             case (Ident("seq"), exprs):
                 return self._seq(exprs, env)
             case (Ident("if"), [cond_expr, then_expr, else_expr]):
                 return self._if(cond_expr, then_expr, else_expr, env)
-            case (Ident("match"), [val_expr, cases_expr]):
-                return self._match(val_expr, cases_expr, env)
+            case (Ident("match"), [val_expr, cases]):
+                return self._match(val_expr, cases, env)
             case (Ident("and"), [left_expr, right_expr]):
                 return self.eval(left_expr, env) and self.eval(right_expr, env)
             case (Ident("or"), [left_expr, right_expr]):
@@ -584,14 +558,12 @@ class Evaluator:
                 return self._while(cond_expr, body_expr, then_expr, else_expr, env)
             case (Ident("for"), [var_expr, coll_expr, body_expr, then_expr, else_expr]):
                 return self._for(var_expr, coll_expr, body_expr, then_expr, else_expr, env)
-            case (Ident("try"), [body_expr, clauses_expr]):
-                return self._try(body_expr, clauses_expr, env)
+            case (Ident("try"), [body_expr, clauses]):
+                return self._try(body_expr, clauses, env)
             case (Ident("raise"), args):
-                assert len(args) <= 1, \
-                    f"Raise takes zero or one argument @ evaluate(): {args}"
                 raise ToilException(self.eval(args[0], env) if args else None)
-            case (Ident("dot"), [target_expr, attr_expr]):
-                return self._dot(target_expr, attr_expr, env)
+            case (Ident("dot"), [target_expr, attr_name]):
+                return self._dot(target_expr, attr_name, env)
             case (op_expr, args_expr) if isinstance(expr, tuple):
                 return self._op(op_expr, args_expr, env)
             case unexpected:
@@ -612,13 +584,7 @@ class Evaluator:
                  (Ident("dot"), [coll_expr, index_expr]):
                 coll_val = self.eval(coll_expr, env)
                 index_val = self.eval(index_expr, env)
-                match coll_val, index_val:
-                    case list(), int():
-                        coll_val[index_val] = right_val
-                    case dict(), str():
-                        coll_val[index_val] = right_val
-                    case _:
-                        assert False, f"Invalid indexing @ _assign(): {coll_val}, {index_val}"
+                coll_val[index_val] = right_val
                 return right_val
             case unexpected:
                 assert False, f"Invalid assign target @ _assign(): {unexpected}"
@@ -635,9 +601,9 @@ class Evaluator:
         else:
             return self.eval(else_expr, env)
 
-    def _match(self, val_expr, cases_expr, env):
+    def _match(self, val_expr, cases, env):
         val = self.eval(val_expr, env)
-        for pattern, body_expr in cases_expr:
+        for pattern, body_expr in cases:
             if self._match_pattern(pattern, val, env):
                 return self.eval(body_expr, env)
         return None
@@ -648,14 +614,14 @@ class Evaluator:
                 self.eval(body_expr, env)
             except ContinueException: continue
             except BreakException:
-                return None if else_expr == [] else self.eval(else_expr[0], env)
-        return None if then_expr == [] else self.eval(then_expr[0], env)
+                return self._eval_optional_arg(else_expr, env)
+        return self._eval_optional_arg(then_expr, env)
 
-    def _for(self, var_expr, coll_expr, body_expr, then_expr, else_expr, env):
+    def _for(self, var_pat, coll_expr, body_expr, then_expr, else_expr, env):
         coll_val = self.eval(coll_expr, env)
         for val in coll_val:
-            assert self._match_pattern(var_expr, val, env), \
-                "Pattern mismatch @ _for: " + str(var_expr) + ", " + str(val)
+            assert self._match_pattern(var_pat, val, env), \
+                "Pattern mismatch @ _for(): " + str(var_pat) + ", " + str(val)
             try:
                 self.eval(body_expr, env)
             except ContinueException: continue
@@ -666,46 +632,42 @@ class Evaluator:
     def _eval_optional_arg(self, args, env):
         return None if len(args) == 0 else self.eval(args[0], env)
 
-    def _try(self, body_expr, clauses_expr, env):
+    def _try(self, body_expr, clauses, env):
         try:
             return self.eval(body_expr, env)
-        except ToilException as toil_exception:
-            for cond_expr, except_expr in clauses_expr:
-                if self._match_pattern(cond_expr, toil_exception.e, env):
+        except ToilException as e:
+            for cond_expr, except_expr in clauses:
+                if self._match_pattern(cond_expr, e.e, env):
                     return self.eval(except_expr, env)
-            raise toil_exception
+            raise e
 
-    def _dot(self, target_expr, attr_expr, env):
+    def _dot(self, target_expr, attr_name, env):
         target_val = self.eval(target_expr, env)
         match target_val:
-            case dict() if attr_expr in target_val:
-                attr_val = target_val[attr_expr]
-                match attr_val:
+            case dict() if attr_name in target_val:
+                func_val = target_val[attr_name]
+                match func_val:
                     case (Ident("closure"), [[Ident("self"), *_], _, _]):
-                        return lambda args: self.apply(attr_val, [target_val] + args)
-                return attr_val
+                        return lambda args: self.apply(func_val, [target_val] + args)
+                return func_val
 
-        attr_val = env.val(attr_expr)
-        match attr_val:
-            case c if callable(c):
-                return lambda args: c([target_val] + args)
-            case (Ident("closure"), [_, _, _]):
-                return lambda args: self.apply(attr_val, [target_val] + args)
+        func_val = env.val(attr_name)
+        return lambda args: self.apply(func_val, [target_val] + args)
 
     def _op(self, op_expr, args_expr, env):
         op_val = self.eval(op_expr, env)
         args_val = [self.eval(arg, env) for arg in args_expr]
         return self.apply(op_val, args_val)
 
-    def apply(self, op_val, args_val):
+    def apply(self, op_val: Value, args_val: list[Value]) -> Value:
         match op_val:
             case c if callable(c):
                 return c(args_val)
-            case (Ident("closure"), [params, body, closure_env]):
+            case (Ident("closure"), [params, body_expr, closure_env]):
                 new_env = Environment(closure_env)
                 if self._match_pattern(params, args_val, new_env):
                     try:
-                        return self.eval(body, new_env)
+                        return self.eval(body_expr, new_env)
                     except ReturnException as e: return e.val
                 assert False, f"Pattern mismatch @ apply(): {params}, {args_val}"
             case _:
@@ -748,23 +710,18 @@ class Evaluator:
             return True
 
         def _match_dict():
-            rest_name = pattern.get("*")
+            tmp_pat, tmp_val = pattern.copy(), value.copy()
 
-            fixed_patterns = pattern.copy()
-            remaining_values = value.copy()
+            rest_name = tmp_pat.get("*")
+            if rest_name is not None: tmp_pat.pop("*")
 
-            if rest_name is not None:
-                fixed_patterns.pop("*")
-
-            for key, sub_pattern in fixed_patterns.items():
-                if key not in remaining_values:
+            for key, sub_pattern in tmp_pat.items():
+                if key not in tmp_val: return False
+                if not self._match_pattern(sub_pattern, tmp_val[key], env):
                     return False
-                if not self._match_pattern(sub_pattern, remaining_values[key], env):
-                    return False
-                remaining_values.pop(key)
+                tmp_val.pop(key)
 
-            if rest_name is not None:
-                env.define(rest_name.name, remaining_values)
+            if rest_name is not None: env.define(rest_name.name, tmp_val)
             return True
 
         match pattern:
@@ -787,21 +744,17 @@ class Evaluator:
                     all(self._match_pattern(p, v, env) for p, v in zip(expr_pats, value))
                 )
             case (Ident(typ), [val_pat]):
-                if toil_type(value) != typ: return False
-                return self._match_pattern(val_pat, value, env)
+                return toil_type(value) == typ and \
+                    self._match_pattern(val_pat, value, env)
             case _:
                 return type(pattern) is type(value) and pattern == value
 
 
 class Interpreter:
-    def __init__(self):
+    def __init__(self) -> None:
         self._env = Environment()
 
-    def _load(self, path):
-        with open(path, "r") as f: src = f.read()
-        return Evaluator().eval(self.ast(src), Environment(self._env))
-
-    def init_env(self):
+    def init_env(self) -> 'Interpreter':
         self._env = Environment()
         self._builtins()
         return self
@@ -857,7 +810,7 @@ class Interpreter:
 
         self._env = Environment(self._env)
 
-    def stdlib(self):
+    def stdlib(self) -> 'Interpreter':
         self.walk("""
             __stdlib := None;
 
@@ -908,13 +861,17 @@ class Interpreter:
         self._env = Environment(self._env)
         return self
 
-    def scan(self, src: str) -> list[Token]:
+    def _load(self, path):
+        with open(path, "r") as f: src = f.read()
+        return Evaluator().eval(self.ast(src), Environment(self._env))
+
+    def scan(self, src: Source) -> list[Token]:
         return Scanner(src).tokenize()
 
     def parse(self, tokens: list[Token]) -> Expr:
         return Parser(tokens).parse()
 
-    def ast(self, src: str) -> Expr:
+    def ast(self, src: Source) -> Expr:
         return self.parse(self.scan(src))
 
     def eval(self, ast: Expr) -> Value:
@@ -926,7 +883,7 @@ class Interpreter:
         except ContinueException: assert False, "Continue at top level @ evaluate()"
         except BreakException: assert False, f"Break at top level @ evaluate()"
 
-    def walk(self, src: str) -> Value:
+    def walk(self, src: Source) -> Value:
         return self.eval(self.ast(src))
 
 

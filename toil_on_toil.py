@@ -32,32 +32,30 @@ t.walk(r"""
                 while self._current_char().isspace() do self._advance() end;
 
                 if self._current_char() == '#' then
-                    while not self._current_char().in("\n", '$EOF') do
+                    while not self._current_char().in(["\n", '$EOF']) do
                         self._advance()
                     end;
                     continue
                 end;
 
-                ch := self._current_char();
-                if ch == '$EOF' then self._tokens.push(Ident('$EOF')); break
-                elif ch.isdigit() then self._number()
-                elif ch == "'" then self._raw_string()
-                elif ch == '"' then self._string()
-                elif ch.is_ident_first() then self._ident()
-                elif ch == '-' then self._two_char_operator('>')
-                elif ch.in('=!<>:') then self._two_char_operator('=')
-                elif ch.in('+*/%()[]{}.,;') then
-                    self._tokens.push(Ident(ch)); self._advance()
-                else raise('Invalid character @ tokenize: ' + ch)
+                c := self._current_char();
+                if c == '$EOF' then self._tokens.push(Ident('$EOF')); break
+                elif c.isdigit() then self._number()
+                elif c == "'" then self._raw_string()
+                elif c == '"' then self._string()
+                elif c.is_ident_first() then self._ident()
+                elif c == '-' then self._two_char_operator('>')
+                elif c.in('=!<>:') then self._two_char_operator('=')
+                elif c.in('+*/%()[]{}.,;') then
+                    self._tokens.push(Ident(c)); self._advance()
+                else raise('Invalid character @ tokenize(): ' + c)
                 end
             else self._tokens end
         end;
 
         defmethod _number do
             start := self._pos;
-            while self._current_char().isdigit() do
-                self._advance()
-            end;
+            while self._current_char().isdigit() do self._advance() end;
             self._tokens.push(int(self._src.slice(start, self._pos)))
         end;
 
@@ -75,17 +73,17 @@ t.walk(r"""
         defmethod _string do
             self._advance();
             s := [];
-            while (ch := self._current_char()) != '"' do
-                assert ch != '$EOF' else 'Unterminated string @ _string()' end;
-                if ch == '\' then
+            while (c := self._current_char()) != '"' do
+                assert c != '$EOF' else 'Unterminated string @ _string()' end;
+                if c == '\' then
                     self._advance();
-                    ch := self._current_char();
-                    assert ch != '$EOF' else 'Unterminated string @ _string()' end;
-                    match ch
+                    c := self._current_char();
+                    assert c != '$EOF' else 'Unterminated string @ _string()' end;
+                    match c
                         case 'n' then s.push("\n")
-                        case _ then s.push(ch)
+                        case _ then s.push(c)
                     end
-                else s.push(ch) end;
+                else s.push(c) end;
                 self._advance()
             end;
             self._advance();
@@ -133,7 +131,7 @@ t.walk(r"""
             # print(self._tokens);
             expr := self._expression();
             assert self._current_token() == Ident('$EOF') else
-                'Extra token @ parse: ' + str(self._current_token())
+                'Extra token @ parse(): ' + str(self._current_token())
             end;
             expr
         end;
@@ -159,16 +157,14 @@ t.walk(r"""
             left := self._and_or();
             if self._current_token() == Ident('->') then
                 self._current_and_advance();
-                right := self._arrow();
+                body_expr := self._arrow();
                 params := if left.type() == 'list' then left else [left] end;
-                tuple(Ident('func'), [params, right])
+                tuple(Ident('func'), [params, body_expr])
             else left end
         end;
 
         defmethod _and_or do
-            self._binary_right({
-                'and': Ident('and'), 'or': Ident('or')
-            }, self._not)
+            self._binary_right({ 'and': Ident('and'), 'or': Ident('or') }, self._not)
         end;
 
         defmethod _not do
@@ -206,21 +202,20 @@ t.walk(r"""
             while (op := self._current_token()).in([
                 Ident('('), Ident('['), Ident('.')
             ]) do
-                if op == Ident('(') then
-                    self._current_and_advance();
-                    target = tuple(target, self._comma_separated_exprs(Ident(')')));
-                    self._consume(Ident(')'))
-                elif op == Ident('[') then
-                    self._current_and_advance();
-                    target = tuple(Ident('index'), [target, self._expression()]);
-                    self._consume(Ident(']'))
-                else
-                    self._current_and_advance();
-                    attr_name := self._current_and_advance();
-                    assert attr_name.type() == 'Ident' else
-                        'Invalid attribute @ _call_index_dot(): ' + str(attr_name)
-                    end;
-                    target = tuple(Ident('dot'), [target, str(attr_name)])
+                self._current_and_advance();
+                match op
+                    case Ident('(') then
+                        target = tuple(target, self._comma_separated_exprs(Ident(')')));
+                        self._consume(Ident(')'))
+                    case Ident('[') then
+                        target = tuple(Ident('index'), [target, self._expression()]);
+                        self._consume(Ident(']'))
+                    case Ident('.') then
+                        attr_name := self._current_and_advance();
+                        assert attr_name.type() == 'Ident' else
+                            'Invalid attribute @ _call_index_dot(): ' + str(attr_name)
+                        end;
+                        target = tuple(Ident('dot'), [target, str(attr_name)])
                 end
             end;
             target
@@ -246,11 +241,11 @@ t.walk(r"""
                 case Ident('defmethod') then self._defmethod()
                 case Ident(name) then
                     assert name.is_ident() else
-                        'Unexpected token @ primary(): ' + str(self._current_token())
+                        'Unexpected token @ _primary(): ' + str(self._current_token())
                     end;
                     self._current_and_advance()
-                case _ then
-                    raise('Unexpected token: @ primary(): ' + str(self._current_token()))
+                case unexpected then
+                    raise('Unexpected token @ _primary(): ' + str(unexpected))
             end
         end;
 
@@ -286,8 +281,8 @@ t.walk(r"""
                         self._current_and_advance();
                         self._consume(Ident(':'));
                         dic[key] = self._expression()
-                    case _ then
-                        raise('Invalid key @ _dict(): ' + str(self._current_token()))
+                    case invalid then
+                        raise('Invalid key @ _dict(): ' + str(invalid))
                 end
             end;
 
@@ -320,8 +315,8 @@ t.walk(r"""
             body_expr := self._expression();
             self._consume(Ident('end'));
             match call_expr
-                case tuple(name, args) then
-                    tuple(Ident('define'), [name, tuple(Ident('func'), [args, body_expr])])
+                case tuple(name, params) then
+                    tuple(Ident('define'), [name, tuple(Ident('func'), [params, body_expr])])
                 case Ident(name) then
                     tuple(Ident('define'), [call_expr, tuple(Ident('func'), [[], body_expr])])
                 case _ then
@@ -442,8 +437,7 @@ t.walk(r"""
 
             match call_expr
                 case tuple(name, args) then
-                    tuple(Ident('define'), [
-                        name,
+                    tuple(Ident('define'), [name,
                         tuple(Ident('func'), [
                             args,
                             tuple(Ident('seq'), [
@@ -454,8 +448,7 @@ t.walk(r"""
                         ])
                     ])
                 case Ident(name) then
-                    tuple(Ident('define'), [
-                        call_expr,
+                    tuple(Ident('define'), [call_expr,
                         tuple(Ident('func'), [
                             [],
                             tuple(Ident('seq'), [
@@ -499,8 +492,7 @@ t.walk(r"""
                 self._current_and_advance();
                 right := sub_elem();
                 left = tuple(ops[str(op)], [left, right])
-            end;
-            left
+            then left end
         end;
 
         defmethod _binary_right(ops, sub_elem) do
@@ -509,18 +501,14 @@ t.walk(r"""
                 self._current_and_advance();
                 right := self._binary_right(ops, sub_elem);
                 tuple(ops[str(op)], [left, right])
-            else
-                left
-            end
+            else left end
         end;
 
         defmethod _unary(ops, sub_elem) do
             if type(op := self._current_token()) == 'Ident' and str(op).in(ops) then
                 self._current_and_advance();
                 tuple(ops[str(op)], [self._unary(ops, sub_elem)])
-            else
-                sub_elem()
-            end
+            else sub_elem() end
         end;
 
         defmethod _comma_separated_exprs(terminator) do
@@ -537,7 +525,7 @@ t.walk(r"""
 
         defmethod _consume(expected) do
             assert self._current_token() == expected else
-                'Expected ' + str(expected) + ' @ consume: ' + str(self._current_token())
+                'Expected ' + str(expected) + ' @ _consume(): ' + str(self._current_token())
             end;
             self._current_and_advance()
         end;
@@ -561,24 +549,20 @@ t.walk(r"""
         end;
 
         defmethod lookup(name) do
-            if name.in(self._vars) then
-                self._vars
-            elif self._parent != None then
-                self._parent.lookup(name)
-            else
-                None
-            end
+            if name.in(self._vars) then self._vars
+            elif self._parent != None then self._parent.lookup(name)
+            else None end
         end;
 
         defmethod val(name) do
             vars := self.lookup(name);
-            assert vars != None else 'Undefined variable @ val: ' + name end;
+            assert vars != None else 'Undefined variable @ val(): ' + name end;
             vars[name]
         end;
 
         defmethod assign(name, val) do
             vars := self.lookup(name);
-            assert vars != None else 'Undefined variable @ assign: ' + name end;
+            assert vars != None else 'Undefined variable @ assign(): ' + name end;
             vars[name] = val
         end
     end
@@ -623,10 +607,10 @@ t.walk(r"""
                     self._for(var_expr, coll_expr, body_expr, then_expr, else_expr, env)
                 case tuple(Ident('try'), [body_expr, clauses]) then
                     self._try(body_expr, clauses, env)
-                case tuple(Ident('raise'), [val]) then
-                    raise(self.eval(val, env))
-                case tuple(Ident('dot'), [target_expr, attr_expr]) then
-                    self._dot(target_expr, attr_expr, env)
+                case tuple(Ident('raise'), [val_expr]) then
+                    raise(self.eval(val_expr, env))
+                case tuple(Ident('dot'), [target_expr, attr_name]) then
+                    self._dot(target_expr, attr_name, env)
                 case tuple(op_expr, args_expr) then
                     self._op(op_expr, args_expr, env)
                 case unexpected then
@@ -643,22 +627,17 @@ t.walk(r"""
         end;
 
         defmethod _assign(left_expr, right_expr, env) do
-            def _set_val(coll_expr, index_expr, right_val) do
-                coll_val := self.eval(coll_expr, env);
-                index_val := self.eval(index_expr, env);
-                coll_val[index_val] = right_val
-            end;
-
             right_val := self.eval(right_expr, env);
             match left_expr
                 case Ident(name) then
                     env.assign(name, right_val)
-                case tuple(Ident('index'), [coll_expr, index_expr]) then
-                        _set_val(coll_expr, index_expr, right_val)
-                case tuple(Ident('dot'), [coll_expr, index_expr]) then
-                        _set_val(coll_expr, index_expr, right_val)
-                case _ then
-                    raise('Invalid assign target @ _assign: ' + str(left_expr))
+                case tuple(Ident('index'), [coll_expr, index_expr]) or
+                     tuple(Ident('dot'), [coll_expr, index_expr]) then
+                    coll_val := self.eval(coll_expr, env);
+                    index_val := self.eval(index_expr, env);
+                    coll_val[index_val] = right_val
+                case unexpected then
+                    raise('Invalid assign target @ _assign(): ' + str(unexpected))
             end
         end;
 
@@ -701,12 +680,12 @@ t.walk(r"""
         end;
 
         defmethod _for(
-            var_expr, coll_expr, body_expr, then_expr, else_expr, env
+            var_pat, coll_expr, body_expr, then_expr, else_expr, env
         ) do
             coll_val := self.eval(coll_expr, env);
             for val in coll_val do
-                assert self._match_pattern(var_expr, val, env) else
-                    'Pattern mismatch @ _for: ' + str(var_expr) + ', ' + str(val)
+                assert self._match_pattern(var_pat, val, env) else
+                    'Pattern mismatch @ _for(): ' + str(var_pat) + ', ' + str(val)
                 end;
                 try
                     self.eval(body_expr, env)
@@ -729,9 +708,9 @@ t.walk(r"""
                 self.eval(body_expr, env)
             except e then
                 match e
-                    case ['ReturnException', _] then raise(e)
-                    case ['ContinueException'] then raise(e)
-                    case ['BreakException'] then raise(e)
+                    case ['ReturnException', _] or
+                         ['ContinueException'] or
+                         ['BreakException'] then raise(e)
                     case _ then None
                 end;
                 for [cond_expr, except_expr] in clauses do
@@ -781,8 +760,8 @@ t.walk(r"""
                             return(val)
                         end
                     end;
-                    raise('Pattern mismatch @ apply: ' + str(params) + ', ' + str(args_val))
-                case _ then raise('Invalid operator @ apply: ' + str(op_val))
+                    raise('Pattern mismatch @ apply(): ' + str(params) + ', ' + str(args_val))
+                case _ then raise('Invalid operator @ apply(): ' + str(op_val))
             end
         end;
 
@@ -790,12 +769,10 @@ t.walk(r"""
             def _match_list do
                 i := 0; lpat := pattern.len(); lval := value.len();
 
-                no_star := True;
                 while i < lpat do
                     sub_pat := pattern[i];
                     match sub_pat
-                        case tuple(Ident('*'), [Ident(rest_name)]) then
-                            no_star = False; break
+                        case tuple(Ident('*'), [Ident(rest_name)]) then break
                     end;
                     if i >= lval then return(False) end;
                     sub_val := value[i];
@@ -803,8 +780,7 @@ t.walk(r"""
                         return(False)
                     end;
                     i = i + 1
-                end;
-                if no_star then return(i == lval) end;
+                then return(i == lval) end;
 
                 lrest := lval - lpat + 1;
                 if lrest < 0 then return(False) end;
@@ -821,17 +797,14 @@ t.walk(r"""
                         return(False)
                     end;
                     i = i + 1
-                end;
-
-                True
+                then True end
             end;
 
             def _match_dict do
-                tmp_pat := pattern.copy(); rest_name := None; tmp_val := value.copy();
-                if '*'.in(pattern) then
-                    tmp_pat.pop('*');
-                    rest_name = pattern['*']
-                end;
+                tmp_pat := pattern.copy(); tmp_val := value.copy();
+
+                rest_name := None;
+                if '*'.in(pattern) then rest_name = tmp_pat['*']; tmp_pat.pop('*') end;
 
                 for [key, sub_pat] in tmp_pat.items() do
                     if not key.in(tmp_val) then return(False) end;
@@ -841,9 +814,7 @@ t.walk(r"""
                     tmp_val.pop(key)
                 end;
 
-                if rest_name != None then
-                    env.define(str(rest_name), tmp_val)
-                end;
+                if rest_name != None then env.define(str(rest_name), tmp_val) end;
                 True
             end;
 

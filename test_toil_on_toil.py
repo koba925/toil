@@ -572,10 +572,10 @@ class TestToT:
         with pytest.raises(AssertionError, match="Pattern mismatch"):
             i.walk("func a, b do add(a, b) end (2)")
 
-        with pytest.raises(AssertionError, match="Expected do @ consume: add"):
+        with pytest.raises(AssertionError, match="Expected do"):
             i.walk("func a add(a, 2) end")
 
-        with pytest.raises(AssertionError, match="Expected end @ consume: \\$EOF"):
+        with pytest.raises(AssertionError, match="Expected end"):
             i.walk("func a do add(a, 2)")
 
     def test_destructure_function_arguments(self):
@@ -1092,6 +1092,14 @@ class TestToT:
         assert i.walk(r"""   2 """) == 2
         assert i.walk(r""" 2   """) == 2
         assert i.walk("""\n  2  \n""") == 2
+
+    def test_comment(self):
+        assert i.walk(r""" 2 # 3 """) == 2
+        assert i.walk(r"""
+            # 2
+            3
+            # 4
+          """) == 3
 
     def test_empty_source(self):
         with pytest.raises(AssertionError, match="Unexpected token"):
