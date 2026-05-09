@@ -510,28 +510,24 @@ class Parser:
 
 class Environment(dict):
     def __init__(self, parent=None):
-        self["parent"] = parent
-        self["vars"] = {}
-        self["define"] = lambda args: self.define(args[0], args[1])
-        self["val"] = lambda args: self.val(args[0])
-        self["assign"] = lambda args: self.assign(args[0], args[1])
-        self["lookup"] = lambda args: self.lookup(args[0])
+        self._parent = parent
+        self._vars = {}
 
     def __repr__(self):
-        content = "__builtins" if "__builtins" in self["vars"] else \
-                  "__stdlib" if "__stdlib" in self["vars"] else \
-                  ", ".join(self["vars"])
-        return f"[{content}]" + (f" < {self["parent"]}" if self["parent"] else "")
+        content = "__builtins" if "__builtins" in self._vars else \
+                  "__stdlib" if "__stdlib" in self._vars else \
+                  ", ".join(self._vars)
+        return f"[{content}]" + (f" < {self._parent}" if self._parent else "")
 
     def define(self, name: str, val):
-        self["vars"][name] = val
+        self._vars[name] = val
         return val
 
     def lookup(self, name: str):
-        if name in self["vars"]:
-            return self["vars"]
-        elif self["parent"] is not None:
-            return self["parent"].lookup(name)
+        if name in self._vars:
+            return self._vars
+        elif self._parent is not None:
+            return self._parent.lookup(name)
         else:
             return None
 
@@ -973,17 +969,9 @@ class Interpreter:
         self._env.define("read", lambda args: open(args[0], "r").read())
         self._env.define("load", lambda args: self._load(args[0]))
 
-        self._env.define("eval", lambda args: Evaluator().eval(
-            self.ast(args[0]),
-            args[1] if len(args) > 1 else self._env
-        ))
-        self._env.define("eval_expr", lambda args: Evaluator().eval(
-            args[0],
-            args[1] if len(args) > 1 else self._env
-        ))
-        self._env.define("apply",
-            lambda args: Evaluator().apply(args[0], args[1])
-        )
+        self._env.define("eval", lambda args: Evaluator().eval(self.ast(args[0]), self._env))
+        self._env.define("eval_expr", lambda args: Evaluator().eval(args[0], self._env))
+        self._env.define("apply", lambda args: Evaluator().apply(args[0], args[1]))
 
         self._env = Environment(self._env)
 
