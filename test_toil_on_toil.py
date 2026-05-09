@@ -795,6 +795,7 @@ class TestToT:
         assert i.walk(r""" match [2, 3] case [a, 4] then "no" case _ then a end """) == 2
 
     def test_while(self):
+        assert i.walk(""" i := 0; while i < 2 do i = i + 1 end """) == None
         assert i.walk("""
             a := [];
             i := 0; while i < 3 do push(a, i); i = i + 1 end;
@@ -849,6 +850,7 @@ class TestToT:
             i.walk(""" continue() """)
 
     def test_break(self):
+        assert i.walk(""" i := 0; while i < 2 do break() end """) == None
         assert i.walk("""
             a := [];
             i := 0; while i < 3 do
@@ -896,6 +898,7 @@ class TestToT:
             i.walk(""" break() """)
 
     def test_for(self):
+        assert i.walk(""" for i in [0, 1, 2] do i end """) == None
         assert i.walk(""" a := []; for i in [0, 1, 2] do push(a, i) end; a """) == [0, 1, 2]
 
         assert i.walk("""
@@ -961,6 +964,7 @@ class TestToT:
         """) == [[0, 0], [0, 2], [1, 0], [1, 2]]
 
     def test_for_break(self):
+        assert i.walk(""" for i in [0, 1, 2] do break() end """) == None
         assert i.walk("""
             a := []; for i in [0, 1, 2] do
                 if i == 1 then break() end;

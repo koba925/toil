@@ -684,10 +684,9 @@ class Evaluator:
             try:
                 self.eval(body_expr, env)
             except ContinueException: continue
-            except BreakException: break
-        else:
-            return self._eval_optional_arg(then_expr, env)
-        return self._eval_optional_arg(else_expr, env)
+            except BreakException:
+                return self._eval_optional_arg(else_expr, env)
+        return self._eval_optional_arg(then_expr, env)
 
     def _eval_optional_arg(self, args, env):
         return None if len(args) == 0 else self.eval(args[0], env)
@@ -953,52 +952,36 @@ class Interpreter:
             def rest(a) do slice(a, 1, None) end;
             def last(a) do a[-1] end;
 
+            def range(start, stop, step) do
+                b := [];
+                i := start; while i < stop do push(b, i); i = i + step then b end
+            end;
+
             def map(a, f) do
-                b := []; l := len(a);
-                i := 0; while i < l do
-                    push(b, f(a[i]));
-                    i = i + 1
-                then b end
+                b := [];
+                for x in a do push(b, f(x)) then b end
             end;
 
             def filter(a, f) do
-                b := []; l := len(a);
-                i := 0; while i < l do
-                    if f(a[i]) then push(b, a[i]) end;
-                    i = i + 1
-                then b end
+                b := [];
+                for x in a do if f(x) then push(b, x) end then b end
             end;
 
             def zip(a, b) do
                 z := []; la := len(a); lb := len(b);
                 i := 0; while i < la and i < lb do
-                    push(z, [a[i], b[i]]);
-                    i = i + 1
+                    push(z, [a[i], b[i]]); i = i + 1
                 then z end
             end;
 
             def reduce(a, f, init) do
-                acc := init; l := len(a);
-                i := 0; while i < l do
-                    acc = f(acc, a[i]);
-                    i = i + 1
-                then acc end
+                acc := init;
+                for x in a do acc = f(acc, x) then acc end
             end;
 
             def reverse(a) do
-                b := []; i := len(a) - 1;
-                while i >= 0 do
-                    push(b, a[i]);
-                    i = i - 1
-                then b end
-            end;
-
-            def range(start, stop, step) do
-                b := [];
-                i := start; while i < stop do
-                    push(b, i);
-                    i = i + step
-                then b end
+                b := []; l := len(a);
+                for i in range(1, l + 1, 1) do push(b, a[l - i]) then b end
             end;
 
             def enumerate(a) do

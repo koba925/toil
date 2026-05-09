@@ -697,6 +697,7 @@ class TestToil:
         assert i.walk(r""" match [2, 3] case [a, 4] then "no" case _ then a end """) == 2
 
     def test_while(self):
+        assert i.walk(""" i := 0; while i < 2 do i = i + 1 end """) == None
         assert i.walk("""
             a := [];
             i := 0; while i < 3 do push(a, i); i = i + 1 end;
@@ -751,6 +752,7 @@ class TestToil:
             i.walk(""" continue() """)
 
     def test_break(self):
+        assert i.walk(""" i := 0; while i < 2 do break() end """) == None
         assert i.walk("""
             a := [];
             i := 0; while i < 3 do
