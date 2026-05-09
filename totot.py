@@ -4,12 +4,14 @@ import time
 from toil import Interpreter
 
 t0 = time.time()
+print("Start")
 
 i = Interpreter().init_env().stdlib()
 i.walk(r"""
+    print("Loading ToT");
     tot := load('tot.toil');
     tot.walk('
-        print("Loading");
+        print("Loading ToToT");
         totot := load("tot.toil");
         print("Walk");
         totot.walk("for i in [1, 2, 3] do print(i) end");

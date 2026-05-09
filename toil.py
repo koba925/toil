@@ -560,7 +560,7 @@ class Evaluator:
             case Ident("break"): raise BreakException()
             case Ident(name): return env.val(name)
             case (Ident("func"), [params, body]):
-                return (Ident("closure"), [params, body, env, None])
+                return (Ident("closure"), [params, body, env])
             case (Ident("return"), args):
                 assert len(args) <= 1, \
                     f"Return takes zero or one argument @ evaluate(): {args}"
@@ -600,11 +600,6 @@ class Evaluator:
 
     def _define(self, left_expr, right_expr, env):
         right_val = self.eval(right_expr, env)
-        match left_expr:
-            case Ident(name):
-                old_val_dict = env.lookup(name)
-                if old_val_dict is not None:
-                    right_val = self._overload_closure(right_val, old_val_dict, name)
         if self._match_pattern(left_expr, right_val, env):
             return right_val
         assert False, f"Pattern mismatch @ _define(): {left_expr}, {right_val}"
@@ -622,26 +617,12 @@ class Evaluator:
                     case list(), int():
                         coll_val[index_val] = right_val
                     case dict(), str():
-                        right_val = self._overload_closure(right_val, coll_val, index_val)
                         coll_val[index_val] = right_val
                     case _:
                         assert False, f"Invalid indexing @ _assign(): {coll_val}, {index_val}"
                 return right_val
             case unexpected:
                 assert False, f"Invalid assign target @ _assign(): {unexpected}"
-
-    def _overload_closure(self, right_val, coll_val, index_val):
-        if not isinstance(coll_val, dict) or not isinstance(index_val, str):
-            return right_val
-        if index_val in coll_val:
-            old_val = coll_val[index_val]
-            match right_val, old_val:
-                case (
-                    (Ident("closure"), [params, body, closure_env, _]),
-                    (Ident("closure"), _)
-                ):
-                    return (Ident("closure"), [params, body, closure_env, old_val])
-        return right_val
 
     def _seq(self, exprs, env):
         val = None
@@ -701,7 +682,7 @@ class Evaluator:
             case dict() if attr_expr in target_val:
                 attr_val = target_val[attr_expr]
                 match attr_val:
-                    case (Ident("closure"), [[Ident("self"), *_], _, _, _]):
+                    case (Ident("closure"), [[Ident("self"), *_], _, _]):
                         return lambda args: self.apply(attr_val, [target_val] + args)
                 return attr_val
 
@@ -709,7 +690,7 @@ class Evaluator:
         match attr_val:
             case c if callable(c):
                 return lambda args: c([target_val] + args)
-            case (Ident("closure"), [_, _, _, _]):
+            case (Ident("closure"), [_, _, _]):
                 return lambda args: self.apply(attr_val, [target_val] + args)
 
     def _op(self, op_expr, args_expr, env):
@@ -721,14 +702,12 @@ class Evaluator:
         match op_val:
             case c if callable(c):
                 return c(args_val)
-            case (Ident("closure"), [params, body, closure_env, fallback]):
+            case (Ident("closure"), [params, body, closure_env]):
                 new_env = Environment(closure_env)
                 if self._match_pattern(params, args_val, new_env):
                     try:
                         return self.eval(body, new_env)
                     except ReturnException as e: return e.val
-                if fallback is not None:
-                    return self.apply(fallback, args_val)
                 assert False, f"Pattern mismatch @ apply(): {params}, {args_val}"
             case _:
                 assert False, f"Invalid operator @ apply(): {op_val}"

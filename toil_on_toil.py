@@ -598,7 +598,7 @@ t.walk(r"""
                 case Ident('break') then raise(['BreakException'])
                 case Ident(name) then env.val(name)
                 case tuple(Ident('func'), [params, body_expr]) then
-                    tuple(Ident('closure'), [params, body_expr, env, None])
+                    tuple(Ident('closure'), [params, body_expr, env])
                 case tuple(Ident('return'), args) then
                     raise(['ReturnException', self._eval_optional_arg(args, env)])
                 case tuple(Ident('define'), [left_expr, right_expr]) then
@@ -636,13 +636,6 @@ t.walk(r"""
 
         defmethod _define(left_expr, right_expr, env) do
             right_val := self.eval(right_expr, env);
-            match left_expr
-                case Ident(name) then
-                    old_val_dict := env.lookup(name);
-                    if old_val_dict != None then
-                        right_val = self._overload_closure(right_val, old_val_dict, name)
-                    end
-            end;
             assert self._match_pattern(left_expr, right_val, env) else
                 'Pattern mismatch @ _define(): ' + str(left_expr) + ', ' + str(right_val)
             end;
@@ -653,7 +646,6 @@ t.walk(r"""
             def _set_val(coll_expr, index_expr, right_val) do
                 coll_val := self.eval(coll_expr, env);
                 index_val := self.eval(index_expr, env);
-                right_val = self._overload_closure(right_val, coll_val, index_val);
                 coll_val[index_val] = right_val
             end;
 
@@ -668,23 +660,6 @@ t.walk(r"""
                 case _ then
                     raise('Invalid assign target @ _assign: ' + str(left_expr))
             end
-        end;
-
-        defmethod _overload_closure(right_val, coll_val, index_val) do
-            if type(coll_val) != 'dict' or type(index_val) != 'str' then
-                return(right_val)
-            end;
-            if index_val.in(coll_val) then
-                old_val := coll_val[index_val];
-                match [right_val, old_val]
-                    case [
-                        tuple(Ident('closure'), [pat, body, env_, _]),
-                        tuple(Ident('closure'), _)
-                    ] then
-                        return(tuple(Ident('closure'), [pat, body, env_, old_val]))
-                end
-            end;
-            right_val
         end;
 
         defmethod _seq(exprs, env) do
@@ -773,7 +748,7 @@ t.walk(r"""
             if target_val.type() == 'dict' and attr_name.in(target_val) then
                 attr_val := target_val[attr_name];
                 match attr_val
-                    case tuple(Ident('closure'), [[Ident('self'), *_], _, _, _]) then
+                    case tuple(Ident('closure'), [[Ident('self'), *_], _, _]) then
                         tuple(Ident('hostfunc'), args ->
                             self.apply(attr_val, [target_val] + args)
                         )
@@ -797,9 +772,7 @@ t.walk(r"""
         defmethod apply(op_val, args_val) do
             match op_val
                 case tuple(Ident('hostfunc'), f) then f(args_val)
-                case tuple(Ident('closure'), [
-                    params_, body_expr, closure_env, fallback
-                ]) then
+                case tuple(Ident('closure'), [params_, body_expr, closure_env]) then
                     new_env := Environment(closure_env);
                     if self._match_pattern(params_, args_val, new_env) then
                         try
@@ -808,10 +781,7 @@ t.walk(r"""
                             return(val)
                         end
                     end;
-                    assert fallback != None else
-                        'Pattern mismatch @ apply: ' + str(params_) + ', ' + str(args_val)
-                    end;
-                    self.apply(fallback, args_val)
+                    raise('Pattern mismatch @ apply: ' + str(params_) + ', ' + str(args_val))
                 case _ then raise('Invalid operator @ apply: ' + str(op_val))
             end
         end;

@@ -523,45 +523,12 @@ class TestToil:
         with pytest.raises(Exception):
             i.walk(""" return() """)
 
-    def test_overload_def(self, capsys):
-        i.walk("""
-            def foo(x) do print("Not supported: " + str(x))  end;
-            def foo({kind: "Person", name: str(name)}) do print("Person: " + name) end;
-            def foo(str(s)) do print("string: " + s) end;
-            def foo(int(n)) do print("int: " + str(n)) end
-        """)
-        i.walk(""" foo(2) """)
-        assert capsys.readouterr().out == "int: 2\n"
-        i.walk(""" foo("bar") """)
-        assert capsys.readouterr().out == "string: bar\n"
-        i.walk(""" foo({kind: "Person", name: "John"}) """)
-        assert capsys.readouterr().out == "Person: John\n"
-        i.walk(""" foo([2]) """)
-        assert capsys.readouterr().out == "Not supported: [2]\n"
-
-    def test_overload_arrow_func(self):
-        i.walk("""
-            fib := n -> fib(n - 1) + fib(n - 2);
-            fib := 1 -> 1;
-            fib := 0 -> 0
-        """)
-        assert i.walk(""" fib(0) """) == 0
-        assert i.walk(""" fib(1) """) == 1
-        assert i.walk(""" fib(4) """) == 3
-
     def test_def(self):
         i.walk(r""" def myadd(a, b) do a + b end """)
         assert i.walk(r""" myadd(2, 3) """) == 5
 
         i.walk(r""" def say_hello do "hello" end """)
         assert i.walk(r""" say_hello() """) == "hello"
-
-        i.walk(r"""
-            def fact(n) do n * fact(n - 1) end;
-            def fact(0) do 1 end
-        """)
-        assert i.walk(r""" fact(0) """) == 1
-        assert i.walk(r""" fact(3) """) == 6
 
         with pytest.raises(Exception, match="Invalid def syntax"):
             i.walk(r""" def 2 do 3 end """)
@@ -985,21 +952,6 @@ class TestToil:
             i.walk(""" defclass Foo(x) end """)
         with pytest.raises(Exception, match="Invalid defmethod syntax"):
             i.walk(""" defclass Foo do defmethod 2 do end end """)
-
-    def test_defmethod_overloading(self):
-        i.walk("""
-            defclass Accumulator do
-                self.total = 0;
-                defmethod add(int(n)) do self.total = self.total + n end;
-                defmethod add(list(arr)) do
-                    for n in arr do self.add(n) end
-                end;
-                defmethod add(str(s)) do self.add(int(s)) end
-            end;
-            acc := Accumulator();
-            acc.add(10); acc.add([20, 30]); acc.add("40")
-        """)
-        assert i.walk(""" acc.total """) == 100
 
     def test_assert(self):
         assert i.walk(""" assert 2 == 2 else 1/0 end """) is None
