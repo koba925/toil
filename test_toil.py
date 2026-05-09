@@ -733,7 +733,7 @@ class TestToil:
         assert i.walk("""
             a := [];
             i := 0; while i < 3 do
-                i = i + 1; if i == 2 then continue() end;
+                i = i + 1; if i == 2 then continue end;
                 push(a, i)
             then a end
         """) == [1, 3]
@@ -741,7 +741,7 @@ class TestToil:
         assert i.walk("""
             a := []; i := 0; while i < 2 do
                 j := 0; while j < 3 do
-                    j = j + 1; if j == 2 then continue() end;
+                    j = j + 1; if j == 2 then continue end;
                     push(a, [i, j])
                 end;
                 i = i + 1
@@ -749,14 +749,14 @@ class TestToil:
         """) == [[0, 1], [0, 3], [1, 1], [1, 3]]
 
         with pytest.raises(Exception, match="Continue at top level"):
-            i.walk(""" continue() """)
+            i.walk(""" continue """)
 
     def test_break(self):
-        assert i.walk(""" i := 0; while i < 2 do break() end """) == None
+        assert i.walk(""" i := 0; while i < 2 do break end """) == None
         assert i.walk("""
             a := [];
             i := 0; while i < 3 do
-                if i == 1 then break() end;
+                if i == 1 then break end;
                 push(a, i); i = i + 1
             then 1/0 else a end
         """) == [0]
@@ -764,7 +764,7 @@ class TestToil:
         assert i.walk("""
             a := [];
             i := 0; while i < 3 do
-                if i == 1 then break() end;
+                if i == 1 then break end;
                 push(a, i); i = i + 1
             else a end
         """) == [0]
@@ -773,7 +773,7 @@ class TestToil:
             a := [];
             i := 0; while i < 2 do
                 j := 0; while j < 3 do
-                    if i == 0 and j == 1 then break() end;
+                    if i == 0 and j == 1 then break end;
                     push(a, [i, j]);
                     j = j + 1
                 end;
@@ -785,19 +785,19 @@ class TestToil:
             a := [];
             i := 0; while i < 2 do
                 j := 0; while j < 3 do
-                    if i == 1 and j == 1 then break() end;
+                    if i == 1 and j == 1 then break end;
                     push(a, [i, j]);
                     j = j + 1
-                else break() end;
+                else break end;
                 i = i + 1
             else a end
         """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
 
-        assert i.walk(""" while True do break() end """) is None
-        assert i.walk(""" while True do break() else 2 end """) == 2
+        assert i.walk(""" while True do break end """) is None
+        assert i.walk(""" while True do break else 2 end """) == 2
 
         with pytest.raises(Exception, match="Break at top level"):
-            i.walk(""" break() """)
+            i.walk(""" break """)
 
     def test_for(self):
         assert i.walk(""" a := []; for i in [0, 1, 2] do push(a, i) end; a """) == [0, 1, 2]
@@ -850,7 +850,7 @@ class TestToil:
     def test_for_continue(self):
         assert i.walk("""
             a := []; for i in [0, 1, 2] do
-                if i == 1 then continue() end;
+                if i == 1 then continue end;
                 push(a, i)
             then a end
         """) == [0, 2]
@@ -858,7 +858,7 @@ class TestToil:
         assert i.walk("""
             a := []; for i in [0, 1] do
                 for j in [0, 1, 2] do
-                    if j == 1 then continue() end;
+                    if j == 1 then continue end;
                     push(a, [i, j])
                 end
             then a end
@@ -867,14 +867,14 @@ class TestToil:
     def test_for_break(self):
         assert i.walk("""
             a := []; for i in [0, 1, 2] do
-                if i == 1 then break() end;
+                if i == 1 then break end;
                 push(a, i)
             then 1/0 else a end
         """) == [0]
 
         assert i.walk("""
             a := []; for i in [0, 1, 2] do
-                if i == 1 then break() end;
+                if i == 1 then break end;
                 push(a, i)
             else a end
         """) == [0]
@@ -883,7 +883,7 @@ class TestToil:
             a := [];
             for i in [0, 1] do
                 for j in [0, 1, 2] do
-                    if i == 0 and j == 1 then break() end;
+                    if i == 0 and j == 1 then break end;
                     push(a, [i, j])
                 end
             then a end
@@ -893,9 +893,9 @@ class TestToil:
             a := [];
             for i in [0, 1] do
                 for j in [0, 1, 2] do
-                    if i == 1 and j == 1 then break() end;
+                    if i == 1 and j == 1 then break end;
                     push(a, [i, j])
-                else break() end
+                else break end
             else a end
         """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
 
@@ -934,7 +934,7 @@ class TestToil:
 
         assert i.walk("""
             a := 0; while a < 5 do
-                try a = a + 1; if a == 3 then break() end
+                try a = a + 1; if a == 3 then break end
                 except _ then a = 10 end
             end; a
         """) == 3

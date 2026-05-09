@@ -32,14 +32,14 @@ t.walk(r"""
                 while self._current_char().isspace() do self._advance() end;
 
                 if self._current_char() == '#' then
-                    while not self._current_char().in("\n", '$EOF')
-                         do self._advance()
+                    while not self._current_char().in("\n", '$EOF') do
+                        self._advance()
                     end;
-                    continue()
+                    continue
                 end;
 
                 ch := self._current_char();
-                if ch == '$EOF' then self._tokens.push(Ident('$EOF')); break()
+                if ch == '$EOF' then self._tokens.push(Ident('$EOF')); break
                 elif ch.isdigit() then self._number()
                 elif ch == "'" then self._raw_string()
                 elif ch == '"' then self._string()
@@ -594,6 +594,8 @@ t.walk(r"""
                 case list(_) then expr.map(e -> self.eval(e, env))
                 case dict(_) then
                     expr.items().map([[k, v]] -> [k, self.eval(v, env)]).dict()
+                case Ident('continue') then raise(['ContinueException'])
+                case Ident('break') then raise(['BreakException'])
                 case Ident(name) then env.val(name)
                 case tuple(Ident('func'), [params, body_expr]) then
                     tuple(Ident('closure'), [params, body_expr, env, None])
@@ -619,10 +621,6 @@ t.walk(r"""
                     self._while(cond_expr, body_expr, then_expr, else_expr, env)
                 case tuple(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr]) then
                     self._for(var_expr, coll_expr, body_expr, then_expr, else_expr, env)
-                case tuple(Ident('continue'), []) then
-                    raise(['ContinueException'])
-                case tuple(Ident('break'), []) then
-                    raise(['BreakException'])
                 case tuple(Ident('try'), [body_expr, clauses]) then
                     self._try(body_expr, clauses, env)
                 case tuple(Ident('raise'), [val]) then
@@ -717,8 +715,8 @@ t.walk(r"""
             while self.eval(cond_expr, env) do
                 try
                     self.eval(body_expr, env)
-                except ['ContinueException'] then continue()
-                except ['BreakException'] then break()
+                except ['ContinueException'] then continue
+                except ['BreakException'] then break
                 end
             then
                 self._eval_optional_arg(then_expr, env)
@@ -737,8 +735,8 @@ t.walk(r"""
                 end;
                 try
                     self.eval(body_expr, env)
-                except ['ContinueException'] then continue()
-                except ['BreakException'] then break()
+                except ['ContinueException'] then continue
+                except ['BreakException'] then break
                 end
             then
                 self._eval_optional_arg(then_expr, env)
@@ -827,7 +825,7 @@ t.walk(r"""
                     sub_pat := pattern[i];
                     match sub_pat
                         case tuple(Ident('*'), [Ident(rest_name)]) then
-                            no_star = False; break()
+                            no_star = False; break
                     end;
                     if i >= lval then return(False) end;
                     sub_val := value[i];
@@ -1070,5 +1068,18 @@ if __name__ == "__main__":
 
     # Example
 
-    # Assert
-    print(i.walk(""" [2, 3].map(x -> x + 1) """)) # -> None
+    print(i.walk("""
+        a := [];
+        i := 0; while i < 3 do
+            i = i + 1; if i == 2 then continue end;
+            push(a, i)
+        then a end
+    """))
+
+    print(i.walk("""
+        a := [];
+        i := 0; while i < 3 do
+            if i == 1 then break end;
+            push(a, i); i = i + 1
+        then 1/0 else a end
+    """))

@@ -556,10 +556,9 @@ class Evaluator:
                 return [self.eval(expr, env) for expr in exprs]
             case exprs if type(exprs) is dict:
                 return {key: self.eval(val, env) for key, val in exprs.items()}
-            case Ident("__env"):
-                return env
-            case Ident(name):
-                return env.val(name)
+            case Ident("continue"): raise ContinueException()
+            case Ident("break"): raise BreakException()
+            case Ident(name): return env.val(name)
             case (Ident("func"), [params, body]):
                 return (Ident("closure"), [params, body, env, None])
             case (Ident("return"), args):
@@ -586,10 +585,6 @@ class Evaluator:
                 return self._while(cond_expr, body_expr, then_expr, else_expr, env)
             case (Ident("for"), [var_expr, coll_expr, body_expr, then_expr, else_expr]):
                 return self._for(var_expr, coll_expr, body_expr, then_expr, else_expr, env)
-            case (Ident("continue"), []):
-                raise ContinueException()
-            case (Ident("break"), []):
-                raise BreakException()
             case (Ident("try"), [body_expr, clauses_expr]):
                 return self._try(body_expr, clauses_expr, env)
             case (Ident("raise"), args):
@@ -1080,7 +1075,18 @@ if __name__ == "__main__":
 
     # Example
 
-    # Assert
     print(i.walk("""
-        a := []; for i in [0, 1, 2] do push(a, i) then [i, a] else 1/0 end
-    """)) # ->
+        a := [];
+        i := 0; while i < 3 do
+            i = i + 1; if i == 2 then continue end;
+            push(a, i)
+        then a end
+    """))
+
+    print(i.walk("""
+        a := [];
+        i := 0; while i < 3 do
+            if i == 1 then break end;
+            push(a, i); i = i + 1
+        then 1/0 else a end
+    """))

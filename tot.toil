@@ -1,4 +1,5 @@
-print('Defining utility functions');
+print('Defining interpreter');
+
 def isalpha(c) do
     type(c) == 'str' and ('a' <= c and c <= 'z') or ('A' <= c and c <= 'Z')
 end;
@@ -10,7 +11,6 @@ def is_ident_first(c) do isalpha(c) or c == '_' end;
 def is_ident_rest(c) do isalnum(c) or c == '_' end;
 def is_ident(s) do is_ident_first(s[0]) end;
 
-print('Defining Scanner');
 defclass Scanner(src) do
     self._src = src;
     self._pos = 0;
@@ -22,14 +22,14 @@ defclass Scanner(src) do
             while self._current_char().isspace() do self._advance() end;
 
             if self._current_char() == '#' then
-                while not self._current_char().in("\n", '$EOF')
-                        do self._advance()
+                while not self._current_char().in("\n", '$EOF') do
+                    self._advance()
                 end;
-                continue()
+                continue
             end;
 
             ch := self._current_char();
-            if ch == '$EOF' then self._tokens.push(Ident('$EOF')); break()
+            if ch == '$EOF' then self._tokens.push(Ident('$EOF')); break
             elif ch.isdigit() then self._number()
             elif ch == "'" then self._raw_string()
             elif ch == '"' then self._string()
@@ -75,9 +75,7 @@ defclass Scanner(src) do
                     case 'n' then s.push("\n")
                     case _ then s.push(ch)
                 end
-            else
-                s.push(ch)
-            end;
+            else s.push(ch) end;
             self._advance()
         end;
         self._advance();
@@ -87,9 +85,7 @@ defclass Scanner(src) do
     defmethod _ident do
         start := self._pos;
         self._advance();
-        while self._current_char().is_ident_rest() do
-            self._advance()
-        end;
+        while self._current_char().is_ident_rest() do self._advance() end;
         token := self._src.slice(start, self._pos);
         match token
             case 'None' then self._tokens.push(None)
@@ -113,13 +109,10 @@ defclass Scanner(src) do
     defmethod _current_char do
         if self._pos < self._src.len() then
             self._src[self._pos]
-        else
-            '$EOF'
-        end
+        else '$EOF' end
     end
 end;
 
-print('Defining Parser');
 defclass Parser(tokens) do
     self._tokens = tokens;
     self._pos = 0;
@@ -127,19 +120,17 @@ defclass Parser(tokens) do
     defmethod parse do
         # print(self._tokens);
         expr := self._expression();
-        assert self._current() == Ident('$EOF') else
-            'Extra token @ parse: ' + str(self._current())
+        assert self._current_token() == Ident('$EOF') else
+            'Extra token @ parse: ' + str(self._current_token())
         end;
         expr
     end;
 
-    defmethod _expression do
-        self._sequence()
-    end;
+    defmethod _expression do self._sequence() end;
 
     defmethod _sequence do
         exprs := [self._define_assign()];
-        while self._current() == Ident(';') do
+        while self._current_token() == Ident(';') do
             self._current_and_advance();
             exprs.push(self._define_assign())
         end;
@@ -154,14 +145,12 @@ defclass Parser(tokens) do
 
     defmethod _arrow do
         left := self._and_or();
-        if self._current() == Ident('->') then
+        if self._current_token() == Ident('->') then
             self._current_and_advance();
             right := self._arrow();
             params_ := if left.type() == 'list' then left else [left] end;
             tuple(Ident('func'), [params_, right])
-        else
-            left
-        end
+        else left end
     end;
 
     defmethod _and_or do
@@ -202,7 +191,9 @@ defclass Parser(tokens) do
 
     defmethod _call_index_dot do
         target := self._primary();
-        while (op := self._current()).in([Ident('('), Ident('['), Ident('.')]) do
+        while (op := self._current_token()).in([
+            Ident('('), Ident('['), Ident('.')
+        ]) do
             if op == Ident('(') then
                 self._current_and_advance();
                 target = tuple(target, self._comma_separated_exprs(Ident(')')));
@@ -224,7 +215,7 @@ defclass Parser(tokens) do
     end;
 
     defmethod _primary do
-        match self._current()
+        match self._current_token()
             case None then self._current_and_advance()
             case bool(_) or int(_) or str(_) then self._current_and_advance()
             case Ident('(') then self._group()
@@ -238,15 +229,16 @@ defclass Parser(tokens) do
             case Ident('while') then self._while()
             case Ident('for') then self._for()
             case Ident('try') then self._try()
+            case Ident('assert') then self._assert()
             case Ident('defclass') then self._defclass()
             case Ident('defmethod') then self._defmethod()
-            case Ident('assert') then self._assert()
             case Ident(name) then
                 assert name.is_ident() else
-                    'Unexpected token @ primary(): ' + str(self._current())
+                    'Unexpected token @ primary(): ' + str(self._current_token())
                 end;
                 self._current_and_advance()
-            case _ then raise('Unexpected token: @ primary(): ' + str(self._current()))
+            case _ then
+                raise('Unexpected token: @ primary(): ' + str(self._current_token()))
         end
     end;
 
@@ -266,13 +258,13 @@ defclass Parser(tokens) do
 
     defmethod _dict do
         def _parse_key_value(dic) do
-            match self._current()
+            match self._current_token()
                 case Ident('*') then
                     self._current_and_advance();
                     dic['*'] = self._current_and_advance()
                 case Ident(key) then
                     self._current_and_advance();
-                    if self._current() == Ident(':') then
+                    if self._current_token() == Ident(':') then
                         self._current_and_advance();
                         dic[key] = self._expression()
                     else
@@ -283,15 +275,15 @@ defclass Parser(tokens) do
                     self._consume(Ident(':'));
                     dic[key] = self._expression()
                 case _ then
-                    raise('Invalid key @ _dict(): ' + str(self._current()))
+                    raise('Invalid key @ _dict(): ' + str(self._current_token()))
             end
         end;
 
         self._current_and_advance();
         dic := {};
-        if self._current() != Ident('}') then
+        if self._current_token() != Ident('}') then
             _parse_key_value(dic);
-            while self._current() != Ident('}') do
+            while self._current_token() != Ident('}') do
                 self._consume(Ident(','));
                 _parse_key_value(dic)
             end
@@ -337,15 +329,14 @@ defclass Parser(tokens) do
         cond_expr := self._expression();
         self._consume(Ident('then'));
         then_expr := self._expression();
-        else_expr := None;
-        if self._current() == Ident('elif') then
-            else_expr = self._if()
-        elif self._current() == Ident('else') then
+        if self._current_token() == Ident('elif') then
+            else_expr := self._if()
+        elif self._current_token() == Ident('else') then
             self._current_and_advance();
-            else_expr = self._expression();
+            else_expr := self._expression();
             self._consume(Ident('end'))
         else
-            else_expr = None;
+            else_expr := None;
             self._consume(Ident('end'))
         end;
         tuple(Ident('if'), [cond_expr, then_expr, else_expr])
@@ -355,7 +346,7 @@ defclass Parser(tokens) do
         self._current_and_advance();
         val_expr := self._expression();
         cases := [];
-        while self._current() == Ident('case') do
+        while self._current_token() == Ident('case') do
             self._current_and_advance();
             pattern := self._expression();
             self._consume(Ident('then'));
@@ -371,11 +362,11 @@ defclass Parser(tokens) do
         cond_expr := self._expression();
         self._consume(Ident('do'));
         body_expr := self._expression();
-        then_expr := if self._current() == Ident('then') then
+        then_expr := if self._current_token() == Ident('then') then
             self._current_and_advance();
             [self._expression()]
         else [] end;
-        else_expr := if self._current() == Ident('else') then
+        else_expr := if self._current_token() == Ident('else') then
             self._current_and_advance();
             [self._expression()]
         else [] end;
@@ -383,11 +374,30 @@ defclass Parser(tokens) do
         tuple(Ident('while'), [cond_expr, body_expr, then_expr, else_expr])
     end;
 
+    defmethod _for do
+        self._current_and_advance();
+        var_expr := self._expression();
+        self._consume(Ident('in'));
+        coll_expr := self._expression();
+        self._consume(Ident('do'));
+        body_expr := self._expression();
+        then_expr := if self._current_token() == Ident('then') then
+            self._current_and_advance();
+            [self._expression()]
+        else [] end;
+        else_expr := if self._current_token() == Ident('else') then
+            self._current_and_advance();
+            [self._expression()]
+        else [] end;
+        self._consume(Ident('end'));
+        tuple(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr])
+    end;
+
     defmethod _try do
         self._current_and_advance();
         body_expr := self._expression();
         clauses := [];
-        while self._current() == Ident('except') do
+        while self._current_token() == Ident('except') do
             self._current_and_advance();
             cond_expr := self._expression();
             self._consume(Ident('then'));
@@ -398,23 +408,17 @@ defclass Parser(tokens) do
         tuple(Ident('try'), [body_expr, clauses])
     end;
 
-    defmethod _for do
+    defmethod _assert do
         self._current_and_advance();
-        var_expr := self._expression();
-        self._consume(Ident('in'));
-        coll_expr := self._expression();
-        self._consume(Ident('do'));
-        body_expr := self._expression();
-        then_expr := if self._current() == Ident('then') then
-            self._current_and_advance();
-            [self._expression()]
-        else [] end;
-        else_expr := if self._current() == Ident('else') then
-            self._current_and_advance();
-            [self._expression()]
-        else [] end;
+        cond_expr := self._expression();
+        self._consume(Ident('else'));
+        exc_expr := self._expression();
         self._consume(Ident('end'));
-        tuple(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr])
+        tuple(Ident('if'), [
+            tuple(Ident('not'), [cond_expr]),
+            tuple(Ident('raise'), [exc_expr]),
+            None
+        ])
     end;
 
     defmethod _defclass do
@@ -477,22 +481,9 @@ defclass Parser(tokens) do
         end
     end;
 
-    defmethod _assert do
-        self._current_and_advance();
-        cond_expr := self._expression();
-        self._consume(Ident('else'));
-        exc_expr := self._expression();
-        self._consume(Ident('end'));
-        tuple(Ident('if'), [
-            tuple(Ident('not'), [cond_expr]),
-            tuple(Ident('raise'), [exc_expr]),
-            None
-        ])
-    end;
-
     defmethod _binary_left(ops, sub_elem) do
         left := sub_elem();
-        while type(op := self._current()) == 'Ident' and str(op).in(ops) do
+        while type(op := self._current_token()) == 'Ident' and str(op).in(ops) do
             self._current_and_advance();
             right := sub_elem();
             left = tuple(ops[str(op)], [left, right])
@@ -502,7 +493,7 @@ defclass Parser(tokens) do
 
     defmethod _binary_right(ops, sub_elem) do
         left := sub_elem();
-        if type(op := self._current()) == 'Ident' and str(op).in(ops) then
+        if type(op := self._current_token()) == 'Ident' and str(op).in(ops) then
             self._current_and_advance();
             right := self._binary_right(ops, sub_elem);
             tuple(ops[str(op)], [left, right])
@@ -512,7 +503,7 @@ defclass Parser(tokens) do
     end;
 
     defmethod _unary(ops, sub_elem) do
-        if type(op := self._current()) == 'Ident' and str(op).in(ops) then
+        if type(op := self._current_token()) == 'Ident' and str(op).in(ops) then
             self._current_and_advance();
             tuple(ops[str(op)], [self._unary(ops, sub_elem)])
         else
@@ -522,9 +513,9 @@ defclass Parser(tokens) do
 
     defmethod _comma_separated_exprs(terminator) do
         cse := [];
-        if self._current() != terminator then
+        if self._current_token() != terminator then
             cse.push(self._expression());
-            while self._current() == Ident(',') do
+            while self._current_token() == Ident(',') do
                 self._current_and_advance();
                 cse.push(self._expression())
             end
@@ -533,13 +524,13 @@ defclass Parser(tokens) do
     end;
 
     defmethod _consume(expected) do
-        assert self._current() == expected else
-            'Expected ' + str(expected) + ' @ consume: ' + str(self._current())
+        assert self._current_token() == expected else
+            'Expected ' + str(expected) + ' @ consume: ' + str(self._current_token())
         end;
         self._current_and_advance()
     end;
 
-    defmethod _current do self._tokens[self._pos] end;
+    defmethod _current_token do self._tokens[self._pos] end;
 
     defmethod _current_and_advance do
         self._pos = self._pos + 1;
@@ -547,7 +538,6 @@ defclass Parser(tokens) do
     end
 end;
 
-print('Defining Environment');
 defclass Environment(parent) do
     self._parent = parent;
     self._vars = {};
@@ -579,7 +569,6 @@ defclass Environment(parent) do
     end
 end;
 
-print('Defining Evaluator');
 defclass Evaluator do
     defmethod eval(expr, env) do
         # print(expr);
@@ -589,19 +578,19 @@ defclass Evaluator do
             case list(_) then expr.map(e -> self.eval(e, env))
             case dict(_) then
                 expr.items().map([[k, v]] -> [k, self.eval(v, env)]).dict()
+            case Ident('continue') then raise(['ContinueException'])
+            case Ident('break') then raise(['BreakException'])
             case Ident(name) then env.val(name)
             case tuple(Ident('func'), [params, body_expr]) then
                 tuple(Ident('closure'), [params, body_expr, env, None])
             case tuple(Ident('return'), args) then
                 raise(['ReturnException', self._eval_optional_arg(args, env)])
-            case tuple(Ident('dot'), [target_expr, attr_expr]) then
-                self._dot(target_expr, attr_expr, env)
-            case tuple(Ident('scope'), [body_expr]) then
-                self.eval(body_expr, Environment(env))
             case tuple(Ident('define'), [left_expr, right_expr]) then
                 self._define(left_expr, right_expr, env)
             case tuple(Ident('assign'), [left_expr, right_expr]) then
                 self._assign(left_expr, right_expr, env)
+            case tuple(Ident('scope'), [body_expr]) then
+                self.eval(body_expr, Environment(env))
             case tuple(Ident('seq'), exprs) then
                 self._seq(exprs, env)
             case tuple(Ident('if'), [cond_expr, then_expr, else_expr]) then
@@ -620,32 +609,12 @@ defclass Evaluator do
                 self._try(body_expr, clauses, env)
             case tuple(Ident('raise'), [val]) then
                 raise(self.eval(val, env))
-            case tuple(Ident('continue'), []) then
-                raise(['ContinueException'])
-            case tuple(Ident('break'), []) then
-                raise(['BreakException'])
+            case tuple(Ident('dot'), [target_expr, attr_expr]) then
+                self._dot(target_expr, attr_expr, env)
             case tuple(op_expr, args_expr) then
                 self._op(op_expr, args_expr, env)
-        end
-    end;
-
-    defmethod _dot(target_expr, attr_name, env) do
-        target_val := self.eval(target_expr, env);
-        if target_val.type() == 'dict' and attr_name.in(target_val) then
-            attr_val := target_val[attr_name];
-            match attr_val
-                case tuple(Ident('closure'), [[Ident('self'), *_], _, _, _]) then
-                    tuple(Ident('hostfunc'), args ->
-                        self.apply(attr_val, [target_val] + args)
-                    )
-                case _ then
-                    attr_val
-            end
-        else
-            func_val := env.val(attr_name);
-            tuple(Ident('hostfunc'), args ->
-                self.apply(func_val, [target_val] + args)
-            )
+            case unexpected then
+                raise('Unexpected expression @ evaluate(): ' + str(unexpected))
         end
     end;
 
@@ -673,18 +642,13 @@ defclass Evaluator do
         end;
 
         right_val := self.eval(right_expr, env);
-        match left_expr.type()
-            case 'Ident' then
-                env.assign(str(left_expr), right_val)
-        case 'tuple' then
-                match left_expr
-                case tuple(Ident('index'), [coll_expr, index_expr]) then
-                        _set_val(coll_expr, index_expr, right_val)
-                case tuple(Ident('dot'), [coll_expr, index_expr]) then
-                        _set_val(coll_expr, index_expr, right_val)
-                    case _ then
-                        raise('Invalid assign target @ _assign: ' + str(left_expr))
-                end
+        match left_expr
+            case Ident(name) then
+                env.assign(name, right_val)
+            case tuple(Ident('index'), [coll_expr, index_expr]) then
+                    _set_val(coll_expr, index_expr, right_val)
+            case tuple(Ident('dot'), [coll_expr, index_expr]) then
+                    _set_val(coll_expr, index_expr, right_val)
             case _ then
                 raise('Invalid assign target @ _assign: ' + str(left_expr))
         end
@@ -735,8 +699,8 @@ defclass Evaluator do
         while self.eval(cond_expr, env) do
             try
                 self.eval(body_expr, env)
-            except ['ContinueException'] then continue()
-            except ['BreakException'] then break()
+            except ['ContinueException'] then continue
+            except ['BreakException'] then break
             end
         then
             self._eval_optional_arg(then_expr, env)
@@ -745,7 +709,9 @@ defclass Evaluator do
         end
     end;
 
-    defmethod _for(var_expr, coll_expr, body_expr, then_expr, else_expr, env) do
+    defmethod _for(
+        var_expr, coll_expr, body_expr, then_expr, else_expr, env
+    ) do
         coll_val := self.eval(coll_expr, env);
         for val in coll_val do
             assert self._match_pattern(var_expr, val, env) else
@@ -753,8 +719,8 @@ defclass Evaluator do
             end;
             try
                 self.eval(body_expr, env)
-            except ['ContinueException'] then continue()
-            except ['BreakException'] then break()
+            except ['ContinueException'] then continue
+            except ['BreakException'] then break
             end
         then
             self._eval_optional_arg(then_expr, env)
@@ -786,6 +752,26 @@ defclass Evaluator do
         end
     end;
 
+    defmethod _dot(target_expr, attr_name, env) do
+        target_val := self.eval(target_expr, env);
+        if target_val.type() == 'dict' and attr_name.in(target_val) then
+            attr_val := target_val[attr_name];
+            match attr_val
+                case tuple(Ident('closure'), [[Ident('self'), *_], _, _, _]) then
+                    tuple(Ident('hostfunc'), args ->
+                        self.apply(attr_val, [target_val] + args)
+                    )
+                case _ then
+                    attr_val
+            end
+        else
+            func_val := env.val(attr_name);
+            tuple(Ident('hostfunc'), args ->
+                self.apply(func_val, [target_val] + args)
+            )
+        end
+    end;
+
     defmethod _op(op_expr, args_expr, env) do
         op_val := self.eval(op_expr, env);
         args_val := args_expr.map(arg -> self.eval(arg, env));
@@ -795,7 +781,9 @@ defclass Evaluator do
     defmethod apply(op_val, args_val) do
         match op_val
             case tuple(Ident('hostfunc'), f) then f(args_val)
-            case tuple(Ident('closure'), [params_, body_expr, closure_env, fallback]) then
+            case tuple(Ident('closure'), [
+                params_, body_expr, closure_env, fallback
+            ]) then
                 new_env := Environment(closure_env);
                 if self._match_pattern(params_, args_val, new_env) then
                     try
@@ -821,7 +809,7 @@ defclass Evaluator do
                 sub_pat := pattern[i];
                 match sub_pat
                     case tuple(Ident('*'), [Ident(rest_name)]) then
-                        no_star = False; break()
+                        no_star = False; break
                 end;
                 if i >= lval then return(False) end;
                 sub_val := value[i];
@@ -896,7 +884,6 @@ defclass Evaluator do
     end
 end;
 
-print('Defining Interpreter');
 defclass Interpreter do
     self._env = Environment(None);
 
@@ -907,6 +894,8 @@ defclass Interpreter do
     end;
 
     defmethod _builtins do
+        def make_hostfunc(f) do tuple(Ident('hostfunc'), args -> f(args)) end;
+
         self._env.define('__builtins', None);
 
         self._env.define('add', tuple(Ident('hostfunc'), args -> args[0] + args[1]));
@@ -966,32 +955,25 @@ defclass Interpreter do
 
     defmethod stdlib do
         self.walk('
-            print("Defining first");
             def first(a) do a[0] end;
-            print("Defining rest");
             def rest(a) do slice(a, 1, None) end;
-            print("Defining last");
             def last(a) do a[-1] end;
 
-            print("Defining range");
             def range(start, stop, step) do
                 b := [];
                 i := start; while i < stop do push(b, i); i = i + step then b end
             end;
 
-            print("Defining map");
             def map(a, f) do
                 b := [];
                 for x in a do push(b, f(x)) then b end
             end;
 
-            print("Defining filter");
             def filter(a, f) do
                 b := [];
                 for x in a do if f(x) then push(b, x) end then b end
             end;
 
-            print("Defining zip");
             def zip(a, b) do
                 z := []; la := len(a); lb := len(b);
                 i := 0; while i < la and i < lb do
@@ -999,29 +981,24 @@ defclass Interpreter do
                 then z end
             end;
 
-            print("Defining reduce");
             def reduce(a, f, init) do
                 acc := init;
                 for x in a do acc = f(acc, x) then acc end
             end;
 
-            print("Defining reverse");
             def reverse(a) do
                 b := []; l := len(a);
                 for i in range(1, l + 1, 1) do push(b, a[l - i]) then b end
             end;
 
-            print("Defining enumerate");
             def enumerate(a) do
                 zip(range(0, len(a), 1), a)
             end;
 
-            print("Defining all");
             def all(a, f) do
                 for x in a do if not f(x) then return(False) end then True end
             end;
 
-            print("Defining any");
             def any(a, f) do
                 for x in a do if f(x) then return(True) end then False end
             end
@@ -1034,17 +1011,16 @@ defclass Interpreter do
     defmethod _load(path) do
         src := read(path);
         module_env := Environment(self._env);
-        ast := self.parse(self.scan(src));
-        Evaluator().eval(ast, module_env)
+        expr := self.ast(src);
+        Evaluator().eval(expr, module_env)
     end;
 
     defmethod scan(src) do Scanner(src).tokenize() end;
     defmethod parse(tokens) do Parser(tokens).parse() end;
     defmethod ast(src) do Parser(self.scan(src)).parse() end;
-    defmethod eval(ast) do Evaluator().eval(ast, self._env) end;
-    defmethod walk(src) do
+    defmethod eval(ast) do
         try
-            self.eval(self.ast(src))
+            Evaluator().eval(ast, self._env)
         except ['ReturnException', val] then
             raise('Return from top level @ walk(): ' + str(val))
         except ['ContinueException'] then
@@ -1052,6 +1028,9 @@ defclass Interpreter do
         except ['BreakException'] then
             raise('Break at top level @ walk()')
         end
+    end;
+    defmethod walk(src) do
+        self.eval(self.ast(src))
     end
 end;
 
