@@ -13,8 +13,6 @@ class Ident:
     def __eq__(self, other):
         return isinstance(other, Ident) and self.name == other.name
 
-RuleElement = Ident | tuple[Ident, list[Any]]
-CustomRules = dict[str, list[RuleElement]]
 Token = Ident | int | str | bool | None
 Expr = Any
 Inst = tuple
@@ -27,22 +25,6 @@ def is_ident_first(c): return c.isalpha() or c == "_"
 def is_ident_rest(c): return c.isalnum() or c == "_"
 def is_ident(s): return is_ident_first(s[0])
 def toil_type(expr): return type(expr).__name__
-
-
-class RuleCollector:
-    def __init__(self, src):
-        self._src = src
-
-    def collect(self) -> CustomRules:
-        custom_rules: CustomRules = {}
-        for line in self._src.splitlines():
-            line = line.strip()
-            if line.startswith("#rule "):
-                rule_src = line[6:]
-                new_rule = Parser(Scanner(rule_src).tokenize(), {}).parse()
-                assert type(new_rule) is dict, f"Invalid rule @ collect(): {new_rule}"
-                custom_rules = {**custom_rules, **new_rule}
-        return custom_rules
 
 
 class Scanner:
@@ -73,8 +55,6 @@ class Scanner:
                     self._string()
                 case c if is_ident_first(c):
                     self._ident()
-                case "!":
-                    self._two_char_operator("=!")
                 case ch if ch in "=!<>:":
                     self._two_char_operator("=")
                 case "-":
@@ -150,10 +130,9 @@ class Scanner:
 
 
 class Parser:
-    def __init__(self, tokens: list[Token], custom_rules: CustomRules):
+    def __init__(self, tokens: list[Token]):
         self._tokens = tokens
         self._pos = 0
-        self._custom_rules = custom_rules
 
     def parse(self) -> Expr:
         expr = self._expression()
@@ -212,8 +191,7 @@ class Parser:
 
     def _unaries(self):
         return self._unary({
-            Ident("-"): Ident("neg"), Ident("+"): Ident("+"), Ident("*"): Ident("*"),
-            Ident("!"): Ident("!"), Ident("!!"): Ident("!!")
+            Ident("-"): Ident("neg"), Ident("+"): Ident("+"), Ident("*"): Ident("*")
         }, self._call_index_dot)
 
     def _call_index_dot(self):
@@ -255,8 +233,6 @@ class Parser:
             case Ident("defclass"): return self._defclass()
             case Ident("defmethod"): return self._defmethod()
             case Ident("assert"): return self._assert()
-            case Ident(name) if name in self._custom_rules:
-                return self._custom(self._custom_rules[name])
             case Ident(name) if is_ident(name): return self._current_and_advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
@@ -484,32 +460,6 @@ class Parser:
             case _:
                 assert False, f"Invalid defmethod syntax @ _defclass(): {call_expr}"
 
-    def _custom(self, rule):
-        def match_args(rule):
-            args = []
-            for current, next in zip(rule, rule[1:] + [None]):
-                match current:
-                    case Ident("EXPR"):
-                        args.append(self._expression())
-                    case Ident("EXPRS"):
-                        args.append(self._comma_separated_exprs(next))
-                    case (Ident("*"), [subrule]):
-                        subargs = []
-                        while self._current_token() == subrule[0]:
-                            subargs.append(match_args(subrule))
-                        args.append(subargs)
-                    case (Ident("+"), [subrule]):
-                        if self._current_token() == subrule[0]:
-                            args.append(match_args(subrule))
-                        else:
-                            args.append([])
-                    case delimiter:
-                        self._consume(delimiter)
-            return args
-
-        self._current_and_advance()
-        return (rule[0], match_args(rule[1:]))
-
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
         while type(self._current_token()) is Ident and \
@@ -569,7 +519,6 @@ class Environment(dict):
 
     def __repr__(self):
         content = "__builtins" if "__builtins" in self["vars"] else \
-                  "__corelib" if "__corelib" in self["vars"] else \
                   "__stdlib" if "__stdlib" in self["vars"] else \
                   ", ".join(self["vars"])
         return f"[{content}]" + (f" < {self["parent"]}" if self["parent"] else "")
@@ -634,12 +583,18 @@ class Evaluator:
                 return self._define(left_expr, right_expr, env)
             case (Ident("assign"), [left_expr, right_expr]):
                 return self._assign(left_expr, right_expr, env)
+            case (Ident("scope"), [expr]):
+                return self.eval(expr, Environment(env))
             case (Ident("seq"), exprs):
                 return self._seq(exprs, env)
             case (Ident("if"), [cond_expr, then_expr, else_expr]):
                 return self._if(cond_expr, then_expr, else_expr, env)
             case (Ident("match"), [val_expr, cases_expr]):
                 return self._match(val_expr, cases_expr, env)
+            case (Ident("and"), [left_expr, right_expr]):
+                return self.eval(left_expr, env) and self.eval(right_expr, env)
+            case (Ident("or"), [left_expr, right_expr]):
+                return self.eval(left_expr, env) or self.eval(right_expr, env)
             case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
                 return self._while(cond_expr, body_expr, then_expr, else_expr, env)
             case (Ident("for"), [var_expr, coll_expr, body_expr, then_expr, else_expr]):
@@ -648,24 +603,14 @@ class Evaluator:
                 raise ContinueException()
             case (Ident("break"), []):
                 raise BreakException()
-            case (Ident("expand"), [(op_expr, args_expr)]):
-                return self._expand(op_expr, args_expr, env)
-            case (Ident("__core_macro"), [params, body]):
-                return (Ident("mclosure"), params, body, env)
             case (Ident("try"), [body_expr, clauses_expr]):
                 return self._try(body_expr, clauses_expr, env)
             case (Ident("raise"), args):
                 assert len(args) <= 1, \
                     f"Raise takes zero or one argument @ evaluate(): {args}"
                 raise ToilException(self.eval(args[0], env) if args else None)
-            case (Ident("scope"), [expr]):
-                return self.eval(expr, Environment(env))
             case (Ident("dot"), [target_expr, attr_expr]):
                 return self._dot(target_expr, attr_expr, env)
-            case (Ident("and"), [left_expr, right_expr]):
-                return self.eval(left_expr, env) and self.eval(right_expr, env)
-            case (Ident("or"), [left_expr, right_expr]):
-                return self.eval(left_expr, env) or self.eval(right_expr, env)
             case (op_expr, args_expr) if isinstance(expr, tuple):
                 return self._op(op_expr, args_expr, env)
             case unexpected:
@@ -809,30 +754,8 @@ class Evaluator:
 
     def _op(self, op_expr, args_expr, env):
         op_val = self.eval(op_expr, env)
-        match op_val:
-            case (Ident("mclosure"), params, body_expr, mclosure_env):
-                new_env = Environment(mclosure_env)
-                expanded = self._expand_macro(params, args_expr, body_expr, new_env)
-                # print(expanded)
-                return self.eval(expanded, env)
-            case _:
-                args_val = [self.eval(arg, env) for arg in args_expr]
-                return self.apply(op_val, args_val)
-
-    def _expand(self, op_expr, args_expr, env):
-        match self.eval(op_expr, env):
-            case (Ident("mclosure"), params, body_expr, mclosure_env):
-                new_env = Environment(mclosure_env)
-                return self._expand_macro(params, args_expr, body_expr, new_env)
-            case _:
-                assert False, f"Cannot expand non-macro @ expand(): {op_expr}"
-
-    def _expand_macro(self, params, args_expr, body_expr, env):
-        if self._match_pattern(params, args_expr, env):
-            try:
-                return self.eval(body_expr, env)
-            except ReturnException as e: return e.val
-        assert False, f"Pattern mismatch @ expand(): {params}, {args_expr}"
+        args_val = [self.eval(arg, env) for arg in args_expr]
+        return self.apply(op_val, args_val)
 
     def apply(self, op_val, args_val):
         match op_val:
@@ -993,37 +916,18 @@ class VM:
 class Interpreter:
     def __init__(self):
         self._env = Environment()
-        self._custom_rules = {}
 
     def _load(self, path):
         with open(path, "r") as f: src = f.read()
-        module_env = Environment(self._env)
-        expr = self.ast(src)
-        return Evaluator().eval(expr, module_env)
+        return Evaluator().eval(self.ast(src), Environment(self._env))
 
     def init_env(self):
-        self._gensym_counter = 0
         self._env = Environment()
         self._builtins()
         return self
 
     def _builtins(self):
         self._env.define("__builtins", None)
-
-        self._env.define("load", lambda args: self._load(args[0]))
-        self._env.define("read", lambda args: open(args[0], "r").read())
-
-        self._env.define("eval", lambda args: Evaluator().eval(
-            self.ast(args[0]),
-            args[1] if len(args) > 1 else self._env
-        ))
-        self._env.define("eval_expr", lambda args: Evaluator().eval(
-            args[0],
-            args[1] if len(args) > 1 else self._env
-        ))
-        self._env.define("apply",
-            lambda args: Evaluator().apply(args[0], args[1])
-        )
 
         self._env.define("add", lambda args: args[0] + args[1])
         self._env.define("sub", lambda args: args[0] - args[1])
@@ -1066,12 +970,22 @@ class Interpreter:
 
         self._env.define("print", lambda args: print(*args))
 
-        self._env = Environment(self._env)
+        self._env.define("read", lambda args: open(args[0], "r").read())
+        self._env.define("load", lambda args: self._load(args[0]))
 
-    def _gensym(self, args):
-        self._gensym_counter += 1
-        name = args[0] if args else "gensym"
-        return Ident(f"__{name}_{self._gensym_counter}")
+        self._env.define("eval", lambda args: Evaluator().eval(
+            self.ast(args[0]),
+            args[1] if len(args) > 1 else self._env
+        ))
+        self._env.define("eval_expr", lambda args: Evaluator().eval(
+            args[0],
+            args[1] if len(args) > 1 else self._env
+        ))
+        self._env.define("apply",
+            lambda args: Evaluator().apply(args[0], args[1])
+        )
+
+        self._env = Environment(self._env)
 
     def stdlib(self):
         self.walk("""
@@ -1145,17 +1059,13 @@ class Interpreter:
         self._env = Environment(self._env)
         return self
 
-    def collect_rules(self, src: str):
-        self._custom_rules = {**self._custom_rules, **RuleCollector(src).collect()}
-
     def scan(self, src: str) -> list[Token]:
         return Scanner(src).tokenize()
 
     def parse(self, tokens: list[Token]) -> Expr:
-        return Parser(tokens, self._custom_rules).parse()
+        return Parser(tokens).parse()
 
     def ast(self, src: str) -> Expr:
-        self.collect_rules(src)
         return self.parse(self.scan(src))
 
     def eval(self, ast: Expr) -> Value:

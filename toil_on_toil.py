@@ -85,9 +85,7 @@ t.walk(r"""
                         case 'n' then s.push("\n")
                         case _ then s.push(ch)
                     end
-                else
-                    s.push(ch)
-                end;
+                else s.push(ch) end;
                 self._advance()
             end;
             self._advance();
@@ -97,9 +95,7 @@ t.walk(r"""
         defmethod _ident do
             start := self._pos;
             self._advance();
-            while self._current_char().is_ident_rest() do
-                self._advance()
-            end;
+            while self._current_char().is_ident_rest() do self._advance() end;
             token := self._src.slice(start, self._pos);
             match token
                 case 'None' then self._tokens.push(None)
@@ -123,9 +119,7 @@ t.walk(r"""
         defmethod _current_char do
             if self._pos < self._src.len() then
                 self._src[self._pos]
-            else
-                '$EOF'
-            end
+            else '$EOF' end
         end
     end
 """)
@@ -556,12 +550,12 @@ t.walk(r"""
             self._current_and_advance()
         end;
 
+        defmethod _current_token do self._tokens[self._pos] end;
+
         defmethod _current_and_advance do
             self._pos = self._pos + 1;
             self._tokens[self._pos - 1]
-        end;
-
-        defmethod _current_token do self._tokens[self._pos] end
+        end
     end
 """)
 
@@ -615,14 +609,12 @@ t.walk(r"""
                     tuple(Ident('closure'), [params, body_expr, env, None])
                 case tuple(Ident('return'), args) then
                     raise(['ReturnException', self._eval_optional_arg(args, env)])
-                case tuple(Ident('dot'), [target_expr, attr_expr]) then
-                    self._dot(target_expr, attr_expr, env)
-                case tuple(Ident('scope'), [body_expr]) then
-                    self.eval(body_expr, Environment(env))
                 case tuple(Ident('define'), [left_expr, right_expr]) then
                     self._define(left_expr, right_expr, env)
                 case tuple(Ident('assign'), [left_expr, right_expr]) then
                     self._assign(left_expr, right_expr, env)
+                case tuple(Ident('scope'), [body_expr]) then
+                    self.eval(body_expr, Environment(env))
                 case tuple(Ident('seq'), exprs) then
                     self._seq(exprs, env)
                 case tuple(Ident('if'), [cond_expr, then_expr, else_expr]) then
@@ -637,36 +629,20 @@ t.walk(r"""
                     self._while(cond_expr, body_expr, then_expr, else_expr, env)
                 case tuple(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr]) then
                     self._for(var_expr, coll_expr, body_expr, then_expr, else_expr, env)
-                case tuple(Ident('try'), [body_expr, clauses]) then
-                    self._try(body_expr, clauses, env)
-                case tuple(Ident('raise'), [val]) then
-                    raise(self.eval(val, env))
                 case tuple(Ident('continue'), []) then
                     raise(['ContinueException'])
                 case tuple(Ident('break'), []) then
                     raise(['BreakException'])
+                case tuple(Ident('try'), [body_expr, clauses]) then
+                    self._try(body_expr, clauses, env)
+                case tuple(Ident('raise'), [val]) then
+                    raise(self.eval(val, env))
+                case tuple(Ident('dot'), [target_expr, attr_expr]) then
+                    self._dot(target_expr, attr_expr, env)
                 case tuple(op_expr, args_expr) then
                     self._op(op_expr, args_expr, env)
-            end
-        end;
-
-        defmethod _dot(target_expr, attr_name, env) do
-            target_val := self.eval(target_expr, env);
-            if target_val.type() == 'dict' and attr_name.in(target_val) then
-                attr_val := target_val[attr_name];
-                match attr_val
-                    case tuple(Ident('closure'), [[Ident('self'), *_], _, _, _]) then
-                        tuple(Ident('hostfunc'), args ->
-                            self.apply(attr_val, [target_val] + args)
-                        )
-                    case _ then
-                        attr_val
-                end
-            else
-                func_val := env.val(attr_name);
-                tuple(Ident('hostfunc'), args ->
-                    self.apply(func_val, [target_val] + args)
-                )
+                case unexpected then
+                    raise('Unexpected expression @ evaluate(): ' + str(unexpected))
             end
         end;
 
@@ -801,6 +777,26 @@ t.walk(r"""
                     end
                 end;
                 raise(e)
+            end
+        end;
+
+        defmethod _dot(target_expr, attr_name, env) do
+            target_val := self.eval(target_expr, env);
+            if target_val.type() == 'dict' and attr_name.in(target_val) then
+                attr_val := target_val[attr_name];
+                match attr_val
+                    case tuple(Ident('closure'), [[Ident('self'), *_], _, _, _]) then
+                        tuple(Ident('hostfunc'), args ->
+                            self.apply(attr_val, [target_val] + args)
+                        )
+                    case _ then
+                        attr_val
+                end
+            else
+                func_val := env.val(attr_name);
+                tuple(Ident('hostfunc'), args ->
+                    self.apply(func_val, [target_val] + args)
+                )
             end
         end;
 
@@ -1052,10 +1048,9 @@ t.walk(r"""
         defmethod scan(src) do Scanner(src).tokenize() end;
         defmethod parse(tokens) do Parser(tokens).parse() end;
         defmethod ast(src) do Parser(self.scan(src)).parse() end;
-        defmethod eval(ast) do Evaluator().eval(ast, self._env) end;
-        defmethod walk(src) do
+        defmethod eval(ast) do
             try
-                self.eval(self.ast(src))
+                Evaluator().eval(ast, self._env)
             except ['ReturnException', val] then
                 raise('Return from top level @ walk(): ' + str(val))
             except ['ContinueException'] then
@@ -1063,6 +1058,9 @@ t.walk(r"""
             except ['BreakException'] then
                 raise('Break at top level @ walk()')
             end
+        end;
+        defmethod walk(src) do
+            self.eval(self.ast(src))
         end
     end
 """)
