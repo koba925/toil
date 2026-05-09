@@ -136,8 +136,8 @@ class TestToil:
         with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" Ident(a) := "aaa" """)
 
-        assert i.walk(r""" tuple(Ident("add"), [int(a), int(b)]) := quote 2 + 3 end; [a, b] """) == [2, 3]
-        assert i.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := quote a + b end; [name1, name2] """) == ['a', 'b']
+        assert i.walk(r""" tuple(Ident("add"), [int(a), int(b)]) := tuple(Ident("add"), [2, 3]); [a, b] """) == [2, 3]
+        assert i.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := tuple(Ident("add"), [Ident("a"), Ident("b")]); [name1, name2] """) == ['a', 'b']
 
         with pytest.raises(Exception, match="Pattern mismatch"):
             i.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := 2 + 3 """)
@@ -446,9 +446,6 @@ class TestToil:
         assert i.walk(r""" dict({a: 2, b: 3}) """) == {"a": 2, "b": 3}
         assert i.walk(r""" dict([["a", 2], ["b", 3]]) """) == {"a": 2, "b": 3}
 
-    def test_quote(self, capsys):
-        assert i.walk(r""" quote 2 + 3 end """) == (Ident("add"), [2, 3])
-
     def test_scope(self):
         assert i.walk(r""" a := 2; scope a end """) == 2
         assert i.walk(r""" a := 2; scope scope a end end """) == 2
@@ -675,7 +672,7 @@ class TestToil:
         assert i.walk(r""" match Ident("aaa") case Ident("bbb") then "yes" end """) is None
         assert i.walk(r""" match Ident("aaa") case Ident(a) then [a] end """) == ['aaa']
 
-        assert i.walk(r""" match quote a + b end case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) == ["a", "b"]
+        assert i.walk(r""" match tuple(Ident("add"), [Ident("a"), Ident("b")]) case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) == ["a", "b"]
         assert i.walk(r""" match 2 + 3 case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
         assert i.walk(r""" match tuple(Ident("add")) case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
 

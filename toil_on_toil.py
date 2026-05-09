@@ -233,7 +233,6 @@ t.walk(r"""
                 case Ident('(') then self._group()
                 case Ident('[') then self._list()
                 case Ident('{') then self._dict()
-                case Ident('quote') then self._quote()
                 case Ident('func') then self._func()
                 case Ident('def') then self._def()
                 case Ident('scope') then self._scope()
@@ -303,13 +302,6 @@ t.walk(r"""
             end;
             self._current_and_advance();
             dic
-        end;
-
-        defmethod _quote do
-            self._current_and_advance();
-            expr := self._expression();
-            self._consume(Ident('end'));
-            tuple(Ident('quote'), [expr])
         end;
 
         defmethod _func do
@@ -603,8 +595,6 @@ t.walk(r"""
                 case dict(_) then
                     expr.items().map([[k, v]] -> [k, self.eval(v, env)]).dict()
                 case Ident(name) then env.val(name)
-                case tuple(Ident('quote'), [expr]) then
-                    expr
                 case tuple(Ident('func'), [params, body_expr]) then
                     tuple(Ident('closure'), [params, body_expr, env, None])
                 case tuple(Ident('return'), args) then

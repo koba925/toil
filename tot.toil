@@ -590,8 +590,6 @@ defclass Evaluator do
             case dict(_) then
                 expr.items().map([[k, v]] -> [k, self.eval(v, env)]).dict()
             case Ident(name) then env.val(name)
-            case tuple(Ident('quote'), [expr]) then
-                expr
             case tuple(Ident('func'), [params, body_expr]) then
                 tuple(Ident('closure'), [params, body_expr, env, None])
             case tuple(Ident('return'), args) then

@@ -221,7 +221,6 @@ class Parser:
             case Ident("("): return self._group()
             case Ident("["): return self._list()
             case Ident("{"): return self._dict()
-            case Ident("quote"): return self._quote()
             case Ident("func"): return self._func()
             case Ident("def"): return self._def()
             case Ident("scope"): return self._scope()
@@ -281,12 +280,6 @@ class Parser:
                 _parse_key_value(dic)
         self._current_and_advance()
         return dic
-
-    def _quote(self):
-        self._current_and_advance()
-        expr = self._expression()
-        self._consume(Ident("end"))
-        return (Ident("quote"), [expr])
 
     def _func(self):
         self._current_and_advance()
@@ -567,8 +560,6 @@ class Evaluator:
                 return env
             case Ident(name):
                 return env.val(name)
-            case (Ident("quote"), [expr]):
-                return self._quote(expr, env)
             case (Ident("func"), [params, body]):
                 return (Ident("closure"), [params, body, env, None])
             case (Ident("return"), args):
@@ -611,27 +602,6 @@ class Evaluator:
                 return self._op(op_expr, args_expr, env)
             case unexpected:
                 assert False, f"Unexpected expression @ evaluate(): {unexpected}"
-
-    def _quote(self, expr, env):
-        def items(exprs):
-            quoted = []
-            for expr in exprs:
-                match expr:
-                    case (Ident("!!"), [elem]):
-                        quoted += self.eval(elem, env)
-                    case _:
-                        quoted.append(self._quote(expr, env))
-            return quoted
-
-        match expr:
-            case [*exprs] if isinstance(expr, list):
-                return items(exprs)
-            case (Ident("!"), [elem]):
-                return self.eval(elem, env)
-            case (*exprs,):
-                return tuple(items(exprs))
-            case _:
-                return expr
 
     def _define(self, left_expr, right_expr, env):
         right_val = self.eval(right_expr, env)
