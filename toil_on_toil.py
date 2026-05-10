@@ -383,7 +383,7 @@ t.walk(r"""
 
         defmethod _for do
             self._current_and_advance();
-            var_expr := self._expression();
+            var_pat := self._expression();
             self._consume(Ident('in'));
             coll_expr := self._expression();
             self._consume(Ident('do'));
@@ -397,7 +397,7 @@ t.walk(r"""
                 [self._expression()]
             else [] end;
             self._consume(Ident('end'));
-            tuple(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr])
+            tuple(Ident('for'), [var_pat, coll_expr, body_expr, then_expr, else_expr])
         end;
 
         defmethod _try do
@@ -406,10 +406,10 @@ t.walk(r"""
             clauses := [];
             while self._current_token() == Ident('except') do
                 self._current_and_advance();
-                cond_expr := self._expression();
+                exc_pat := self._expression();
                 self._consume(Ident('then'));
-                except_expr := self._expression();
-                clauses.push([cond_expr, except_expr])
+                exc_expr := self._expression();
+                clauses.push([exc_pat, exc_expr])
             end;
             self._consume(Ident('end'));
             tuple(Ident('try'), [body_expr, clauses])
@@ -585,10 +585,10 @@ t.walk(r"""
                     tuple(Ident('closure'), [params, body_expr, env])
                 case tuple(Ident('return'), args) then
                     raise(['ReturnException', self._eval_optional_arg(args, env)])
-                case tuple(Ident('define'), [left_expr, right_expr]) then
-                    self._define(left_expr, right_expr, env)
-                case tuple(Ident('assign'), [left_expr, right_expr]) then
-                    self._assign(left_expr, right_expr, env)
+                case tuple(Ident('define'), [pat, expr]) then
+                    self._define(pat, expr, env)
+                case tuple(Ident('assign'), [pat, expr]) then
+                    self._assign(pat, expr, env)
                 case tuple(Ident('scope'), [body_expr]) then
                     self.eval(body_expr, Environment(env))
                 case tuple(Ident('seq'), exprs) then
@@ -601,10 +601,14 @@ t.walk(r"""
                     self.eval(left_expr, env) and self.eval(right_expr, env)
                 case tuple(Ident('or'), [left_expr, right_expr]) then
                     self.eval(left_expr, env) or self.eval(right_expr, env)
-                case tuple(Ident('while'), [cond_expr, body_expr, then_expr, else_expr]) then
+                case tuple(Ident('while'), [
+                    cond_expr, body_expr, then_expr, else_expr
+                ]) then
                     self._while(cond_expr, body_expr, then_expr, else_expr, env)
-                case tuple(Ident('for'), [var_expr, coll_expr, body_expr, then_expr, else_expr]) then
-                    self._for(var_expr, coll_expr, body_expr, then_expr, else_expr, env)
+                case tuple(Ident('for'), [
+                    var_pat, coll_expr, body_expr, then_expr, else_expr
+                ]) then
+                    self._for(var_pat, coll_expr, body_expr, then_expr, else_expr, env)
                 case tuple(Ident('try'), [body_expr, clauses]) then
                     self._try(body_expr, clauses, env)
                 case tuple(Ident('raise'), [val_expr]) then
@@ -618,24 +622,24 @@ t.walk(r"""
             end
         end;
 
-        defmethod _define(left_expr, right_expr, env) do
-            right_val := self.eval(right_expr, env);
-            assert self._match_pattern(left_expr, right_val, env) else
-                'Pattern mismatch @ _define(): ' + str(left_expr) + ', ' + str(right_val)
+        defmethod _define(pat, expr, env) do
+            val := self.eval(expr, env);
+            assert self._match_pattern(pat, val, env) else
+                'Pattern mismatch @ _define(): ' + str(pat) + ', ' + str(val)
             end;
-            right_val
+            val
         end;
 
-        defmethod _assign(left_expr, right_expr, env) do
-            right_val := self.eval(right_expr, env);
-            match left_expr
+        defmethod _assign(pat, expr, env) do
+            val := self.eval(expr, env);
+            match pat
                 case Ident(name) then
-                    env.assign(name, right_val)
+                    env.assign(name, val)
                 case tuple(Ident('index'), [coll_expr, index_expr]) or
                      tuple(Ident('dot'), [coll_expr, index_expr]) then
                     coll_val := self.eval(coll_expr, env);
                     index_val := self.eval(index_expr, env);
-                    coll_val[index_val] = right_val
+                    coll_val[index_val] = val
                 case unexpected then
                     raise('Invalid assign target @ _assign(): ' + str(unexpected))
             end
@@ -713,9 +717,9 @@ t.walk(r"""
                          ['BreakException'] then raise(e)
                     case _ then None
                 end;
-                for [cond_expr, except_expr] in clauses do
-                    if self._match_pattern(cond_expr, e, env) then
-                        return(self.eval(except_expr, env))
+                for [exc_pat, exc_expr] in clauses do
+                    if self._match_pattern(exc_pat, e, env) then
+                        return(self.eval(exc_expr, env))
                     end
                 end;
                 raise(e)

@@ -339,7 +339,7 @@ class Parser:
 
     def _for(self):
         self._current_and_advance()
-        var_expr = self._expression()
+        var_pat = self._expression()
         self._consume(Ident("in"))
         coll_expr = self._expression()
         self._consume(Ident("do"))
@@ -355,7 +355,7 @@ class Parser:
         else:
             else_expr = []
         self._consume(Ident("end"));
-        return (Ident("for"), [var_expr, coll_expr, body_expr, then_expr, else_expr])
+        return (Ident("for"), [var_pat, coll_expr, body_expr, then_expr, else_expr])
 
     def _try(self):
         self._current_and_advance()
@@ -363,10 +363,10 @@ class Parser:
         clauses = []
         while self._current_token() == Ident("except"):
             self._current_and_advance()
-            cond_expr = self._expression()
+            exc_pat = self._expression()
             self._consume(Ident("then"))
-            except_expr = self._expression()
-            clauses.append((cond_expr, except_expr))
+            exc_expr = self._expression()
+            clauses.append((exc_pat, exc_expr))
         self._consume(Ident("end"))
         return (Ident("try"), [body_expr, clauses])
 
@@ -538,10 +538,10 @@ class Evaluator:
                 return (Ident("closure"), [params, body_expr, env])
             case (Ident("return"), args):
                 raise ReturnException(self.eval(args[0], env) if args else None)
-            case (Ident("define"), [left_expr, right_expr]):
-                return self._define(left_expr, right_expr, env)
-            case (Ident("assign"), [left_expr, right_expr]):
-                return self._assign(left_expr, right_expr, env)
+            case (Ident("define"), [pat, expr]):
+                return self._define(pat, expr, env)
+            case (Ident("assign"), [pat, expr]):
+                return self._assign(pat, expr, env)
             case (Ident("scope"), [body_expr]):
                 return self.eval(body_expr, Environment(env))
             case (Ident("seq"), exprs):
@@ -556,8 +556,8 @@ class Evaluator:
                 return self.eval(left_expr, env) or self.eval(right_expr, env)
             case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
                 return self._while(cond_expr, body_expr, then_expr, else_expr, env)
-            case (Ident("for"), [var_expr, coll_expr, body_expr, then_expr, else_expr]):
-                return self._for(var_expr, coll_expr, body_expr, then_expr, else_expr, env)
+            case (Ident("for"), [var_pat, coll_expr, body_expr, then_expr, else_expr]):
+                return self._for(var_pat, coll_expr, body_expr, then_expr, else_expr, env)
             case (Ident("try"), [body_expr, clauses]):
                 return self._try(body_expr, clauses, env)
             case (Ident("raise"), args):
@@ -569,23 +569,23 @@ class Evaluator:
             case unexpected:
                 assert False, f"Unexpected expression @ evaluate(): {unexpected}"
 
-    def _define(self, left_expr, right_expr, env):
-        right_val = self.eval(right_expr, env)
-        if self._match_pattern(left_expr, right_val, env):
-            return right_val
-        assert False, f"Pattern mismatch @ _define(): {left_expr}, {right_val}"
+    def _define(self, pat, expr, env):
+        val = self.eval(expr, env)
+        if self._match_pattern(pat, val, env):
+            return val
+        assert False, f"Pattern mismatch @ _define(): {pat}, {val}"
 
     def _assign(self, left_expr, right_expr, env):
-        right_val = self.eval(right_expr, env)
+        val = self.eval(right_expr, env)
         match left_expr:
             case Ident(name):
-                return env.assign(name, right_val)
+                return env.assign(name, val)
             case (Ident("index"), [coll_expr, index_expr]) | \
                  (Ident("dot"), [coll_expr, index_expr]):
                 coll_val = self.eval(coll_expr, env)
                 index_val = self.eval(index_expr, env)
-                coll_val[index_val] = right_val
-                return right_val
+                coll_val[index_val] = val
+                return val
             case unexpected:
                 assert False, f"Invalid assign target @ _assign(): {unexpected}"
 
@@ -636,9 +636,9 @@ class Evaluator:
         try:
             return self.eval(body_expr, env)
         except ToilException as e:
-            for cond_expr, except_expr in clauses:
-                if self._match_pattern(cond_expr, e.e, env):
-                    return self.eval(except_expr, env)
+            for exc_pat, exc_expr in clauses:
+                if self._match_pattern(exc_pat, e.e, env):
+                    return self.eval(exc_expr, env)
             raise e
 
     def _dot(self, target_expr, attr_name, env):
