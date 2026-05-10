@@ -1,703 +1,701 @@
 import pytest
-from toil import Interpreter, Ident
-
-i = Interpreter()
+from toil import toil, Ident
 
 @pytest.fixture(autouse=True)
 def reset_env():
-    i.init_env().stdlib()
+    toil.init_env().stdlib()
 
 
 class TestToil:
     # Ensure test independence
     def test_env_isolation_step1(self):
-        assert i.walk(r""" a := 2 """) == 2
+        assert toil.walk(r""" a := 2 """) == 2
     def test_env_isolation_step2(self):
         with pytest.raises(AssertionError, match="Undefined variable"):
-            i.walk(r""" a """)
+            toil.walk(r""" a """)
 
     def test_overall_structure(self):
-        assert i.scan(r""" 2 """) == [2, Ident('$EOF')]
-        assert i.parse([2, Ident('$EOF')]) == 2
-        assert i.ast(r""" 2 """) == 2
-        assert i.eval(2) == 2
-        assert i.walk(r""" 2 """) == 2
+        assert toil.scan(r""" 2 """) == [2, Ident('$EOF')]
+        assert toil.parse([2, Ident('$EOF')]) == 2
+        assert toil.ast(r""" 2 """) == 2
+        assert toil.eval(2) == 2
+        assert toil.walk(r""" 2 """) == 2
 
     def test_sequence(self):
-        assert i.walk(r""" if True then 2 end; if True then 3 end """) == 3
-        assert i.walk(r""" if True then 2 end; if True then 3 end; 4 """) == 4
+        assert toil.walk(r""" if True then 2 end; if True then 3 end """) == 3
+        assert toil.walk(r""" if True then 2 end; if True then 3 end; 4 """) == 4
 
     def test_define_assign(self):
-        assert i.walk(r""" a := 2 """) == 2
-        assert i.walk(r""" a """) == 2
+        assert toil.walk(r""" a := 2 """) == 2
+        assert toil.walk(r""" a """) == 2
 
-        assert i.walk(r""" a = 3 """) == 3
-        assert i.walk(r""" a """) == 3
+        assert toil.walk(r""" a = 3 """) == 3
+        assert toil.walk(r""" a """) == 3
 
-        assert i.walk(r""" a := b := 4 """) == 4
-        assert i.walk(r""" a """) == 4
-        assert i.walk(r""" b """) == 4
+        assert toil.walk(r""" a := b := 4 """) == 4
+        assert toil.walk(r""" a """) == 4
+        assert toil.walk(r""" b """) == 4
 
-        assert i.walk(r""" a = b = 5 """) == 5
-        assert i.walk(r""" a """) == 5
-        assert i.walk(r""" b """) == 5
+        assert toil.walk(r""" a = b = 5 """) == 5
+        assert toil.walk(r""" a """) == 5
+        assert toil.walk(r""" b """) == 5
 
-        assert i.walk(r""" a = c := 6 """) == 6
-        assert i.walk(r""" a """) == 6
-        assert i.walk(r""" c """) == 6
+        assert toil.walk(r""" a = c := 6 """) == 6
+        assert toil.walk(r""" a """) == 6
+        assert toil.walk(r""" c """) == 6
 
         with pytest.raises(AssertionError, match="Undefined variable"):
-            i.walk(r""" undefined_variable """)
+            toil.walk(r""" undefined_variable """)
         with pytest.raises(AssertionError, match="Undefined variable"):
-            i.walk(r""" undefined_variable = 2 """)
+            toil.walk(r""" undefined_variable = 2 """)
         with pytest.raises(AssertionError, match="Unexpected token"):
-            i.walk(r""" a := """)
+            toil.walk(r""" a := """)
 
     def test_destructure_variable_and_literal(self):
         # Variable pattern
-        assert i.walk(r""" a := 2; a """) == 2
-        assert i.walk(r""" _ := 2; _ """) == 2
+        assert toil.walk(r""" a := 2; a """) == 2
+        assert toil.walk(r""" _ := 2; _ """) == 2
 
         # Literal pattern
-        assert i.walk(r""" a := 2; 2 := a """) == 2
-        assert i.walk(r""" None := None """) is None
-        assert i.walk(r""" True := True """) is True
-        assert i.walk(r""" "hello" := "hello" """) == "hello"
+        assert toil.walk(r""" a := 2; 2 := a """) == 2
+        assert toil.walk(r""" None := None """) is None
+        assert toil.walk(r""" True := True """) is True
+        assert toil.walk(r""" "hello" := "hello" """) == "hello"
 
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" "hello" := "world" """)
+            toil.walk(r""" "hello" := "world" """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" a := 3; 2 := a """)
+            toil.walk(r""" a := 3; 2 := a """)
 
     def test_destructure_list(self):
-        assert i.walk(r""" [a, b] := [3, 4]; [a, b] """) == [3, 4]
-        assert i.walk(r""" [] := [] """) == []
-        assert i.walk(r""" [_, b, _] := [2, 3, 4]; b """) == 3
+        assert toil.walk(r""" [a, b] := [3, 4]; [a, b] """) == [3, 4]
+        assert toil.walk(r""" [] := [] """) == []
+        assert toil.walk(r""" [_, b, _] := [2, 3, 4]; b """) == 3
 
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" [a, b] := [2] """)
+            toil.walk(r""" [a, b] := [2] """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" [a, b] := [4, 5, 6] """)
+            toil.walk(r""" [a, b] := [4, 5, 6] """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" [] := [1] """)
+            toil.walk(r""" [] := [1] """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" [a] := 2 """)
+            toil.walk(r""" [a] := 2 """)
 
         # Rest parameters
-        assert i.walk(r""" [a, *b] := [2]; [a, b] """) == [2, []]
-        assert i.walk(r""" [a, *b] := [3, 4]; [a, b] """) == [3, [4]]
-        assert i.walk(r""" [a, *b] := [4, 5, 6]; [a, b] """) == [4, [5, 6]]
-        assert i.walk(r""" [*a] := [4, 5, 6]; a """) == [4, 5, 6]
+        assert toil.walk(r""" [a, *b] := [2]; [a, b] """) == [2, []]
+        assert toil.walk(r""" [a, *b] := [3, 4]; [a, b] """) == [3, [4]]
+        assert toil.walk(r""" [a, *b] := [4, 5, 6]; [a, b] """) == [4, [5, 6]]
+        assert toil.walk(r""" [*a] := [4, 5, 6]; a """) == [4, 5, 6]
 
-        assert i.walk(r""" [*a, b] := [2]; [a, b] """) == [[], 2]
-        assert i.walk(r""" [*a, b] := [2, 3]; [a, b] """) == [[2], 3]
-        assert i.walk(r""" [*a, b] := [2, 3, 4]; [a, b] """) == [[2, 3], 4]
+        assert toil.walk(r""" [*a, b] := [2]; [a, b] """) == [[], 2]
+        assert toil.walk(r""" [*a, b] := [2, 3]; [a, b] """) == [[2], 3]
+        assert toil.walk(r""" [*a, b] := [2, 3, 4]; [a, b] """) == [[2, 3], 4]
 
-        assert i.walk(r""" [a, *b, c] := [3, 4]; [a, b, c] """) == [3, [], 4]
-        assert i.walk(r""" [a, *b, c] := [4, 5, 6]; [a, b, c] """) == [4, [5], 6]
-        assert i.walk(r""" [a, *b, c] := [5, 6, 7, 8]; [a, b, c] """) == [5, [6, 7], 8]
+        assert toil.walk(r""" [a, *b, c] := [3, 4]; [a, b, c] """) == [3, [], 4]
+        assert toil.walk(r""" [a, *b, c] := [4, 5, 6]; [a, b, c] """) == [4, [5], 6]
+        assert toil.walk(r""" [a, *b, c] := [5, 6, 7, 8]; [a, b, c] """) == [5, [6, 7], 8]
 
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" [a, *b] := [] """)
+            toil.walk(r""" [a, *b] := [] """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" [*a, b] := [] """)
+            toil.walk(r""" [*a, b] := [] """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" [a, *b, c] := [2] """)
+            toil.walk(r""" [a, *b, c] := [2] """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" [a, *b, *c, d] := [5, 6, 7, 8] """)
+            toil.walk(r""" [a, *b, *c, d] := [5, 6, 7, 8] """)
 
     def test_destructure_dict(self):
-        assert i.walk(r""" {a} := {a: 2, b: 3}; a """) == 2
-        assert i.walk(r""" {a, b} := {a: 2, b: 3}; [a, b] """) == [2, 3]
-        assert i.walk(r""" {a: c, b: d} := {a: 3, b: 4}; [c, d] """) == [3, 4]
-        assert i.walk(r""" {a} := {"a": 5, b: 6}; a """) == 5
-        assert i.walk(r""" {a: _, b} := {a: 2, b: 3}; b """) == 3
-        assert i.walk(r""" {} := {a: 2, b: 3} """) == {'a': 2, 'b': 3}
+        assert toil.walk(r""" {a} := {a: 2, b: 3}; a """) == 2
+        assert toil.walk(r""" {a, b} := {a: 2, b: 3}; [a, b] """) == [2, 3]
+        assert toil.walk(r""" {a: c, b: d} := {a: 3, b: 4}; [c, d] """) == [3, 4]
+        assert toil.walk(r""" {a} := {"a": 5, b: 6}; a """) == 5
+        assert toil.walk(r""" {a: _, b} := {a: 2, b: 3}; b """) == 3
+        assert toil.walk(r""" {} := {a: 2, b: 3} """) == {'a': 2, 'b': 3}
 
-        assert i.walk(r""" {a, *rest} := {a: 2}; [a, rest] """) == [2, {}]
-        assert i.walk(r""" {a, *rest} := {a: 2, b: 3}; [a, rest] """) == [2, {'b': 3}]
-        assert i.walk(r""" {a, *rest} := {a: 2, b: 3, c: 4}; [a, rest] """) == [2, {'b': 3, 'c': 4}]
+        assert toil.walk(r""" {a, *rest} := {a: 2}; [a, rest] """) == [2, {}]
+        assert toil.walk(r""" {a, *rest} := {a: 2, b: 3}; [a, rest] """) == [2, {'b': 3}]
+        assert toil.walk(r""" {a, *rest} := {a: 2, b: 3, c: 4}; [a, rest] """) == [2, {'b': 3, 'c': 4}]
 
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" {a} := {b: 2} """)
+            toil.walk(r""" {a} := {b: 2} """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" {a, b, c} := {a: 2, b: 3} """)
+            toil.walk(r""" {a, b, c} := {a: 2, b: 3} """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" {a, *rest} := {b: 2} """)
+            toil.walk(r""" {a, *rest} := {b: 2} """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" {a} := 2 """)
+            toil.walk(r""" {a} := 2 """)
 
     def test_destructure_ident_and_expr(self):
-        assert i.walk(r""" Ident("aaa") := Ident("aaa") """) == Ident("aaa")
-        assert i.walk(r""" Ident(a) := Ident("aaa"); a """) == "aaa"
+        assert toil.walk(r""" Ident("aaa") := Ident("aaa") """) == Ident("aaa")
+        assert toil.walk(r""" Ident(a) := Ident("aaa"); a """) == "aaa"
 
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" Ident("aaa") := Ident("bbb") """)
+            toil.walk(r""" Ident("aaa") := Ident("bbb") """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" Ident(a) := "aaa" """)
+            toil.walk(r""" Ident(a) := "aaa" """)
 
-        assert i.walk(r""" tuple(Ident("add"), [int(a), int(b)]) := tuple(Ident("add"), [2, 3]); [a, b] """) == [2, 3]
-        assert i.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := tuple(Ident("add"), [Ident("a"), Ident("b")]); [name1, name2] """) == ['a', 'b']
+        assert toil.walk(r""" tuple(Ident("add"), [int(a), int(b)]) := tuple(Ident("add"), [2, 3]); [a, b] """) == [2, 3]
+        assert toil.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := tuple(Ident("add"), [Ident("a"), Ident("b")]); [name1, name2] """) == ['a', 'b']
 
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := 2 + 3 """)
+            toil.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := 2 + 3 """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := tuple(Ident("add")) """)
+            toil.walk(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := tuple(Ident("add")) """)
 
     def test_destructure_type(self):
-        assert i.walk(r""" int(a) := 2; a """) == 2
-        assert i.walk(r""" str(a) := "aaa"; a """) == "aaa"
+        assert toil.walk(r""" int(a) := 2; a """) == 2
+        assert toil.walk(r""" str(a) := "aaa"; a """) == "aaa"
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" int(a) := "2" """)
+            toil.walk(r""" int(a) := "2" """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" str(a) := [] """)
+            toil.walk(r""" str(a) := [] """)
 
     def test_destructure_or(self):
-        assert i.walk(r""" int(a) or str(a) := 2; a """) == 2
-        assert i.walk(r""" int(a) or str(a) := "aaa"; a """) == "aaa"
-        assert i.walk(r""" int(a) or str(a) or list(a):= [2]; a """) == [2]
+        assert toil.walk(r""" int(a) or str(a) := 2; a """) == 2
+        assert toil.walk(r""" int(a) or str(a) := "aaa"; a """) == "aaa"
+        assert toil.walk(r""" int(a) or str(a) or list(a):= [2]; a """) == [2]
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" int(a) or str(a) := [2] """)
+            toil.walk(r""" int(a) or str(a) := [2] """)
 
     def test_destructure_combination(self):
-        assert i.walk(r""" [{a: b}, c] := [{a: 2, b: 3}, 4]; [b, c] """) == [2, 4]
-        assert i.walk(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """) == [5, 6]
+        assert toil.walk(r""" [{a: b}, c] := [{a: 2, b: 3}, 4]; [b, c] """) == [2, 4]
+        assert toil.walk(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """) == [5, 6]
 
     def test_list_assign(self):
-        i.walk(""" b := [2, 3, [4, 5]] """)
-        i.walk(""" b[0] = 6 """)
-        assert i.walk(""" b[0] """) == 6
-        i.walk(""" b[2][1] = 7 """)
-        assert i.walk(""" b[2][1] """) == 7
-        assert i.walk(""" b """) == [6, 3, [4, 7]]
+        toil.walk(""" b := [2, 3, [4, 5]] """)
+        toil.walk(""" b[0] = 6 """)
+        assert toil.walk(""" b[0] """) == 6
+        toil.walk(""" b[2][1] = 7 """)
+        assert toil.walk(""" b[2][1] """) == 7
+        assert toil.walk(""" b """) == [6, 3, [4, 7]]
 
-        assert i.walk(""" a := [1, 2]; b := [3, 4]; a[0] = b[1] = 5; [a, b] """) == [[5, 2], [3, 5]]
+        assert toil.walk(""" a := [1, 2]; b := [3, 4]; a[0] = b[1] = 5; [a, b] """) == [[5, 2], [3, 5]]
 
     def test_arrow_function(self):
-        assert i.walk(""" ([] -> 2)() """) == 2
-        assert i.walk(""" ([a] -> a + 2)(3) """) == 5
-        assert i.walk(""" (a -> a + 2)(3) """) == 5
-        assert i.walk(""" ([[a, b]] -> a + b)([2, 3]) """) == 5
-        assert i.walk(""" ([a, b] -> a + b)(2, 3) """) == 5
+        assert toil.walk(""" ([] -> 2)() """) == 2
+        assert toil.walk(""" ([a] -> a + 2)(3) """) == 5
+        assert toil.walk(""" (a -> a + 2)(3) """) == 5
+        assert toil.walk(""" ([[a, b]] -> a + b)([2, 3]) """) == 5
+        assert toil.walk(""" ([a, b] -> a + b)(2, 3) """) == 5
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(""" ([a, b] -> a + b)(2) """)
+            toil.walk(""" ([a, b] -> a + b)(2) """)
 
-        assert i.walk(""" ([a, *b] -> b)(2, 3, 4) """) == [3, 4]
-        assert i.walk(""" ({a} -> a + 2)({a: 3}) """) == 5
+        assert toil.walk(""" ([a, *b] -> b)(2, 3, 4) """) == [3, 4]
+        assert toil.walk(""" ({a} -> a + 2)({a: 3}) """) == 5
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(""" ({a} -> a + 2)({b: 3}) """)
+            toil.walk(""" ({a} -> a + 2)({b: 3}) """)
 
-        assert i.walk(""" (int(a) -> a + 2)(3) """) == 5
+        assert toil.walk(""" (int(a) -> a + 2)(3) """) == 5
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(""" (int(a) -> a + 2)("aaa") """)
+            toil.walk(""" (int(a) -> a + 2)("aaa") """)
 
-        assert i.walk(""" (x -> x or 2)(False) """) == 2
-        assert i.walk(""" (a -> b -> a + b)(2)(3) """) == 5
+        assert toil.walk(""" (x -> x or 2)(False) """) == 2
+        assert toil.walk(""" (a -> b -> a + b)(2)(3) """) == 5
 
-        assert i.walk(""" inc := a -> a + 1; inc(2) """) == 3
-        assert i.walk(""" myadd := [a, b] -> a + b; myadd(2, 3) """) == 5
+        assert toil.walk(""" inc := a -> a + 1; inc(2) """) == 3
+        assert toil.walk(""" myadd := [a, b] -> a + b; myadd(2, 3) """) == 5
 
     def test_logical_operations(self, capsys):
-        assert i.walk(r""" True and False """) is False
-        assert i.walk(r""" False and True """) is False
-        assert i.walk(r""" True or False """) is True
-        assert i.walk(r""" False or True """) is True
+        assert toil.walk(r""" True and False """) is False
+        assert toil.walk(r""" False and True """) is False
+        assert toil.walk(r""" True or False """) is True
+        assert toil.walk(r""" False or True """) is True
 
-        assert i.walk(r""" True and 2 """) == 2
-        assert i.walk(r""" 0 and 2 / 0 """) == 0
-        assert i.walk(r""" False or 2 """) == 2
-        assert i.walk(r""" 1 or 2 / 0 """) == 1
+        assert toil.walk(r""" True and 2 """) == 2
+        assert toil.walk(r""" 0 and 2 / 0 """) == 0
+        assert toil.walk(r""" False or 2 """) == 2
+        assert toil.walk(r""" 1 or 2 / 0 """) == 1
 
-        assert i.walk(r""" print(2) and 3 """) is None
+        assert toil.walk(r""" print(2) and 3 """) is None
         assert capsys.readouterr().out == "2\n"
-        assert i.walk(r""" not print(2) or 3 """) is True
+        assert toil.walk(r""" not print(2) or 3 """) is True
         assert capsys.readouterr().out == "2\n"
 
-        assert i.walk(r""" not True """) is False
-        assert i.walk(r""" not False """) is True
-        assert i.walk(r""" not not True """) is True
+        assert toil.walk(r""" not True """) is False
+        assert toil.walk(r""" not False """) is True
+        assert toil.walk(r""" not not True """) is True
 
-        assert i.walk(r""" a := not 2 == 2 or True """) is True
+        assert toil.walk(r""" a := not 2 == 2 or True """) is True
 
     def test_comparison_operations(self):
-        assert i.walk(r""" 2 + 5 == 3 + 4 """) is True
-        assert i.walk(r""" 2 + 3 == 3 + 4 """) is False
-        assert i.walk(r""" 2 + 5 != 3 + 4 """) is False
-        assert i.walk(r""" 2 + 3 != 3 + 4 """) is True
+        assert toil.walk(r""" 2 + 5 == 3 + 4 """) is True
+        assert toil.walk(r""" 2 + 3 == 3 + 4 """) is False
+        assert toil.walk(r""" 2 + 5 != 3 + 4 """) is False
+        assert toil.walk(r""" 2 + 3 != 3 + 4 """) is True
 
-        assert i.walk(r""" 2 + 4 < 3 + 4 """) is True
-        assert i.walk(r""" 2 + 5 < 3 + 4 """) is False
-        assert i.walk(r""" 2 + 5 < 2 + 4 """) is False
+        assert toil.walk(r""" 2 + 4 < 3 + 4 """) is True
+        assert toil.walk(r""" 2 + 5 < 3 + 4 """) is False
+        assert toil.walk(r""" 2 + 5 < 2 + 4 """) is False
 
-        assert i.walk(r""" 2 + 4 > 3 + 4 """) is False
-        assert i.walk(r""" 2 + 5 > 3 + 4 """) is False
-        assert i.walk(r""" 2 + 5 > 2 + 4 """) is True
+        assert toil.walk(r""" 2 + 4 > 3 + 4 """) is False
+        assert toil.walk(r""" 2 + 5 > 3 + 4 """) is False
+        assert toil.walk(r""" 2 + 5 > 2 + 4 """) is True
 
-        assert i.walk(r""" 2 + 4 <= 3 + 4 """) is True
-        assert i.walk(r""" 2 + 5 <= 3 + 4 """) is True
-        assert i.walk(r""" 2 + 5 <= 2 + 4 """) is False
+        assert toil.walk(r""" 2 + 4 <= 3 + 4 """) is True
+        assert toil.walk(r""" 2 + 5 <= 3 + 4 """) is True
+        assert toil.walk(r""" 2 + 5 <= 2 + 4 """) is False
 
-        assert i.walk(r""" 2 + 4 >= 3 + 4 """) is False
-        assert i.walk(r""" 2 + 5 >= 3 + 4 """) is True
-        assert i.walk(r""" 2 + 5 >= 2 + 4 """) is True
+        assert toil.walk(r""" 2 + 4 >= 3 + 4 """) is False
+        assert toil.walk(r""" 2 + 5 >= 3 + 4 """) is True
+        assert toil.walk(r""" 2 + 5 >= 2 + 4 """) is True
 
-        assert i.walk(r""" 2 == 2 == 2 """) is False
-        assert i.walk(r""" a := 2 == 3 + 4 """) is False
+        assert toil.walk(r""" 2 == 2 == 2 """) is False
+        assert toil.walk(r""" a := 2 == 3 + 4 """) is False
 
-        assert i.walk(r""" True == True """) is True
-        assert i.walk(r""" None == None """) is True
-        assert i.walk(r""" False != True """) is True
+        assert toil.walk(r""" True == True """) is True
+        assert toil.walk(r""" None == None """) is True
+        assert toil.walk(r""" False != True """) is True
 
     def test_arithmetic_operations(self):
-        assert i.walk(r""" 2 + 3 """) == 5
-        assert i.walk(r""" 2 + 3 - 4 """) == 1
-        assert i.walk(r""" a := 2 + sub(4, 3) """) == 3
+        assert toil.walk(r""" 2 + 3 """) == 5
+        assert toil.walk(r""" 2 + 3 - 4 """) == 1
+        assert toil.walk(r""" a := 2 + sub(4, 3) """) == 3
 
     def test_mul_div_mod(self):
-        assert i.walk(r""" 2 * 3 """) == 6
-        assert i.walk(r""" 4 / 2 * 3 """) == 6
-        assert i.walk(r""" 2 * 3 % 4 """) == 2
-        assert i.walk(r""" 2 + 3 * add(4, 5) """) == 29
+        assert toil.walk(r""" 2 * 3 """) == 6
+        assert toil.walk(r""" 4 / 2 * 3 """) == 6
+        assert toil.walk(r""" 2 * 3 % 4 """) == 2
+        assert toil.walk(r""" 2 + 3 * add(4, 5) """) == 29
 
     def test_unary_operations(self):
-        assert i.walk(r""" -2 """) == -2
-        assert i.walk(r""" --2 """) == 2
-        assert i.walk(r""" 3--2 """) == 5
-        assert i.walk(r""" -add(2, 3) * 4 """) == -20
+        assert toil.walk(r""" -2 """) == -2
+        assert toil.walk(r""" --2 """) == 2
+        assert toil.walk(r""" 3--2 """) == 5
+        assert toil.walk(r""" -add(2, 3) * 4 """) == -20
 
     def test_call_index(self):
-        assert i.walk(r""" neg(2) """) == -2
-        assert i.walk(r""" add(2, 3) """) == 5
+        assert toil.walk(r""" neg(2) """) == -2
+        assert toil.walk(r""" add(2, 3) """) == 5
 
-        i.walk(""" a := [2, 3, [4, 5]] """)
-        assert i.walk(""" a[2][0] """) == 4
-        assert i.walk(""" a[2][-1] """) == 5
+        toil.walk(""" a := [2, 3, [4, 5]] """)
+        assert toil.walk(""" a[2][0] """) == 4
+        assert toil.walk(""" a[2][-1] """) == 5
 
-        i.walk(""" c := func do [add, sub] end """)
-        assert i.walk(""" c()[0](2, 3) """) == 5
+        toil.walk(""" c := func do [add, sub] end """)
+        assert toil.walk(""" c()[0](2, 3) """) == 5
 
-        i.walk(""" e := [1] """)
+        toil.walk(""" e := [1] """)
         with pytest.raises(Exception):
-            i.walk(""" e[None] = 2 """)
+            toil.walk(""" e[None] = 2 """)
         with pytest.raises(Exception):
-            i.walk(""" None[2] = 3 """)
+            toil.walk(""" None[2] = 3 """)
         with pytest.raises(Exception):
-            i.walk(""" [1, 2][5] """)
+            toil.walk(""" [1, 2][5] """)
         with pytest.raises(Exception):
-            i.walk(""" [1, 2][None] """)
+            toil.walk(""" [1, 2][None] """)
         with pytest.raises(Exception):
-            i.walk(""" None[0] """)
+            toil.walk(""" None[0] """)
 
     def test_dot_notation(self):
-        i.walk(r""" a := {aaa: 2, bbb: 3} """)
-        assert i.walk(r""" a.aaa """) == 2
+        toil.walk(r""" a := {aaa: 2, bbb: 3} """)
+        assert toil.walk(r""" a.aaa """) == 2
 
-        i.walk(r""" a.bbb = 4 """)
-        assert i.walk(r""" a """) == {'aaa': 2, 'bbb': 4}
-        i.walk(r""" a.ccc = 5 """)
-        assert i.walk(r""" a """) == {'aaa': 2, 'bbb': 4, 'ccc': 5}
+        toil.walk(r""" a.bbb = 4 """)
+        assert toil.walk(r""" a """) == {'aaa': 2, 'bbb': 4}
+        toil.walk(r""" a.ccc = 5 """)
+        assert toil.walk(r""" a """) == {'aaa': 2, 'bbb': 4, 'ccc': 5}
 
         with pytest.raises(AssertionError):
-            i.walk(r""" a.not_found """)
+            toil.walk(r""" a.not_found """)
         with pytest.raises(AssertionError, match="Invalid attribute"):
-            i.walk(r""" a.1 """)
+            toil.walk(r""" a.1 """)
         with pytest.raises(Exception):
-            i.walk(r""" [2, 3].aaa """)
+            toil.walk(r""" [2, 3].aaa """)
         with pytest.raises(Exception):
-            i.walk(r""" [2, 3].aaa = 4 """)
+            toil.walk(r""" [2, 3].aaa = 4 """)
 
     def test_ufcs(self):
-        assert i.walk(r""" 2.add(3) """) == 5
-        assert i.walk(r""" [2, 3, 4].len() """) == 3
-        assert i.walk(r""" [2, 3, 4].len().add(5) """) == 8
+        assert toil.walk(r""" 2.add(3) """) == 5
+        assert toil.walk(r""" [2, 3, 4].len() """) == 3
+        assert toil.walk(r""" [2, 3, 4].len().add(5) """) == 8
 
-        i.walk(r""" def myadd(a, b) do a + b end """)
-        assert i.walk(r""" 2.myadd(3) """) == 5
+        toil.walk(r""" def myadd(a, b) do a + b end """)
+        assert toil.walk(r""" 2.myadd(3) """) == 5
 
         with pytest.raises(AssertionError, match="Undefined variable"):
-            i.walk(r""" 2.not_found() """)
+            toil.walk(r""" 2.not_found() """)
         with pytest.raises(AssertionError, match="Invalid operator"):
-            i.walk(r""" foo := 2; 3.foo() """)
+            toil.walk(r""" foo := 2; 3.foo() """)
 
     def test_method_notation(self):
-        i.walk(r""" obj := {
+        toil.walk(r""" obj := {
             set: func self, val do self.val = val end,
             add: func self, a do self.val + a end,
             val: None
         } """)
-        i.walk(r""" obj.set(2) """)
-        assert i.walk(r""" obj.val """) == 2
-        assert i.walk(r""" obj.add(3) """) == 5
+        toil.walk(r""" obj.set(2) """)
+        assert toil.walk(r""" obj.val """) == 2
+        assert toil.walk(r""" obj.add(3) """) == 5
 
-        assert i.walk(r""" {a: 2, b: 3}.keys() """) == ['a', 'b']
-        assert i.walk(r""" { len: func self do "local" end }.len() """) == "local"
+        assert toil.walk(r""" {a: 2, b: 3}.keys() """) == ['a', 'b']
+        assert toil.walk(r""" { len: func self do "local" end }.len() """) == "local"
 
     def test_none_bool(self):
-        assert i.walk(r""" None """) is None
-        assert i.walk(r""" True """) is True
-        assert i.walk(r""" False """) is False
+        assert toil.walk(r""" None """) is None
+        assert toil.walk(r""" True """) is True
+        assert toil.walk(r""" False """) is False
 
     def test_numbers(self):
-        assert i.walk(r"""2""") == 2
-        assert i.walk(r"""23""") == 23
-        assert i.walk(r"""0""") == 0
-        assert i.walk(r"""023""") == 23
+        assert toil.walk(r"""2""") == 2
+        assert toil.walk(r"""23""") == 23
+        assert toil.walk(r"""0""") == 0
+        assert toil.walk(r"""023""") == 23
 
     def test_raw_string(self):
-        assert i.walk(r""" 'hello, world' """) == "hello, world"
-        assert i.walk(r""" '' """) == ""
-        assert i.walk(r""" 'if ; #"\n' """) == r"""if ; #"\n"""
-        assert i.walk(""" 'a\nb' """) == "a\nb"
+        assert toil.walk(r""" 'hello, world' """) == "hello, world"
+        assert toil.walk(r""" '' """) == ""
+        assert toil.walk(r""" 'if ; #"\n' """) == r"""if ; #"\n"""
+        assert toil.walk(""" 'a\nb' """) == "a\nb"
 
         with pytest.raises(AssertionError, match="Unterminated string"):
-            i.walk(r""" ' """)
+            toil.walk(r""" ' """)
 
     def test_string(self):
-        assert i.walk(r""" "hello, world" """) == "hello, world"
-        assert i.walk(r""" "" """) == ""
-        assert i.walk(r""" "if ; #\"\\\n" """) == 'if ; #"\\\n'
-        assert i.walk(""" \"a\nb\" """) == "a\nb"
+        assert toil.walk(r""" "hello, world" """) == "hello, world"
+        assert toil.walk(r""" "" """) == ""
+        assert toil.walk(r""" "if ; #\"\\\n" """) == 'if ; #"\\\n'
+        assert toil.walk(""" \"a\nb\" """) == "a\nb"
 
         with pytest.raises(AssertionError, match="Unterminated string"):
-            i.walk(r""" " """)
+            toil.walk(r""" " """)
 
         with pytest.raises(AssertionError, match="Unterminated string"):
-            i.walk(r""" "\" """)
+            toil.walk(r""" "\" """)
 
     def test_string_functions(self):
-        assert i.walk(r""" join(["ab", "cd", "ef"], ",") """) == "ab,cd,ef"
+        assert toil.walk(r""" join(["ab", "cd", "ef"], ",") """) == "ab,cd,ef"
 
     def test_grouping(self):
-        assert i.walk(r""" (2 + 3) * 4 """) == 20
-        assert i.walk(r""" (2) * 3 """) == 6
+        assert toil.walk(r""" (2 + 3) * 4 """) == 20
+        assert toil.walk(r""" (2) * 3 """) == 6
 
     def test_list(self, capsys):
-        assert i.walk(""" [] """) == []
-        assert i.walk(""" [2 + 3] """) == [5]
-        assert i.walk(""" [2, 3, [4, 5]] """) == [2, 3, [4, 5]]
-        i.walk(""" [print(2), print(3)] """)
+        assert toil.walk(""" [] """) == []
+        assert toil.walk(""" [2 + 3] """) == [5]
+        assert toil.walk(""" [2, 3, [4, 5]] """) == [2, 3, [4, 5]]
+        toil.walk(""" [print(2), print(3)] """)
         assert capsys.readouterr().out == "2\n3\n"
 
     def test_list_functions(self, capsys):
-        i.walk(""" d := [2, 3, 4] """)
-        assert i.walk(""" len(d) """) == 3
-        assert i.walk(""" index(d, 2) """) == 4
-        assert i.walk(""" slice(d, 1, None) """) == [3, 4]
-        assert i.walk(""" slice(d, 1, 2) """) == [3]
-        assert i.walk(""" slice(d, None, 2) """) == [2, 3]
-        assert i.walk(""" slice(d, None, None) """) == [2, 3, 4]
-        assert i.walk(""" push(d, 5) """) is None
-        assert i.walk(""" d """) == [2, 3, 4, 5]
-        assert i.walk(""" pop(d) """) == 5
-        assert i.walk(""" d """) == [2, 3, 4]
-        assert i.walk(""" in(2, d) """) is True
-        assert i.walk(""" in(5, d) """) is False
-        assert i.walk(""" dd := copy(d); dd[0] = 6; [d, dd] """) == [[2, 3, 4], [6, 3, 4]]
+        toil.walk(""" d := [2, 3, 4] """)
+        assert toil.walk(""" len(d) """) == 3
+        assert toil.walk(""" index(d, 2) """) == 4
+        assert toil.walk(""" slice(d, 1, None) """) == [3, 4]
+        assert toil.walk(""" slice(d, 1, 2) """) == [3]
+        assert toil.walk(""" slice(d, None, 2) """) == [2, 3]
+        assert toil.walk(""" slice(d, None, None) """) == [2, 3, 4]
+        assert toil.walk(""" push(d, 5) """) is None
+        assert toil.walk(""" d """) == [2, 3, 4, 5]
+        assert toil.walk(""" pop(d) """) == 5
+        assert toil.walk(""" d """) == [2, 3, 4]
+        assert toil.walk(""" in(2, d) """) is True
+        assert toil.walk(""" in(5, d) """) is False
+        assert toil.walk(""" dd := copy(d); dd[0] = 6; [d, dd] """) == [[2, 3, 4], [6, 3, 4]]
 
-        assert i.walk(""" [2, 3] + [4, 5] """) == [2, 3, 4, 5]
-        assert i.walk(""" [2, 3] * 3 """) == [2, 3, 2, 3, 2, 3]
+        assert toil.walk(""" [2, 3] + [4, 5] """) == [2, 3, 4, 5]
+        assert toil.walk(""" [2, 3] * 3 """) == [2, 3, 2, 3, 2, 3]
 
     def test_dict(self):
-        assert i.walk(r""" {} """) == {}
+        assert toil.walk(r""" {} """) == {}
 
-        i.walk(r""" ccc := 1 """)
-        assert i.walk(r""" a := {"aaa": 2 + 3, bbb: 4, ccc} """) == {'aaa': 5, 'bbb': 4, 'ccc': 1}
-        assert i.walk(r""" a["aaa"] """) == 5
+        toil.walk(r""" ccc := 1 """)
+        assert toil.walk(r""" a := {"aaa": 2 + 3, bbb: 4, ccc} """) == {'aaa': 5, 'bbb': 4, 'ccc': 1}
+        assert toil.walk(r""" a["aaa"] """) == 5
 
-        i.walk(r""" a["aaa"] = 6 """)
-        i.walk(r""" a["ddd"] = 7 """)
-        assert i.walk(r""" a """) == {'aaa': 6, 'bbb': 4, 'ccc': 1, 'ddd': 7}
+        toil.walk(r""" a["aaa"] = 6 """)
+        toil.walk(r""" a["ddd"] = 7 """)
+        assert toil.walk(r""" a """) == {'aaa': 6, 'bbb': 4, 'ccc': 1, 'ddd': 7}
 
-        assert i.walk(r""" {outer: {inner: 1}} """) == {'outer': {'inner': 1}}
+        assert toil.walk(r""" {outer: {inner: 1}} """) == {'outer': {'inner': 1}}
 
         with pytest.raises(AssertionError, match="Expected :"):
-            i.walk(r""" {"aaa"} """)
+            toil.walk(r""" {"aaa"} """)
         with pytest.raises(AssertionError, match="Invalid key"):
-            i.walk(r""" {2: 3} """)
+            toil.walk(r""" {2: 3} """)
         with pytest.raises(KeyError):
-            i.walk(r""" a["eee"] """)
+            toil.walk(r""" a["eee"] """)
         with pytest.raises(AssertionError, match="Undefined variable"):
-            i.walk(r""" {undefined_var} """)
+            toil.walk(r""" {undefined_var} """)
 
     def test_dict_functions(self):
-        assert i.walk(r""" a := dict([["aaa", 2], ["bbb", 3], ["ccc", 4]]) """) == {'aaa': 2, 'bbb': 3, 'ccc': 4}
-        assert i.walk(r""" len(a) """) == 3
-        assert i.walk(r""" in("aaa", a) """) is True
-        assert i.walk(r""" in("ddd", a) """) is False
-        assert i.walk(r""" keys(a) """) == ['aaa', 'bbb', 'ccc']
-        assert i.walk(r""" items(a) """) == [['aaa', 2], ['bbb', 3], ['ccc', 4]]
+        assert toil.walk(r""" a := dict([["aaa", 2], ["bbb", 3], ["ccc", 4]]) """) == {'aaa': 2, 'bbb': 3, 'ccc': 4}
+        assert toil.walk(r""" len(a) """) == 3
+        assert toil.walk(r""" in("aaa", a) """) is True
+        assert toil.walk(r""" in("ddd", a) """) is False
+        assert toil.walk(r""" keys(a) """) == ['aaa', 'bbb', 'ccc']
+        assert toil.walk(r""" items(a) """) == [['aaa', 2], ['bbb', 3], ['ccc', 4]]
 
     def test_type_functions(self):
-        assert i.walk(r""" type(None) """) == "NoneType"
-        assert i.walk(r""" type(True) """) == "bool"
-        assert i.walk(r""" type(5) """) == "int"
-        assert i.walk(r""" type("") """) == "str"
-        assert i.walk(r""" type([]) """) == "list"
-        assert i.walk(r""" type({}) """) == "dict"
+        assert toil.walk(r""" type(None) """) == "NoneType"
+        assert toil.walk(r""" type(True) """) == "bool"
+        assert toil.walk(r""" type(5) """) == "int"
+        assert toil.walk(r""" type("") """) == "str"
+        assert toil.walk(r""" type([]) """) == "list"
+        assert toil.walk(r""" type({}) """) == "dict"
 
-        assert i.walk(r""" bool(True) """) is True
-        assert i.walk(r""" bool(1) """) is True
-        assert i.walk(r""" int(2) """) == 2
-        assert i.walk(r""" int("2") """) == 2
-        assert i.walk(r""" str("a") """) == "a"
-        assert i.walk(r""" str(2) """) == "2"
-        assert i.walk(r""" list([2, 3]) """) == [2, 3]
-        assert i.walk(r""" list({a: 2, b: 3}) """) == ["a", "b"]
-        assert i.walk(r""" dict({a: 2, b: 3}) """) == {"a": 2, "b": 3}
-        assert i.walk(r""" dict([["a", 2], ["b", 3]]) """) == {"a": 2, "b": 3}
+        assert toil.walk(r""" bool(True) """) is True
+        assert toil.walk(r""" bool(1) """) is True
+        assert toil.walk(r""" int(2) """) == 2
+        assert toil.walk(r""" int("2") """) == 2
+        assert toil.walk(r""" str("a") """) == "a"
+        assert toil.walk(r""" str(2) """) == "2"
+        assert toil.walk(r""" list([2, 3]) """) == [2, 3]
+        assert toil.walk(r""" list({a: 2, b: 3}) """) == ["a", "b"]
+        assert toil.walk(r""" dict({a: 2, b: 3}) """) == {"a": 2, "b": 3}
+        assert toil.walk(r""" dict([["a", 2], ["b", 3]]) """) == {"a": 2, "b": 3}
 
     def test_scope(self):
-        assert i.walk(r""" a := 2; scope a end """) == 2
-        assert i.walk(r""" a := 2; scope scope a end end """) == 2
+        assert toil.walk(r""" a := 2; scope a end """) == 2
+        assert toil.walk(r""" a := 2; scope scope a end end """) == 2
 
-        assert i.walk(r""" a := 2; scope a := 3 end """) == 3
-        assert i.walk(r""" a """) == 2
+        assert toil.walk(r""" a := 2; scope a := 3 end """) == 3
+        assert toil.walk(r""" a """) == 2
 
-        assert i.walk(r""" a := 2; scope a = 3 end """) == 3
-        assert i.walk(r""" a """) == 3
+        assert toil.walk(r""" a := 2; scope a = 3 end """) == 3
+        assert toil.walk(r""" a """) == 3
 
-        assert i.walk(r""" a := 2; scope d := 3 end """) == 3
+        assert toil.walk(r""" a := 2; scope d := 3 end """) == 3
         with pytest.raises(AssertionError, match="Undefined variable"):
-            i.walk(r""" d """)
+            toil.walk(r""" d """)
 
     def test_func(self):
-        assert i.walk("func do 2 end ()") == 2
-        assert i.walk("func a do add(a, 2) end (3)") == 5
-        assert i.walk("func a, b do add(a, b) end (2, 3)") == 5
+        assert toil.walk("func do 2 end ()") == 2
+        assert toil.walk("func a do add(a, 2) end (3)") == 5
+        assert toil.walk("func a, b do add(a, b) end (2, 3)") == 5
 
-        assert i.walk("func a, b do add(a, b) end (add(2, 3), 4; 5)") == 10
-        assert i.walk("""
+        assert toil.walk("func a, b do add(a, b) end (add(2, 3), 4; 5)") == 10
+        assert toil.walk("""
            myadd := func a, b do add(a, b) end;
            myadd(2, 3)
         """) == 5
 
         with pytest.raises(AssertionError, match="Pattern mismatch"):
-            i.walk("func a, b do add(a, b) end (2)")
+            toil.walk("func a, b do add(a, b) end (2)")
 
         with pytest.raises(AssertionError, match="Expected do"):
-            i.walk("func a add(a, 2) end")
+            toil.walk("func a add(a, 2) end")
 
         with pytest.raises(AssertionError, match="Expected end"):
-            i.walk("func a do add(a, 2)")
+            toil.walk("func a do add(a, 2)")
 
     def test_destructure_function_arguments(self):
-        assert i.walk(r""" func a, *rest do [a, rest] end (2, 3, 4) """) == [2, [3, 4]]
-        assert i.walk(r""" func {a: d, *rest}, e do [d, e, rest] end ({a: 2, b: 3, c: 4}, 5) """) == [2, 5, {'b': 3, 'c': 4}]
+        assert toil.walk(r""" func a, *rest do [a, rest] end (2, 3, 4) """) == [2, [3, 4]]
+        assert toil.walk(r""" func {a: d, *rest}, e do [d, e, rest] end ({a: 2, b: 3, c: 4}, 5) """) == [2, 5, {'b': 3, 'c': 4}]
 
-        assert i.walk(r""" def foo(int(a), str(b)) do [a, b] end; foo(2, "a") """) == [2, "a"]
+        assert toil.walk(r""" def foo(int(a), str(b)) do [a, b] end; foo(2, "a") """) == [2, "a"]
 
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" def bar(int(a), str(b)) do [a, b] end; bar(2, 3) """)
+            toil.walk(r""" def bar(int(a), str(b)) do [a, b] end; bar(2, 3) """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" func a, b do [a, b] end (2) """)
+            toil.walk(r""" func a, b do [a, b] end (2) """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" func a do a end (2, 3) """)
+            toil.walk(r""" func a do a end (2, 3) """)
         with pytest.raises(Exception, match="Pattern mismatch"):
-            i.walk(r""" func do 2 end (2) """)
+            toil.walk(r""" func do 2 end (2) """)
 
-        assert i.walk(r""" func do "ok" end () """) == "ok"
+        assert toil.walk(r""" func do "ok" end () """) == "ok"
 
     def test_return(self):
-        i.walk("""
+        toil.walk("""
             def f(a) do
                 if a == 2 then return(3) end;
                 4
             end
         """)
-        assert i.walk(""" f(2) """) == 3
-        assert i.walk(""" f(3) """) == 4
+        assert toil.walk(""" f(2) """) == 3
+        assert toil.walk(""" f(3) """) == 4
 
-        i.walk("""
+        toil.walk("""
             def fib(n) do
                 if n == 0 then return(0) end;
                 if n == 1 then return(1) end;
                 fib(n - 1) + fib(n - 2)
             end
         """)
-        assert i.walk(""" fib(0) """) == 0
-        assert i.walk(""" fib(1) """) == 1
-        assert i.walk(""" fib(6) """) == 8
+        assert toil.walk(""" fib(0) """) == 0
+        assert toil.walk(""" fib(1) """) == 1
+        assert toil.walk(""" fib(6) """) == 8
 
-        assert i.walk(""" func do return() end () """) is None
+        assert toil.walk(""" func do return() end () """) is None
 
         with pytest.raises(Exception):
-            i.walk(""" return() """)
+            toil.walk(""" return() """)
 
     def test_def(self):
-        i.walk(r""" def myadd(a, b) do a + b end """)
-        assert i.walk(r""" myadd(2, 3) """) == 5
+        toil.walk(r""" def myadd(a, b) do a + b end """)
+        assert toil.walk(r""" myadd(2, 3) """) == 5
 
-        i.walk(r""" def say_hello do "hello" end """)
-        assert i.walk(r""" say_hello() """) == "hello"
+        toil.walk(r""" def say_hello do "hello" end """)
+        assert toil.walk(r""" say_hello() """) == "hello"
 
         with pytest.raises(Exception, match="Invalid def syntax"):
-            i.walk(r""" def 2 do 3 end """)
+            toil.walk(r""" def 2 do 3 end """)
 
     def test_if(self):
-        assert i.walk(r""" if True then 2 end """) == 2
-        assert i.walk(r""" if False then 2 end """) is None
-        assert i.walk(r""" if True then 2 else 3 end """) == 2
-        assert i.walk(r""" if False then 2 else 3 end """) == 3
-        assert i.walk(r""" if True then 2 elif True then 3 end """) == 2
-        assert i.walk(r""" if False then 2 elif True then 3 end """) == 3
-        assert i.walk(r""" if False then 2 elif False then 3 end """) is None
-        assert i.walk(r""" if False then 2 elif True then 3 else 4 end """) == 3
-        assert i.walk(r""" if True then 2 elif True then 3 else 4 end """) == 2
-        assert i.walk(r""" if False then 2 elif False then 3 else 4 end """) == 4
-        assert i.walk(r""" if False then 2 elif False then 3 elif True then 4 else 5 end """) == 4
+        assert toil.walk(r""" if True then 2 end """) == 2
+        assert toil.walk(r""" if False then 2 end """) is None
+        assert toil.walk(r""" if True then 2 else 3 end """) == 2
+        assert toil.walk(r""" if False then 2 else 3 end """) == 3
+        assert toil.walk(r""" if True then 2 elif True then 3 end """) == 2
+        assert toil.walk(r""" if False then 2 elif True then 3 end """) == 3
+        assert toil.walk(r""" if False then 2 elif False then 3 end """) is None
+        assert toil.walk(r""" if False then 2 elif True then 3 else 4 end """) == 3
+        assert toil.walk(r""" if True then 2 elif True then 3 else 4 end """) == 2
+        assert toil.walk(r""" if False then 2 elif False then 3 else 4 end """) == 4
+        assert toil.walk(r""" if False then 2 elif False then 3 elif True then 4 else 5 end """) == 4
 
-        assert i.walk(r""" if 2; True then 1; 2 else 2; 3 end """) == 2
-        assert i.walk(r""" if 2; False then 1; 2 else 2; 3 end """) == 3
+        assert toil.walk(r""" if 2; True then 1; 2 else 2; 3 end """) == 2
+        assert toil.walk(r""" if 2; False then 1; 2 else 2; 3 end """) == 3
 
         with pytest.raises(AssertionError, match="Expected then"):
-            i.walk(r""" if True 2 end """)
+            toil.walk(r""" if True 2 end """)
         with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(r""" if True then 2 """)
+            toil.walk(r""" if True then 2 """)
         with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(r""" if True then 2 3 end """)
+            toil.walk(r""" if True then 2 3 end """)
         with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(r""" if True then 2 else 3 """)
+            toil.walk(r""" if True then 2 else 3 """)
         with pytest.raises(AssertionError, match="Expected then"):
-            i.walk(r""" if False then 2 elif True 3 end """)
+            toil.walk(r""" if False then 2 elif True 3 end """)
         with pytest.raises(AssertionError, match="Expected end"):
-            i.walk(r""" if False then 2 elif True then 3 """)
+            toil.walk(r""" if False then 2 elif True then 3 """)
 
     def test_match_syntax(self):
-        assert i.walk(r""" match 2 end """) is None
+        assert toil.walk(r""" match 2 end """) is None
 
         with pytest.raises(Exception, match="Expected end"):
-            i.walk(r""" match end """)
+            toil.walk(r""" match end """)
         with pytest.raises(Exception, match="Expected end"):
-            i.walk(r""" match 2 case 2 then 3 """)
+            toil.walk(r""" match 2 case 2 then 3 """)
         with pytest.raises(Exception, match="Expected end"):
-            i.walk(r""" match 2 then 3 end """)
+            toil.walk(r""" match 2 then 3 end """)
         with pytest.raises(Exception, match="Expected then"):
-            i.walk(r""" match 2 case then 3 end """)
+            toil.walk(r""" match 2 case then 3 end """)
 
     def test_match_variable_and_literal(self):
-        assert i.walk(r""" match 2 case a then a + 1 case _ then "no" end """) == 3
-        assert i.walk(r""" match 2 case 3 then "yes" end """) is None
-        assert i.walk(r""" match 2 case 2 then "yes" case _ then "no" end """) == "yes"
-        assert i.walk(r""" match 2 case 3 then "yes" case _ then "no" end """) == "no"
-        assert i.walk(r""" match [] case 3 then "yes" case _ then "no" end """) == "no"
-        assert i.walk(r""" match None case None then "yes" case _ then "no" end """) == "yes"
-        assert i.walk(r""" match 2 case None then "yes" case _ then "no" end """) == "no"
-        assert i.walk(r""" match True case True then "yes" case _ then "no" end """) == "yes"
-        assert i.walk(r""" match False case True then "yes" case _ then "no" end """) == "no"
-        assert i.walk(r""" match False case False then "yes" case _ then "no" end """) == "yes"
-        assert i.walk(r""" match True case False then "yes" case _ then "no" end """) == "no"
-        assert i.walk(r""" match "hello" case "hello" then "yes" case _ then "no" end """) == "yes"
-        assert i.walk(r""" match "world" case "hello" then "yes" case _ then "no" end """) == "no"
+        assert toil.walk(r""" match 2 case a then a + 1 case _ then "no" end """) == 3
+        assert toil.walk(r""" match 2 case 3 then "yes" end """) is None
+        assert toil.walk(r""" match 2 case 2 then "yes" case _ then "no" end """) == "yes"
+        assert toil.walk(r""" match 2 case 3 then "yes" case _ then "no" end """) == "no"
+        assert toil.walk(r""" match [] case 3 then "yes" case _ then "no" end """) == "no"
+        assert toil.walk(r""" match None case None then "yes" case _ then "no" end """) == "yes"
+        assert toil.walk(r""" match 2 case None then "yes" case _ then "no" end """) == "no"
+        assert toil.walk(r""" match True case True then "yes" case _ then "no" end """) == "yes"
+        assert toil.walk(r""" match False case True then "yes" case _ then "no" end """) == "no"
+        assert toil.walk(r""" match False case False then "yes" case _ then "no" end """) == "yes"
+        assert toil.walk(r""" match True case False then "yes" case _ then "no" end """) == "no"
+        assert toil.walk(r""" match "hello" case "hello" then "yes" case _ then "no" end """) == "yes"
+        assert toil.walk(r""" match "world" case "hello" then "yes" case _ then "no" end """) == "no"
 
     def test_match_list(self):
-        assert i.walk(r""" match [] case [] then "yes" case _ then "no" end """) == "yes"
-        assert i.walk(r""" match 2 case [] then "yes" case _ then "no" end """) == "no"
-        assert i.walk(r""" match [2] case [a] then a + 1 case _ then "no" end """) == 3
-        assert i.walk(r""" match [2, 3] case [a] then a + 1 case _ then "no" end """) == "no"
-        assert i.walk(r""" match [2, 3] case [a, b] then a * b case _ then "no" end """) == 6
-        assert i.walk(r""" match [2] case [a, b] then a * b case _ then "no" end """) == "no"
-        assert i.walk(r""" match [] case [a, *b] then [a, b] case _ then "no" end """) == "no"
-        assert i.walk(r""" match [2] case [a, *b] then [a, b] case _ then "no" end """) == [2, []]
-        assert i.walk(r""" match [3, 4] case [a, *b] then [a, b] case _ then "no" end """) == [3, [4]]
-        assert i.walk(r""" match [4, 5, 6] case [a, *b] then [a, b] case _ then "no" end """) == [4, [5, 6]]
-        assert i.walk(r""" match [] case [*a, b] then [a, b] case _ then "no" end """) == "no"
-        assert i.walk(r""" match [2] case [*a, b] then [a, b] case _ then "no" end """) == [[], 2]
-        assert i.walk(r""" match [3, 4] case [*a, b] then [a, b] case _ then "no" end """) == [[3], 4]
-        assert i.walk(r""" match [4, 5, 6] case [*a, b] then [a, b] case _ then "no" end """) == [[4, 5], 6]
-        assert i.walk(r""" match [2] case [a, *b, c] then [a, b, c] case _ then "no" end """) == "no"
-        assert i.walk(r""" match [3, 4] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [3, [], 4]
-        assert i.walk(r""" match [4, 5, 6] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [4, [5], 6]
-        assert i.walk(r""" match [5, 6, 7, 8] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [5, [6, 7], 8]
-        assert i.walk(r""" match [2] case [*a, *b] then [a, b] case _ then "no" end """) == "no"
+        assert toil.walk(r""" match [] case [] then "yes" case _ then "no" end """) == "yes"
+        assert toil.walk(r""" match 2 case [] then "yes" case _ then "no" end """) == "no"
+        assert toil.walk(r""" match [2] case [a] then a + 1 case _ then "no" end """) == 3
+        assert toil.walk(r""" match [2, 3] case [a] then a + 1 case _ then "no" end """) == "no"
+        assert toil.walk(r""" match [2, 3] case [a, b] then a * b case _ then "no" end """) == 6
+        assert toil.walk(r""" match [2] case [a, b] then a * b case _ then "no" end """) == "no"
+        assert toil.walk(r""" match [] case [a, *b] then [a, b] case _ then "no" end """) == "no"
+        assert toil.walk(r""" match [2] case [a, *b] then [a, b] case _ then "no" end """) == [2, []]
+        assert toil.walk(r""" match [3, 4] case [a, *b] then [a, b] case _ then "no" end """) == [3, [4]]
+        assert toil.walk(r""" match [4, 5, 6] case [a, *b] then [a, b] case _ then "no" end """) == [4, [5, 6]]
+        assert toil.walk(r""" match [] case [*a, b] then [a, b] case _ then "no" end """) == "no"
+        assert toil.walk(r""" match [2] case [*a, b] then [a, b] case _ then "no" end """) == [[], 2]
+        assert toil.walk(r""" match [3, 4] case [*a, b] then [a, b] case _ then "no" end """) == [[3], 4]
+        assert toil.walk(r""" match [4, 5, 6] case [*a, b] then [a, b] case _ then "no" end """) == [[4, 5], 6]
+        assert toil.walk(r""" match [2] case [a, *b, c] then [a, b, c] case _ then "no" end """) == "no"
+        assert toil.walk(r""" match [3, 4] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [3, [], 4]
+        assert toil.walk(r""" match [4, 5, 6] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [4, [5], 6]
+        assert toil.walk(r""" match [5, 6, 7, 8] case [a, *b, c] then [a, b, c] case _ then "no" end """) == [5, [6, 7], 8]
+        assert toil.walk(r""" match [2] case [*a, *b] then [a, b] case _ then "no" end """) == "no"
 
     def test_match_dict_cases(self):
-        assert i.walk(r""" match {} case {} then "yes" case _ then "no" end """) == "yes"
-        assert i.walk(r""" match 2 case {} then "yes" case _ then "no" end """) == "no"
-        assert i.walk(r""" match {a: 2} case {} then "yes" case _ then "no" end """) == "yes"
+        assert toil.walk(r""" match {} case {} then "yes" case _ then "no" end """) == "yes"
+        assert toil.walk(r""" match 2 case {} then "yes" case _ then "no" end """) == "no"
+        assert toil.walk(r""" match {a: 2} case {} then "yes" case _ then "no" end """) == "yes"
 
-        assert i.walk(r""" match {a: 2} case {a: 2} then "yes" end """) == "yes"
-        assert i.walk(r""" match {a: 2} case {a: 3} then "yes" end """) is None
-        assert i.walk(r""" match {a: 2} case {a: a} then a end """) == 2
-        assert i.walk(r""" match {a: 3} case {a: b} then b end """) == 3
-        assert i.walk(r""" match {a: 4} case {a} then a end """) == 4
-        assert i.walk(r""" match {a: 5} case {"a": a} then a end """) == 5
-        assert i.walk(r""" match {a: 6, b: 7} case {a} then a end """) == 6
-        assert i.walk(r""" match {a: 7, b: 8} case {a, b} then [a, b] end """) == [7, 8]
-        assert i.walk(r""" match {a: 8, b: 9} case {a: _, b} then b end """) == 9
-        assert i.walk(r""" match {a: 2} case {b} then a end """) is None
-        assert i.walk(r""" match {a: 2} case {a, b} then a end """) is None
+        assert toil.walk(r""" match {a: 2} case {a: 2} then "yes" end """) == "yes"
+        assert toil.walk(r""" match {a: 2} case {a: 3} then "yes" end """) is None
+        assert toil.walk(r""" match {a: 2} case {a: a} then a end """) == 2
+        assert toil.walk(r""" match {a: 3} case {a: b} then b end """) == 3
+        assert toil.walk(r""" match {a: 4} case {a} then a end """) == 4
+        assert toil.walk(r""" match {a: 5} case {"a": a} then a end """) == 5
+        assert toil.walk(r""" match {a: 6, b: 7} case {a} then a end """) == 6
+        assert toil.walk(r""" match {a: 7, b: 8} case {a, b} then [a, b] end """) == [7, 8]
+        assert toil.walk(r""" match {a: 8, b: 9} case {a: _, b} then b end """) == 9
+        assert toil.walk(r""" match {a: 2} case {b} then a end """) is None
+        assert toil.walk(r""" match {a: 2} case {a, b} then a end """) is None
 
-        assert i.walk(r""" match {a: 2} case {*rest} then rest end """) == {'a': 2}
-        assert i.walk(r""" match {a: 3} case {a, *rest} then [a, rest] end """) == [3, {}]
-        assert i.walk(r""" match {a: 3} case {b, *rest} then [b, rest] end """) is None
-        assert i.walk(r""" match {a: 4, b: 5} case {a, *rest} then [a, rest] end """) == [4, {'b': 5}]
-        assert i.walk(r""" match {a: 5, b: 6, c: 7} case {a, *rest} then [a, rest] end """) == [5, {'b': 6, 'c': 7}]
+        assert toil.walk(r""" match {a: 2} case {*rest} then rest end """) == {'a': 2}
+        assert toil.walk(r""" match {a: 3} case {a, *rest} then [a, rest] end """) == [3, {}]
+        assert toil.walk(r""" match {a: 3} case {b, *rest} then [b, rest] end """) is None
+        assert toil.walk(r""" match {a: 4, b: 5} case {a, *rest} then [a, rest] end """) == [4, {'b': 5}]
+        assert toil.walk(r""" match {a: 5, b: 6, c: 7} case {a, *rest} then [a, rest] end """) == [5, {'b': 6, 'c': 7}]
 
     def test_match_ident_and_expr(self):
-        assert i.walk(r""" match Ident("aaa") case Ident("aaa") then "yes" end """) == "yes"
-        assert i.walk(r""" match Ident("aaa") case "aaa" then "yes" end """) is None
-        assert i.walk(r""" match Ident("aaa") case Ident("bbb") then "yes" end """) is None
-        assert i.walk(r""" match Ident("aaa") case Ident(a) then [a] end """) == ['aaa']
+        assert toil.walk(r""" match Ident("aaa") case Ident("aaa") then "yes" end """) == "yes"
+        assert toil.walk(r""" match Ident("aaa") case "aaa" then "yes" end """) is None
+        assert toil.walk(r""" match Ident("aaa") case Ident("bbb") then "yes" end """) is None
+        assert toil.walk(r""" match Ident("aaa") case Ident(a) then [a] end """) == ['aaa']
 
-        assert i.walk(r""" match tuple(Ident("add"), [Ident("a"), Ident("b")]) case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) == ["a", "b"]
-        assert i.walk(r""" match 2 + 3 case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
-        assert i.walk(r""" match tuple(Ident("add")) case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
+        assert toil.walk(r""" match tuple(Ident("add"), [Ident("a"), Ident("b")]) case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) == ["a", "b"]
+        assert toil.walk(r""" match 2 + 3 case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
+        assert toil.walk(r""" match tuple(Ident("add")) case tuple(Ident("add"), [Ident(name1), Ident(name2)]) then [name1, name2] end """) is None
 
     def test_match_type_and_or(self):
-        assert i.walk(r""" match 2 case int(a) then a end """) == 2
-        assert i.walk(r""" match "2" case int(a) then a end """) is None
-        assert i.walk(r""" match "aaa" case str(a) then [a] end """) == ['aaa']
-        assert i.walk(r""" match [] case str(a) then [a] end """) is None
+        assert toil.walk(r""" match 2 case int(a) then a end """) == 2
+        assert toil.walk(r""" match "2" case int(a) then a end """) is None
+        assert toil.walk(r""" match "aaa" case str(a) then [a] end """) == ['aaa']
+        assert toil.walk(r""" match [] case str(a) then [a] end """) is None
 
-        assert i.walk(r""" match 2 case int(a) or str(a) then [a] end """) == [2]
-        assert i.walk(r""" match "aaa" case int(a) or str(a) then [a] end """) == ['aaa']
-        assert i.walk(r""" match [2] case int(a) or str(a) then [a] end """) is None
-        assert i.walk(r""" match [2] case int(a) or str(a) or list(a) then [a] end """) == [[2]]
+        assert toil.walk(r""" match 2 case int(a) or str(a) then [a] end """) == [2]
+        assert toil.walk(r""" match "aaa" case int(a) or str(a) then [a] end """) == ['aaa']
+        assert toil.walk(r""" match [2] case int(a) or str(a) then [a] end """) is None
+        assert toil.walk(r""" match [2] case int(a) or str(a) or list(a) then [a] end """) == [[2]]
 
     def test_match_combination(self):
-        assert i.walk(r""" match [{a: 2, b: 3}, 4] case  [{a: b}, c] then [b, c] end """) == [2, 4]
-        assert i.walk(r""" match {a: [5, 6]} case {a: [b, c]} then [b, c] end """) == [5, 6]
+        assert toil.walk(r""" match [{a: 2, b: 3}, 4] case  [{a: b}, c] then [b, c] end """) == [2, 4]
+        assert toil.walk(r""" match {a: [5, 6]} case {a: [b, c]} then [b, c] end """) == [5, 6]
 
     def test_match_control_flow(self):
-        assert i.walk(r""" a := 0; match 2 case 2 then a = 1 case _ then a = 2 end; a """) == 1
-        assert i.walk(r""" match [2, 3] case [a, b] then "ok" end; a + b """) == 5
-        assert i.walk(r""" match [2, 3] case [a, 4] then "no" case _ then a end """) == 2
+        assert toil.walk(r""" a := 0; match 2 case 2 then a = 1 case _ then a = 2 end; a """) == 1
+        assert toil.walk(r""" match [2, 3] case [a, b] then "ok" end; a + b """) == 5
+        assert toil.walk(r""" match [2, 3] case [a, 4] then "no" case _ then a end """) == 2
 
     def test_while(self):
-        assert i.walk(""" i := 0; while i < 2 do i = i + 1 end """) == None
-        assert i.walk("""
+        assert toil.walk(""" i := 0; while i < 2 do i = i + 1 end """) == None
+        assert toil.walk("""
             a := [];
             i := 0; while i < 3 do push(a, i); i = i + 1 end;
             a
         """) == [0, 1, 2]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := [];
             i := 0; while i < 3 do push(a, i); i = i + 1 then a else 1/0 end
         """) == [0, 1, 2]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := [];
             i := 0; while i < 3 do push(a, i); i = i + 1 then a end
         """) == [0, 1, 2]
 
-        assert i.walk(""" while False do 1 / 0 then 3 else 4 end """) == 3
+        assert toil.walk(""" while False do 1 / 0 then 3 else 4 end """) == 3
 
         with pytest.raises(Exception, match="Expected do"):
-            i.walk(""" while do 2 then 3 else 4 end """)
+            toil.walk(""" while do 2 then 3 else 4 end """)
         with pytest.raises(Exception, match="Expected do"):
-            i.walk(""" while True 2 then 3 else 4 end """)
+            toil.walk(""" while True 2 then 3 else 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            i.walk(""" while True do 2 3 else 4 end """)
+            toil.walk(""" while True do 2 3 else 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            i.walk(""" while True do 2 then 3 4 end """)
+            toil.walk(""" while True do 2 then 3 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            i.walk(""" while True do 2 then 3 else end """)
+            toil.walk(""" while True do 2 then 3 else end """)
         with pytest.raises(Exception, match="Expected end"):
-            i.walk(""" while True do 2 then 3 else 4 """)
+            toil.walk(""" while True do 2 then 3 else 4 """)
 
     def test_continue(self):
-        assert i.walk("""
+        assert toil.walk("""
             a := [];
             i := 0; while i < 3 do
                 i = i + 1; if i == 2 then continue end;
@@ -705,7 +703,7 @@ class TestToil:
             then a end
         """) == [1, 3]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := []; i := 0; while i < 2 do
                 j := 0; while j < 3 do
                     j = j + 1; if j == 2 then continue end;
@@ -716,11 +714,11 @@ class TestToil:
         """) == [[0, 1], [0, 3], [1, 1], [1, 3]]
 
         with pytest.raises(Exception, match="Continue at top level"):
-            i.walk(""" continue """)
+            toil.walk(""" continue """)
 
     def test_break(self):
-        assert i.walk(""" i := 0; while i < 2 do break end """) == None
-        assert i.walk("""
+        assert toil.walk(""" i := 0; while i < 2 do break end """) == None
+        assert toil.walk("""
             a := [];
             i := 0; while i < 3 do
                 if i == 1 then break end;
@@ -728,7 +726,7 @@ class TestToil:
             then 1/0 else a end
         """) == [0]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := [];
             i := 0; while i < 3 do
                 if i == 1 then break end;
@@ -736,7 +734,7 @@ class TestToil:
             else a end
         """) == [0]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := [];
             i := 0; while i < 2 do
                 j := 0; while j < 3 do
@@ -748,7 +746,7 @@ class TestToil:
             then a end
         """) == [[0, 0], [1, 0], [1, 1], [1, 2]]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := [];
             i := 0; while i < 2 do
                 j := 0; while j < 3 do
@@ -760,69 +758,69 @@ class TestToil:
             else a end
         """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
 
-        assert i.walk(""" while True do break end """) is None
-        assert i.walk(""" while True do break else 2 end """) == 2
+        assert toil.walk(""" while True do break end """) is None
+        assert toil.walk(""" while True do break else 2 end """) == 2
 
         with pytest.raises(Exception, match="Break at top level"):
-            i.walk(""" break """)
+            toil.walk(""" break """)
 
     def test_for(self):
-        assert i.walk(""" a := []; for i in [0, 1, 2] do push(a, i) end; a """) == [0, 1, 2]
+        assert toil.walk(""" a := []; for i in [0, 1, 2] do push(a, i) end; a """) == [0, 1, 2]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := []; for i in [0, 1, 2] do push(a, i) then [i, a] else 1/0 end
         """) == [2, [0, 1, 2]]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := []; for i in [0, 1, 2] do push(a, i) then a end
         """) == [0, 1, 2]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := []; for [i, j] in [[1, 2], [3, 4]] do push(a, [i, j]) then a end
         """) == [[1, 2], [3, 4]]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := [];
             for [k, v] in {"a": 2, "b": 3}.items() do push(a, [k, v]) then a end
         """) == [['a', 2], ['b', 3]]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := [];
             keys := ["a", "b", "c"];
             values := [2, 3, 4];
             for [k, v] in zip(keys, values) do push(a, [k, v]) then a end
         """) == [['a', 2], ['b', 3], ['c', 4]]
 
-        assert i.walk(""" for i in [] do 1/0 then 2 end """) == 2
+        assert toil.walk(""" for i in [] do 1/0 then 2 end """) == 2
 
         with pytest.raises(Exception):
-            i.walk(""" for in [] do 2 then 3 else 4 end """)
+            toil.walk(""" for in [] do 2 then 3 else 4 end """)
         with pytest.raises(Exception):
-            i.walk(""" for i [] do 2 then 3 else 4 end """)
+            toil.walk(""" for i [] do 2 then 3 else 4 end """)
         with pytest.raises(Exception, match="Expected do"):
-            i.walk(""" for i in do 2 then 3 else 4 end """)
+            toil.walk(""" for i in do 2 then 3 else 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            i.walk(""" for i in [] do then 3 else 4 end """)
+            toil.walk(""" for i in [] do then 3 else 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            i.walk(""" for i in [] do 2 3 else 4 end """)
+            toil.walk(""" for i in [] do 2 3 else 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            i.walk(""" for i in [] do 2 then else 4 end """)
+            toil.walk(""" for i in [] do 2 then else 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            i.walk(""" for i in [] do 2 then 3 4 end """)
+            toil.walk(""" for i in [] do 2 then 3 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            i.walk(""" for i in [] do 2 then 3 else end """)
+            toil.walk(""" for i in [] do 2 then 3 else end """)
         with pytest.raises(Exception, match="Expected end"):
-            i.walk(""" for i in [] do 2 then 3 else 4 """)
+            toil.walk(""" for i in [] do 2 then 3 else 4 """)
 
     def test_for_continue(self):
-        assert i.walk("""
+        assert toil.walk("""
             a := []; for i in [0, 1, 2] do
                 if i == 1 then continue end;
                 push(a, i)
             then a end
         """) == [0, 2]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := []; for i in [0, 1] do
                 for j in [0, 1, 2] do
                     if j == 1 then continue end;
@@ -832,21 +830,21 @@ class TestToil:
         """) == [[0, 0], [0, 2], [1, 0], [1, 2]]
 
     def test_for_break(self):
-        assert i.walk("""
+        assert toil.walk("""
             a := []; for i in [0, 1, 2] do
                 if i == 1 then break end;
                 push(a, i)
             then 1/0 else a end
         """) == [0]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := []; for i in [0, 1, 2] do
                 if i == 1 then break end;
                 push(a, i)
             else a end
         """) == [0]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := [];
             for i in [0, 1] do
                 for j in [0, 1, 2] do
@@ -856,7 +854,7 @@ class TestToil:
             then a end
         """) == [[0, 0], [1, 0], [1, 1], [1, 2]]
 
-        assert i.walk("""
+        assert toil.walk("""
             a := [];
             for i in [0, 1] do
                 for j in [0, 1, 2] do
@@ -867,11 +865,11 @@ class TestToil:
         """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
 
     def test_try_except(self):
-        assert i.walk(""" try 2; 3 end """) == 3
-        assert i.walk(""" try 2; 3 except e then e end """) == 3
-        assert i.walk(""" try 2; raise(2 + 3); 3 except e then e end """) == 5
+        assert toil.walk(""" try 2; 3 end """) == 3
+        assert toil.walk(""" try 2; 3 except e then e end """) == 3
+        assert toil.walk(""" try 2; raise(2 + 3); 3 except e then e end """) == 5
 
-        assert i.walk("""
+        assert toil.walk("""
             try
                 raise(["foo", 3])
             except ["foo", val] then ["foo", val]
@@ -879,7 +877,7 @@ class TestToil:
             end
         """) == ['foo', 3]
 
-        assert i.walk("""
+        assert toil.walk("""
             try
                 raise(["bar", 3])
             except ["foo", val] then ["foo", val]
@@ -888,25 +886,25 @@ class TestToil:
         """) == ['bar', 3]
 
         with pytest.raises(Exception):
-            i.walk("""
+            toil.walk("""
                 try
                     raise(["baz", 3])
                 except ["foo", val] then ["foo", val]
                 end
             """)
 
-        assert i.walk(""" try raise(2) except _ then 3 end """) == 3
+        assert toil.walk(""" try raise(2) except _ then 3 end """) == 3
 
-        assert i.walk(""" func do try return(2) except _ then 3 end end () """) == 2
+        assert toil.walk(""" func do try return(2) except _ then 3 end end () """) == 2
 
-        assert i.walk("""
+        assert toil.walk("""
             a := 0; while a < 5 do
                 try a = a + 1; if a == 3 then break end
                 except _ then a = 10 end
             end; a
         """) == 3
 
-        assert i.walk("""
+        assert toil.walk("""
             try
                 try
                     raise(2)
@@ -918,7 +916,7 @@ class TestToil:
             end
         """) == 3
 
-        assert i.walk("""
+        assert toil.walk("""
             try
                 try
                     raise("outer")
@@ -929,7 +927,7 @@ class TestToil:
         """) == "caught outer"
 
     def test_defclass(self):
-        assert i.walk(r"""
+        assert toil.walk(r"""
             defclass Counter(start) do
                 self.count = start;
                 defmethod inc(step) do
@@ -947,55 +945,55 @@ class TestToil:
         """) == [12, 25]
 
         with pytest.raises(Exception, match="Invalid defclass syntax"):
-            i.walk(""" defclass 2 do 2 end """)
+            toil.walk(""" defclass 2 do 2 end """)
         with pytest.raises(Exception, match="Expected do"):
-            i.walk(""" defclass Foo(x) end """)
+            toil.walk(""" defclass Foo(x) end """)
         with pytest.raises(Exception, match="Invalid defmethod syntax"):
-            i.walk(""" defclass Foo do defmethod 2 do end end """)
+            toil.walk(""" defclass Foo do defmethod 2 do end end """)
 
     def test_assert(self):
-        assert i.walk(""" assert 2 == 2 else 1/0 end """) is None
+        assert toil.walk(""" assert 2 == 2 else 1/0 end """) is None
 
         with pytest.raises(Exception, match="Assert exception"):
-            i.walk(""" assert 2 == 3 else "Assert exception" end """)
+            toil.walk(""" assert 2 == 3 else "Assert exception" end """)
 
         with pytest.raises(Exception, match="Expected else"):
-            i.walk(""" assert 2 == 3 "Assert exception" end """)
+            toil.walk(""" assert 2 == 3 "Assert exception" end """)
 
         with pytest.raises(Exception, match="Expected end"):
-            i.walk(""" assert 2 == 3 else "Assert exception" """)
+            toil.walk(""" assert 2 == 3 else "Assert exception" """)
 
     def test_read_load(self, tmp_path):
-        assert i.walk(""" type(read("scripts/fib.toil")) """) == "str"
-        assert i.walk(""" load("scripts/fib.toil")(4) """) == 3
+        assert toil.walk(""" type(read("scripts/fib.toil")) """) == "str"
+        assert toil.walk(""" load("scripts/fib.toil")(4) """) == 3
 
     def test_eval_apply(self):
-        assert i.walk(""" eval("2 + 3") """) == 5
-        assert i.walk(""" eval_expr(tuple(Ident("add"), [2, 3])) """) == 5
-        assert i.walk(""" apply(add, [2, 3]) """) == 5
-        assert i.walk(""" apply(func a, b do a + b end, [2, 3]) """) == 5
+        assert toil.walk(""" eval("2 + 3") """) == 5
+        assert toil.walk(""" eval_expr(tuple(Ident("add"), [2, 3])) """) == 5
+        assert toil.walk(""" apply(add, [2, 3]) """) == 5
+        assert toil.walk(""" apply(func a, b do a + b end, [2, 3]) """) == 5
 
     def test_stdlib(self):
-        assert i.walk(""" a := range(2, 10, 1) """) == [2, 3, 4, 5, 6, 7, 8, 9]
-        assert i.walk(""" b := range(2, 10, 3) """) == [2, 5, 8]
-        assert i.walk(""" first(a) """) == 2
-        assert i.walk(""" rest(a) """) == [3, 4, 5, 6, 7, 8, 9]
-        assert i.walk(""" last(a) """) == 9
-        assert i.walk(""" map(a, n -> n * 2) """) == [4, 6, 8, 10, 12, 14, 16, 18]
-        assert i.walk(""" filter(a, n -> n % 2 == 0) """) == [2, 4, 6, 8]
-        assert i.walk(""" reverse(a) """) == [9, 8, 7, 6, 5, 4, 3, 2]
-        assert i.walk(""" reverse([]) """) == []
-        assert i.walk(""" zip(a, [4, 5, 6]) """) == [[2, 4], [3, 5], [4, 6]]
-        assert i.walk(""" enumerate(a) """) == [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
+        assert toil.walk(""" a := range(2, 10, 1) """) == [2, 3, 4, 5, 6, 7, 8, 9]
+        assert toil.walk(""" b := range(2, 10, 3) """) == [2, 5, 8]
+        assert toil.walk(""" first(a) """) == 2
+        assert toil.walk(""" rest(a) """) == [3, 4, 5, 6, 7, 8, 9]
+        assert toil.walk(""" last(a) """) == 9
+        assert toil.walk(""" map(a, n -> n * 2) """) == [4, 6, 8, 10, 12, 14, 16, 18]
+        assert toil.walk(""" filter(a, n -> n % 2 == 0) """) == [2, 4, 6, 8]
+        assert toil.walk(""" reverse(a) """) == [9, 8, 7, 6, 5, 4, 3, 2]
+        assert toil.walk(""" reverse([]) """) == []
+        assert toil.walk(""" zip(a, [4, 5, 6]) """) == [[2, 4], [3, 5], [4, 6]]
+        assert toil.walk(""" enumerate(a) """) == [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
 
     def test_whitespace(self):
-        assert i.walk(r"""   2 """) == 2
-        assert i.walk(r""" 2   """) == 2
-        assert i.walk("""\n  2  \n""") == 2
+        assert toil.walk(r"""   2 """) == 2
+        assert toil.walk(r""" 2   """) == 2
+        assert toil.walk("""\n  2  \n""") == 2
 
     def test_comment(self):
-        assert i.walk(r""" 2 # 3 """) == 2
-        assert i.walk(r"""
+        assert toil.walk(r""" 2 # 3 """) == 2
+        assert toil.walk(r"""
             # 2
             3
             # 4
@@ -1003,27 +1001,27 @@ class TestToil:
 
     def test_empty_source(self):
         with pytest.raises(AssertionError, match="Unexpected token"):
-            i.walk(r"""  """)
+            toil.walk(r"""  """)
 
     def test_invalid_character(self):
         with pytest.raises(AssertionError, match="Invalid character"):
-            i.walk(r""" ~ """)
+            toil.walk(r""" ~ """)
 
     def test_extra_token(self):
         with pytest.raises(AssertionError, match="Extra token"):
-            i.walk(r""" 2 3 """)
+            toil.walk(r""" 2 3 """)
 
 class TestExamples:
     def test_recursion_gcd(self):
-        i.walk("""
+        toil.walk("""
             def gcd(a, b) do
                 if b == 0 then a else gcd(b, a % b) end
             end
         """)
-        assert i.walk("gcd(12, 18)") == 6
+        assert toil.walk("gcd(12, 18)") == 6
 
     def test_iteration_gcd(self):
-        i.walk("""
+        toil.walk("""
             def gcd(a, b) do
                 while b > 0 do
                     tmp := b; b = a % b; a = tmp
@@ -1031,20 +1029,20 @@ class TestExamples:
                 a
             end
         """)
-        assert i.walk("gcd(12, 18)") == 6
+        assert toil.walk("gcd(12, 18)") == 6
 
     def test_recursion_fac(self):
-        i.walk("""
+        toil.walk("""
             def fac(n) do
                 if n == 0 then 1 else n * fac(n - 1) end
             end
         """)
-        assert i.walk("fac(0)") == 1
-        assert i.walk("fac(1)") == 1
-        assert i.walk("fac(4)") == 24
+        assert toil.walk("fac(0)") == 1
+        assert toil.walk("fac(1)") == 1
+        assert toil.walk("fac(4)") == 24
 
     def test_iteration_fac(self):
-        i.walk("""
+        toil.walk("""
             def fac(n) do
                 result := 1;
                 for n in range(1, n + 1, 1) do
@@ -1052,12 +1050,12 @@ class TestExamples:
                 then result end
             end
         """)
-        assert i.walk("fac(0)") == 1
-        assert i.walk("fac(1)") == 1
-        assert i.walk("fac(4)") == 24
+        assert toil.walk("fac(0)") == 1
+        assert toil.walk("fac(1)") == 1
+        assert toil.walk("fac(4)") == 24
 
     def test_recursion_fib(self):
-        i.walk("""
+        toil.walk("""
             def fib(n) do
                 if n == 0 then 0
                 elif n == 1 then 1
@@ -1065,12 +1063,12 @@ class TestExamples:
                 end
             end
         """)
-        assert i.walk("fib(0)") == 0
-        assert i.walk("fib(1)") == 1
-        assert i.walk("fib(6)") == 8
+        assert toil.walk("fib(0)") == 0
+        assert toil.walk("fib(1)") == 1
+        assert toil.walk("fib(6)") == 8
 
     def test_iteration_fib(self):
-        i.walk("""
+        toil.walk("""
             def fib(n) do
                 a := 0; b := 1;
                 for n in range(0, n, 1) do
@@ -1078,22 +1076,22 @@ class TestExamples:
                 then a end
             end
         """)
-        assert i.walk("fib(0)") == 0
-        assert i.walk("fib(1)") == 1
-        assert i.walk("fib(6)") == 8
+        assert toil.walk("fib(0)") == 0
+        assert toil.walk("fib(1)") == 1
+        assert toil.walk("fib(6)") == 8
 
     def test_mutual_recursion(self):
-        i.walk("""
+        toil.walk("""
             def even(n) do if n == 0 then True else odd(n - 1) end end;
             def odd(n) do if n == 0 then False else even(n - 1) end end
         """)
-        assert i.walk("even(2)") is True
-        assert i.walk("even(3)") is False
-        assert i.walk("odd(2)") is False
-        assert i.walk("odd(3)") is True
+        assert toil.walk("even(2)") is True
+        assert toil.walk("even(3)") is False
+        assert toil.walk("odd(2)") is False
+        assert toil.walk("odd(3)") is True
 
     def test_closure_counter(self):
-        i.walk("""
+        toil.walk("""
             def make_counter do
                 count := 0;
                 func do count = count + 1 end
@@ -1102,13 +1100,13 @@ class TestExamples:
             c1 := make_counter();
             c2 := make_counter()
         """)
-        assert i.walk("c1()") == 1
-        assert i.walk("c1()") == 2
-        assert i.walk("c2()") == 1
-        assert i.walk("c2()") == 2
+        assert toil.walk("c1()") == 1
+        assert toil.walk("c1()") == 2
+        assert toil.walk("c2()") == 1
+        assert toil.walk("c2()") == 2
 
     def test_bubblesort(self):
-        assert i.walk("""
+        assert toil.walk("""
             def bubblesort(a) do
                 n := len(a);
                 for i in range(0, n, 1) do
@@ -1124,7 +1122,7 @@ class TestExamples:
         """) == [2, 3, 4, 5, 8]
 
     def test_quicksort(self):
-        assert i.walk("""
+        assert toil.walk("""
             def quicksort(a) do
                 if len(a) <= 1 then a else
                     pivot := first(a); rem := rest(a);
@@ -1138,7 +1136,7 @@ class TestExamples:
         """) == [2, 3, 4, 5, 8]
 
     def test_sieve(self):
-        assert i.walk("""
+        assert toil.walk("""
             def sieve(n) do
                 s := [False, False] + [True] * (n - 2);
                 i := 2; while i * i < n do
@@ -1155,7 +1153,7 @@ class TestExamples:
         """) == [2, 3, 5, 7]
 
     def test_poor_mans_object(self, capsys):
-        i.walk("""
+        toil.walk("""
             def Animal(name) do
                 self := {};
                 self._name = name;
@@ -1164,7 +1162,7 @@ class TestExamples:
                 self
             end
         """)
-        i.walk("""
+        toil.walk("""
             animal1 := Animal("Rocky");
             animal2 := Animal("Lucy");
             animal1.introduce();
@@ -1174,14 +1172,14 @@ class TestExamples:
         """)
         assert capsys.readouterr().out == "I am Rocky\ncrying\nI am Lucy\ncrying\n"
 
-        i.walk("""
+        toil.walk("""
             def Dog(name) do
                 self := Animal(name);
                 self.make_sound = func self do print("woof") end;
                 self
             end
         """)
-        i.walk("""
+        toil.walk("""
             dog1 := Dog("Leo");
             dog1.introduce();
             dog1.make_sound()
@@ -1189,7 +1187,7 @@ class TestExamples:
         assert capsys.readouterr().out == "I am Leo\nwoof\n"
 
     def test_lazy_evaluation_with_thunks(self):
-        assert i.walk("""
+        assert toil.walk("""
             def force(thunk) do thunk() end;
             def stream_car(s) do s[0] end;
             def stream_cdr(s) do force(s[1]) end;

@@ -886,27 +886,26 @@ class Interpreter:
     def walk(self, src: Source) -> Value:
         return self.eval(self.ast(src))
 
+toil = Interpreter().init_env().stdlib()
 
 if __name__ == "__main__":
     import sys
-
-    i = Interpreter().init_env().stdlib()
 
     def repl():
         while True:
             print("\nInput source and enter Ctrl+D:")
             if (src := sys.stdin.read()) == "": exit(0)
             try:
-                expr = i.ast(src)
+                expr = toil.ast(src)
                 print("AST:", expr, sep="\n")
                 print("Output:")
-                result = i.eval(expr)
+                result = toil.eval(expr)
                 print("Result:", result, sep="\n")
             except AssertionError as e:
                 print("Error:", e, sep="\n")
 
     def walk_file(filename):
-        with open(filename, "r") as f: result = i.walk(f.read())
+        with open(filename, "r") as f: result = toil.walk(f.read())
         exit(result if isinstance(result, int) else 0)
 
     if len(sys.argv) > 1:
@@ -917,4 +916,4 @@ if __name__ == "__main__":
 
     # Example
 
-    i.walk(""" print("hello, world") """)
+    toil.walk(""" print("hello, world") """)

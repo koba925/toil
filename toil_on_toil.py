@@ -5,9 +5,9 @@ sys.setrecursionlimit(200000)
 
 from toil import Interpreter
 
-t = Interpreter().init_env().stdlib()
+toil = Interpreter().init_env().stdlib()
 
-t.walk(r"""
+toil.walk(r"""
     def isalpha(c) do
        type(c) == 'str' and ('a' <= c and c <= 'z') or ('A' <= c and c <= 'Z')
     end;
@@ -20,7 +20,7 @@ t.walk(r"""
     def is_ident(s) do is_ident_first(s[0]) end
 """)
 
-t.walk(r"""
+toil.walk(r"""
     defclass Scanner(src) do
         self._src = src;
         self._pos = 0;
@@ -122,7 +122,7 @@ t.walk(r"""
     end
 """)
 
-t.walk(r"""
+toil.walk(r"""
     defclass Parser(tokens) do
         self._tokens = tokens;
         self._pos = 0;
@@ -539,7 +539,7 @@ t.walk(r"""
     end
 """)
 
-t.walk(r"""
+toil.walk(r"""
     defclass Environment(parent) do
         self._parent = parent;
         self._vars = {};
@@ -568,7 +568,7 @@ t.walk(r"""
     end
 """)
 
-t.walk(r"""
+toil.walk(r"""
     defclass Evaluator do
         defmethod eval(expr, env) do
             # print(expr);
@@ -846,7 +846,7 @@ t.walk(r"""
     end
 """)
 
-t.walk(r"""
+toil.walk(r"""
     defclass Interpreter do
         self._env = Environment(None);
 
@@ -991,17 +991,17 @@ t.walk(r"""
 
 
 class ToTWrapper:
-    def scan(self, src): return t.walk(f""" tot.scan('{src}') """)
-    def parse(self, tokens): return t.walk(f""" tot.parse({tokens}) """)
-    def ast(self, src): return t.walk(f""" tot.ast('{src}') """)
-    def eval(self, ast): return t.walk(f""" tot.eval({ast}) """)
-    def walk(self, src): return t.walk(f""" tot.walk('{src}') """)
+    def scan(self, src): return toil.walk(f""" tot.scan('{src}') """)
+    def parse(self, tokens): return toil.walk(f""" tot.parse({tokens}) """)
+    def ast(self, src): return toil.walk(f""" tot.ast('{src}') """)
+    def eval(self, ast): return toil.walk(f""" tot.eval({ast}) """)
+    def walk(self, src): return toil.walk(f""" tot.walk('{src}') """)
 
-t.walk(r""" tot := Interpreter().init_env().stdlib() """)
-i = ToTWrapper()
+toil.walk(r""" tot := Interpreter().init_env().stdlib() """)
+tot = ToTWrapper()
 
 if __name__ == "__main__":
 
     # Example
 
-    i.walk(""" print("hello, world") """)
+    tot.walk(""" print("hello, world") """)
