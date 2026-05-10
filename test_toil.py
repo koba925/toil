@@ -1,10 +1,12 @@
 import pytest
-from toil import toil, Ident
+from toil import Interpreter, Ident
+
+toil = Interpreter().init_env().stdlib()
+
 
 @pytest.fixture(autouse=True)
 def reset_env():
     toil.init_env().stdlib()
-
 
 class TestToil:
     # Ensure test independence

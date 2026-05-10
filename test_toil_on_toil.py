@@ -1,6 +1,18 @@
 import pytest
-from toil import Ident
-from toil_on_toil import toil, tot
+from toil import Interpreter, Ident
+from toil_on_toil import ToTWrapper
+
+
+toil = Interpreter().init_env().stdlib()
+toil.walk(r"""
+    {
+        Interpreter, Environment,
+        isalpha, isdigit, isalnum, isspace, is_ident_first, is_ident_rest, is_ident
+    } := load('toil.toil');
+    tot := Interpreter().init_env().stdlib()
+""")
+
+tot = ToTWrapper(toil)
 
 
 class TestFunctions:

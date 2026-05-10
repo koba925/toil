@@ -9,10 +9,13 @@ print("Start")
 i = Interpreter().init_env().stdlib()
 i.walk(r"""
     print("Loading ToT");
-    tot := load('tot.toil');
+    {Interpreter} := load("toil.toil");
+    tot := Interpreter().init_env().stdlib();
+    print("Walk");
     tot.walk('
         print("Loading ToToT");
-        totot := load("tot.toil");
+        {Interpreter} := load("toil.toil");
+        totot := Interpreter().init_env().stdlib();
         print("Walk");
         totot.walk("for i in [1, 2, 3] do print(i) end");
         totot.walk("for i in [1, 2, 3].filter(x -> x % 2 == 1) do print(i) end")

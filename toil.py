@@ -887,10 +887,10 @@ class Interpreter:
     def walk(self, src: Source) -> Value:
         return self.eval(self.ast(src))
 
-toil = Interpreter().init_env().stdlib()
-
 if __name__ == "__main__":
     import sys
+
+    toil = Interpreter().init_env().stdlib()
 
     def repl():
         while True:
