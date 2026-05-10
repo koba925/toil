@@ -112,11 +112,10 @@ class TestFunctions:
 # Reset environments between each test methods without total initialization
 toil.walk(""" tot_base := tot """)
 
-@pytest.fixture()
-def reset_tot_env():
+@pytest.fixture(autouse=True)
+def setup_tot():
     toil.walk(""" tot := Interpreter(); tot._env = Environment(tot_base._env) """)
 
-@pytest.mark.usefixtures("reset_tot_env")
 class TestToT:
 
     # Ensure test independence
@@ -1125,7 +1124,6 @@ class TestToT:
         with pytest.raises(AssertionError, match="Extra token"):
             tot.walk(r""" 2 3 """)
 
-@pytest.mark.usefixtures("reset_tot_env")
 class TestExamples:
     def test_recursion_gcd(self):
         tot.walk("""
