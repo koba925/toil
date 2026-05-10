@@ -786,6 +786,7 @@ class Interpreter:
         self._env.define("copy", lambda args: args[0].copy())
 
         self._env.define("join", lambda args: str(args[1]).join(map(str, args[0])))
+        self._env.define("format", lambda args: args[0].format(*args[1:]))
 
         self._env.define("keys", lambda args: list(args[0].keys()))
         self._env.define("items", lambda args: [list(e) for e in args[0].items()])
@@ -916,4 +917,4 @@ if __name__ == "__main__":
 
     # Example
 
-    toil.walk(""" print("hello, world") """)
+    toil.walk(""" print('hello, world') """)

@@ -48,7 +48,7 @@ toil.walk(r"""
                 elif c.in('=!<>:') then self._two_char_operator('=')
                 elif c.in('+*/%()[]{}.,;') then
                     self._tokens.push(Ident(c)); self._advance()
-                else raise('Invalid character @ tokenize(): ' + c)
+                else raise('Invalid character @ tokenize(): {}'.format(c))
                 end
             else self._tokens end
         end;
@@ -131,7 +131,7 @@ toil.walk(r"""
             # print(self._tokens);
             expr := self._expression();
             assert self._current_token() == Ident('$EOF') else
-                'Extra token @ parse(): ' + str(self._current_token())
+                'Extra token @ parse(): {}'.format(self._current_token())
             end;
             expr
         end;
@@ -213,7 +213,7 @@ toil.walk(r"""
                     case Ident('.') then
                         attr_name := self._current_and_advance();
                         assert attr_name.type() == 'Ident' else
-                            'Invalid attribute @ _call_index_dot(): ' + str(attr_name)
+                            'Invalid attribute @ _call_index_dot(): {}'.format(attr_name)
                         end;
                         target = tuple(Ident('dot'), [target, str(attr_name)])
                 end
@@ -241,11 +241,11 @@ toil.walk(r"""
                 case Ident('defmethod') then self._defmethod()
                 case Ident(name) then
                     assert name.is_ident() else
-                        'Unexpected token @ _primary(): ' + str(self._current_token())
+                        'Unexpected token @ _primary(): {}'.format(self._current_token())
                     end;
                     self._current_and_advance()
                 case unexpected then
-                    raise('Unexpected token @ _primary(): ' + str(unexpected))
+                    raise('Unexpected token @ _primary(): {}'.format(unexpected))
             end
         end;
 
@@ -282,7 +282,7 @@ toil.walk(r"""
                         self._consume(Ident(':'));
                         dic[key] = self._expression()
                     case invalid then
-                        raise('Invalid key @ _dict(): ' + str(invalid))
+                        raise('Invalid key @ _dict(): {}'.format(invalid))
                 end
             end;
 
@@ -320,7 +320,7 @@ toil.walk(r"""
                 case Ident(name) then
                     tuple(Ident('define'), [call_expr, tuple(Ident('func'), [[], body_expr])])
                 case _ then
-                    raise('Invalid def syntax @ _def(): ' + str(call_expr))
+                    raise('Invalid def syntax @ _def(): {}'.format(call_expr))
             end
         end;
 
@@ -459,7 +459,7 @@ toil.walk(r"""
                         ])
                     ])
                 case _ then
-                    raise('Invalid defclass syntax @ _defclass(): ' + str(call_expr))
+                    raise('Invalid defclass syntax @ _defclass(): {}'.format(call_expr))
             end
         end;
 
@@ -482,7 +482,7 @@ toil.walk(r"""
                         tuple(Ident('func'), [[Ident('self')], body_expr])
                     ])
                 case _ then
-                    raise('Invalid defmethod syntax @ _defmethod(): ' + str(call_expr))
+                    raise('Invalid defmethod syntax @ _defmethod(): {}'.format(call_expr))
             end
         end;
 
@@ -525,7 +525,7 @@ toil.walk(r"""
 
         defmethod _consume(expected) do
             assert self._current_token() == expected else
-                'Expected ' + str(expected) + ' @ _consume(): ' + str(self._current_token())
+                'Expected {} @ _consume(): {}'.format(expected, self._current_token())
             end;
             self._current_and_advance()
         end;
@@ -556,13 +556,13 @@ toil.walk(r"""
 
         defmethod val(name) do
             vars := self.lookup(name);
-            assert vars != None else 'Undefined variable @ val(): ' + name end;
+            assert vars != None else 'Undefined variable @ val(): {}'.format(name) end;
             vars[name]
         end;
 
         defmethod assign(name, val) do
             vars := self.lookup(name);
-            assert vars != None else 'Undefined variable @ assign(): ' + name end;
+            assert vars != None else 'Undefined variable @ assign(): {}'.format(name) end;
             vars[name] = val
         end
     end
@@ -618,14 +618,14 @@ toil.walk(r"""
                 case tuple(op_expr, args_expr) then
                     self._op(op_expr, args_expr, env)
                 case unexpected then
-                    raise('Unexpected expression @ evaluate(): ' + str(unexpected))
+                    raise('Unexpected expression @ evaluate(): {}'.format(unexpected))
             end
         end;
 
         defmethod _define(pat, expr, env) do
             val := self.eval(expr, env);
             assert self._match_pattern(pat, val, env) else
-                'Pattern mismatch @ _define(): ' + str(pat) + ', ' + str(val)
+                'Pattern mismatch @ _define(): {}, {}'.format(pat, val)
             end;
             val
         end;
@@ -641,7 +641,7 @@ toil.walk(r"""
                     index_val := self.eval(index_expr, env);
                     coll_val[index_val] = val
                 case unexpected then
-                    raise('Invalid assign target @ _assign(): ' + str(unexpected))
+                    raise('Invalid assign target @ _assign(): {}'.format(unexpected))
             end
         end;
 
@@ -689,7 +689,7 @@ toil.walk(r"""
             coll_val := self.eval(coll_expr, env);
             for val in coll_val do
                 assert self._match_pattern(var_pat, val, env) else
-                    'Pattern mismatch @ _for(): ' + str(var_pat) + ', ' + str(val)
+                    'Pattern mismatch @ _for(): {}, {}'.format(var_pat, val)
                 end;
                 try
                     self.eval(body_expr, env)
@@ -764,8 +764,8 @@ toil.walk(r"""
                             return(val)
                         end
                     end;
-                    raise('Pattern mismatch @ apply(): ' + str(params) + ', ' + str(args_val))
-                case _ then raise('Invalid operator @ apply(): ' + str(op_val))
+                    raise('Pattern mismatch @ apply(): {}, {}'.format(params, args_val))
+                case _ then raise('Invalid operator @ apply(): {}'.format(op_val))
             end
         end;
 
@@ -883,6 +883,7 @@ toil.walk(r"""
             self._env.define('copy', tuple(Ident('hostfunc'), args -> copy(args[0])));
 
             self._env.define('join', tuple(Ident('hostfunc'), args -> join(args[0], args[1])));
+            self._env.define('format', tuple(Ident('hostfunc'), args -> apply(format, args)));
 
             self._env.define('keys', tuple(Ident('hostfunc'), args -> keys(args[0])));
             self._env.define('items', tuple(Ident('hostfunc'), args -> items(args[0])));
@@ -976,16 +977,14 @@ toil.walk(r"""
             try
                 Evaluator().eval(ast, self._env)
             except ['ReturnException', val] then
-                raise('Return from top level @ walk(): ' + str(val))
+                raise('Return from top level @ walk(): {}'.format(val))
             except ['ContinueException'] then
                 raise('Continue at top level @ walk()')
             except ['BreakException'] then
                 raise('Break at top level @ walk()')
             end
         end;
-        defmethod walk(src) do
-            self.eval(self.ast(src))
-        end
+        defmethod walk(src) do self.eval(self.ast(src)) end
     end
 """)
 
