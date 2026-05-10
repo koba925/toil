@@ -17,104 +17,104 @@ tot = ToTWrapper(toil)
 
 class TestFunctions:
     def test_isalpha(self):
-        assert toil.walk(""" isalpha("a") """) is True
-        assert toil.walk(""" isalpha("z") """) is True
-        assert toil.walk(""" isalpha("A") """) is True
-        assert toil.walk(""" isalpha("Z") """) is True
-        assert toil.walk(""" isalpha("0") """) is False
-        assert toil.walk(""" isalpha("9") """) is False
-        assert toil.walk(""" isalpha("_") """) is False
-        assert toil.walk(""" isalpha("$") """) is False
-        assert toil.walk(""" isalpha(" ") """) is False
+        assert toil.walk(r""" isalpha("a") """) is True
+        assert toil.walk(r""" isalpha("z") """) is True
+        assert toil.walk(r""" isalpha("A") """) is True
+        assert toil.walk(r""" isalpha("Z") """) is True
+        assert toil.walk(r""" isalpha("0") """) is False
+        assert toil.walk(r""" isalpha("9") """) is False
+        assert toil.walk(r""" isalpha("_") """) is False
+        assert toil.walk(r""" isalpha("$") """) is False
+        assert toil.walk(r""" isalpha(" ") """) is False
         assert toil.walk(""" isalpha("\n") """) is False
         assert toil.walk(r""" isalpha("\n") """) is False
 
     def test_isdigit(self):
-        assert toil.walk(""" isdigit("a") """) is False
-        assert toil.walk(""" isdigit("z") """) is False
-        assert toil.walk(""" isdigit("A") """) is False
-        assert toil.walk(""" isdigit("Z") """) is False
-        assert toil.walk(""" isdigit("0") """) is True
-        assert toil.walk(""" isdigit("9") """) is True
-        assert toil.walk(""" isdigit("_") """) is False
-        assert toil.walk(""" isdigit("$") """) is False
-        assert toil.walk(""" isdigit(" ") """) is False
+        assert toil.walk(r""" isdigit("a") """) is False
+        assert toil.walk(r""" isdigit("z") """) is False
+        assert toil.walk(r""" isdigit("A") """) is False
+        assert toil.walk(r""" isdigit("Z") """) is False
+        assert toil.walk(r""" isdigit("0") """) is True
+        assert toil.walk(r""" isdigit("9") """) is True
+        assert toil.walk(r""" isdigit("_") """) is False
+        assert toil.walk(r""" isdigit("$") """) is False
+        assert toil.walk(r""" isdigit(" ") """) is False
         assert toil.walk(""" isdigit("\n") """) is False
         assert toil.walk(r""" isdigit("\n") """) is False
 
     def test_isalnum(self):
-        assert toil.walk(""" isalnum("a") """) is True
-        assert toil.walk(""" isalnum("z") """) is True
-        assert toil.walk(""" isalnum("A") """) is True
-        assert toil.walk(""" isalnum("Z") """) is True
-        assert toil.walk(""" isalnum("0") """) is True
-        assert toil.walk(""" isalnum("9") """) is True
-        assert toil.walk(""" isalnum("_") """) is False
-        assert toil.walk(""" isalnum("$") """) is False
-        assert toil.walk(""" isalnum(" ") """) is False
+        assert toil.walk(r""" isalnum("a") """) is True
+        assert toil.walk(r""" isalnum("z") """) is True
+        assert toil.walk(r""" isalnum("A") """) is True
+        assert toil.walk(r""" isalnum("Z") """) is True
+        assert toil.walk(r""" isalnum("0") """) is True
+        assert toil.walk(r""" isalnum("9") """) is True
+        assert toil.walk(r""" isalnum("_") """) is False
+        assert toil.walk(r""" isalnum("$") """) is False
+        assert toil.walk(r""" isalnum(" ") """) is False
         assert toil.walk(""" isalnum("\n") """) is False
         assert toil.walk(r""" isalnum("\n") """) is False
 
     def test_isspace(self):
-        assert toil.walk(""" isspace("a") """) is False
-        assert toil.walk(""" isspace("z") """) is False
-        assert toil.walk(""" isspace("A") """) is False
-        assert toil.walk(""" isspace("Z") """) is False
-        assert toil.walk(""" isspace("0") """) is False
-        assert toil.walk(""" isspace("9") """) is False
-        assert toil.walk(""" isspace("_") """) is False
-        assert toil.walk(""" isspace("$") """) is False
-        assert toil.walk(""" isspace(" ") """) is True
+        assert toil.walk(r""" isspace("a") """) is False
+        assert toil.walk(r""" isspace("z") """) is False
+        assert toil.walk(r""" isspace("A") """) is False
+        assert toil.walk(r""" isspace("Z") """) is False
+        assert toil.walk(r""" isspace("0") """) is False
+        assert toil.walk(r""" isspace("9") """) is False
+        assert toil.walk(r""" isspace("_") """) is False
+        assert toil.walk(r""" isspace("$") """) is False
+        assert toil.walk(r""" isspace(" ") """) is True
         assert toil.walk(""" isspace("\n") """) is True
         assert toil.walk(r""" isspace("\n") """) is True
 
     def test_is_ident_first(self):
-        assert toil.walk(""" is_ident_first("a") """) is True
-        assert toil.walk(""" is_ident_first("z") """) is True
-        assert toil.walk(""" is_ident_first("A") """) is True
-        assert toil.walk(""" is_ident_first("Z") """) is True
-        assert toil.walk(""" is_ident_first("0") """) is False
-        assert toil.walk(""" is_ident_first("9") """) is False
-        assert toil.walk(""" is_ident_first("_") """) is True
-        assert toil.walk(""" is_ident_first("$") """) is False
-        assert toil.walk(""" is_ident_first(" ") """) is False
+        assert toil.walk(r""" is_ident_first("a") """) is True
+        assert toil.walk(r""" is_ident_first("z") """) is True
+        assert toil.walk(r""" is_ident_first("A") """) is True
+        assert toil.walk(r""" is_ident_first("Z") """) is True
+        assert toil.walk(r""" is_ident_first("0") """) is False
+        assert toil.walk(r""" is_ident_first("9") """) is False
+        assert toil.walk(r""" is_ident_first("_") """) is True
+        assert toil.walk(r""" is_ident_first("$") """) is False
+        assert toil.walk(r""" is_ident_first(" ") """) is False
         assert toil.walk(""" is_ident_first("\n") """) is False
         assert toil.walk(r""" is_ident_first("\n") """) is False
 
     def test_is_ident_rest(self):
-        assert toil.walk(""" is_ident_rest("a") """) is True
-        assert toil.walk(""" is_ident_rest("z") """) is True
-        assert toil.walk(""" is_ident_rest("A") """) is True
-        assert toil.walk(""" is_ident_rest("Z") """) is True
-        assert toil.walk(""" is_ident_rest("0") """) is True
-        assert toil.walk(""" is_ident_rest("9") """) is True
-        assert toil.walk(""" is_ident_rest("_") """) is True
-        assert toil.walk(""" is_ident_rest("$") """) is False
-        assert toil.walk(""" is_ident_rest(" ") """) is False
+        assert toil.walk(r""" is_ident_rest("a") """) is True
+        assert toil.walk(r""" is_ident_rest("z") """) is True
+        assert toil.walk(r""" is_ident_rest("A") """) is True
+        assert toil.walk(r""" is_ident_rest("Z") """) is True
+        assert toil.walk(r""" is_ident_rest("0") """) is True
+        assert toil.walk(r""" is_ident_rest("9") """) is True
+        assert toil.walk(r""" is_ident_rest("_") """) is True
+        assert toil.walk(r""" is_ident_rest("$") """) is False
+        assert toil.walk(r""" is_ident_rest(" ") """) is False
         assert toil.walk(""" is_ident_rest("\n") """) is False
         assert toil.walk(r""" is_ident_rest("\n") """) is False
 
     def test_is_ident(self):
-        assert toil.walk(""" is_ident("a") """) is True
-        assert toil.walk(""" is_ident("_abc") """) is True
-        assert toil.walk(""" is_ident("0a") """) is False
-        assert toil.walk(""" is_ident("$a") """) is False
-        assert toil.walk(""" is_ident(" a") """) is False
+        assert toil.walk(r""" is_ident("a") """) is True
+        assert toil.walk(r""" is_ident("_abc") """) is True
+        assert toil.walk(r""" is_ident("0a") """) is False
+        assert toil.walk(r""" is_ident("$a") """) is False
+        assert toil.walk(r""" is_ident(" a") """) is False
 
     def test_in(self):
-        assert toil.walk(""" in(2, [1, 2, 3]) """) is True
-        assert toil.walk(""" in(4, [1, 2, 3]) """) is False
-        assert toil.walk(""" 2.in([1, 2, 3]) """) is True
-        assert toil.walk(""" 4.in([1, 2, 3]) """) is False
-        assert toil.walk(""" 'a'.in({'a': 2, 'b': 3}) """) is True
-        assert toil.walk(""" 'c'.in({'a': 2, 'b': 3}) """) is False
+        assert toil.walk(r""" in(2, [1, 2, 3]) """) is True
+        assert toil.walk(r""" in(4, [1, 2, 3]) """) is False
+        assert toil.walk(r""" 2.in([1, 2, 3]) """) is True
+        assert toil.walk(r""" 4.in([1, 2, 3]) """) is False
+        assert toil.walk(r""" 'a'.in({'a': 2, 'b': 3}) """) is True
+        assert toil.walk(r""" 'c'.in({'a': 2, 'b': 3}) """) is False
 
 # Reset environments between each test methods without total initialization
-toil.walk(""" tot_base := tot """)
+toil.walk(r""" tot_base := tot """)
 
 @pytest.fixture(autouse=True)
 def setup_tot():
-    toil.walk(""" tot := Interpreter(); tot._env = Environment(tot_base._env) """)
+    toil.walk(r""" tot := Interpreter(); tot._env = Environment(tot_base._env) """)
 
 class TestToT:
 
@@ -273,38 +273,40 @@ class TestToT:
         assert tot.walk(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """) == [5, 6]
 
     def test_list_assign(self):
-        tot.walk(""" b := [2, 3, [4, 5]] """)
-        tot.walk(""" b[0] = 6 """)
-        assert tot.walk(""" b[0] """) == 6
-        tot.walk(""" b[2][1] = 7 """)
-        assert tot.walk(""" b[2][1] """) == 7
-        assert tot.walk(""" b """) == [6, 3, [4, 7]]
+        tot.walk(r""" b := [2, 3, [4, 5]] """)
+        tot.walk(r""" b[0] = 6 """)
+        assert tot.walk(r""" b[0] """) == 6
+        tot.walk(r""" b[2][1] = 7 """)
+        assert tot.walk(r""" b[2][1] """) == 7
+        assert tot.walk(r""" b """) == [6, 3, [4, 7]]
 
-        assert tot.walk(""" a := [1, 2]; b := [3, 4]; a[0] = b[1] = 5; [a, b] """) == [[5, 2], [3, 5]]
+        assert tot.walk(r""" a := [1, 2]; b := [3, 4]; a[0] = b[1] = 5; [a, b] """) == [[5, 2], [3, 5]]
 
     def test_arrow_function(self):
-        assert tot.walk(""" ([] -> 2)() """) == 2
-        assert tot.walk(""" ([a] -> a + 2)(3) """) == 5
-        assert tot.walk(""" (a -> a + 2)(3) """) == 5
-        assert tot.walk(""" ([[a, b]] -> a + b)([2, 3]) """) == 5
-        assert tot.walk(""" ([a, b] -> a + b)(2, 3) """) == 5
+        assert tot.walk(r""" ([] -> 2)() """) == 2
+        assert tot.walk(r""" ([a] -> a + 2)(3) """) == 5
+        assert tot.walk(r""" (a -> a + 2)(3) """) == 5
+        assert tot.walk(r""" ([[a, b]] -> a + b)([2, 3]) """) == 5
+        assert tot.walk(r""" ([a, b] -> a + b)(2, 3) """) == 5
         with pytest.raises(Exception, match="Pattern mismatch"):
-            tot.walk(""" ([a, b] -> a + b)(2) """)
+            tot.walk(r""" ([a, b] -> a + b)(2) """)
 
-        assert tot.walk(""" ([a, *b] -> b)(2, 3, 4) """) == [3, 4]
-        assert tot.walk(""" ({a} -> a + 2)({a: 3}) """) == 5
+        assert tot.walk(r""" ([a, *b] -> b)(2, 3, 4) """) == [3, 4]
+        assert tot.walk(r""" ({a} -> a + 2)({a: 3}) """) == 5
         with pytest.raises(Exception, match="Pattern mismatch"):
-            tot.walk(""" ({a} -> a + 2)({b: 3}) """)
+            tot.walk(r""" ({a} -> a + 2)({b: 3}) """)
 
-        assert tot.walk(""" (int(a) -> a + 2)(3) """) == 5
+        assert tot.walk(r""" (int(a) -> a + 2)(3) """) == 5
         with pytest.raises(Exception, match="Pattern mismatch"):
-            tot.walk(""" (int(a) -> a + 2)("aaa") """)
+            tot.walk(r""" (int(a) -> a + 2)("aaa") """)
 
-        assert tot.walk(""" (x -> x or 2)(False) """) == 2
-        assert tot.walk(""" (a -> b -> a + b)(2)(3) """) == 5
+        assert tot.walk(r""" (x -> x or 2)(False) """) == 2
+        assert tot.walk(r""" (a -> b -> a + b)(2)(3) """) == 5
 
-        assert tot.walk(""" inc := a -> a + 1; inc(2) """) == 3
-        assert tot.walk(""" myadd := [a, b] -> a + b; myadd(2, 3) """) == 5
+        assert tot.walk(r""" inc := a -> a + 1; inc(2) """) == 3
+        assert tot.walk(r""" myadd := [a, b] -> a + b; myadd(2, 3) """) == 5
+
+        assert tot.walk(r""" f := a -> a or 2; f(False) """) == 2
 
     def test_logical_operations(self, capsys):
         assert tot.walk(r""" True and False """) is False
@@ -327,6 +329,12 @@ class TestToT:
         assert tot.walk(r""" not not True """) is True
 
         assert tot.walk(r""" a := not 2 == 2 or True """) is True
+
+        assert tot.walk(r""" True or False and False """) is False  # (True or False) and False
+        assert tot.walk(r""" False and False or True """) is True   # (False and False) or True
+        assert tot.walk(r""" not True and False """) is False       # (not True) and False
+        assert tot.walk(r""" False or not False """) is True        # False or (not False)
+        assert tot.walk(r""" not 2 == 3 """) is True                # not (2 == 3)
 
     def test_comparison_operations(self):
         assert tot.walk(r""" 2 + 5 == 3 + 4 """) is True
@@ -357,10 +365,22 @@ class TestToT:
         assert tot.walk(r""" None == None """) is True
         assert tot.walk(r""" False != True """) is True
 
+        assert tot.walk(r""" [1, 2] == [1, 2] """) is True
+        assert tot.walk(r""" [1, 2] == [1, 3] """) is False
+        assert tot.walk(r""" {"a": 1} == {"a": 1} """) is True
+
+        assert tot.walk(r""" not 2 + 3 == 4 + 1 """) is False       # not ((2 + 3) == (4 + 1))
+        assert tot.walk(r""" 2 + 3 > 4 and 5 < 6 """) is True       # ((2 + 3) > 4) and (5 < 6)
+
     def test_arithmetic_operations(self):
         assert tot.walk(r""" 2 + 3 """) == 5
         assert tot.walk(r""" 2 + 3 - 4 """) == 1
         assert tot.walk(r""" a := 2 + sub(4, 3) """) == 3
+
+        assert tot.walk(r""" 2 + 3 * 4 """) == 14                   # 2 + (3 * 4)
+        assert tot.walk(r""" 2 * 3 + 4 * 5 """) == 26               # (2 * 3) + (4 * 5)
+        assert tot.walk(r""" 10 - 4 / 2 """) == 8                   # 10 - (4 / 2)
+        assert tot.walk(r""" 2 + 3 == 5 """) is True                # (2 + 3) == 5
 
     def test_mul_div_mod(self):
         assert tot.walk(r""" 2 * 3 """) == 6
@@ -368,34 +388,42 @@ class TestToT:
         assert tot.walk(r""" 2 * 3 % 4 """) == 2
         assert tot.walk(r""" 2 + 3 * add(4, 5) """) == 29
 
+        assert tot.walk(r""" -2 * 3 """) == -6                      # (-2) * 3
+        assert tot.walk(r""" 10 / -2 """) == -5                     # 10 / (-2)
+        assert tot.walk(r""" 2 + 3 * 4 == 14 """) is True           # (2 + (3 * 4)) == 14
+
     def test_unary_operations(self):
         assert tot.walk(r""" -2 """) == -2
         assert tot.walk(r""" --2 """) == 2
         assert tot.walk(r""" 3--2 """) == 5
         assert tot.walk(r""" -add(2, 3) * 4 """) == -20
 
+        assert tot.walk(r""" -2 * 3 """) == -6                      # (-2) * 3
+        assert tot.walk(r""" -len([1, 2]) """) == -2                # -(len([1, 2]))
+        assert tot.walk(r""" -[1, -2][-1] """) == 2                 # -([1, -2][-1])
+
     def test_call_index(self):
         assert tot.walk(r""" neg(2) """) == -2
         assert tot.walk(r""" add(2, 3) """) == 5
 
-        tot.walk(""" a := [2, 3, [4, 5]] """)
-        assert tot.walk(""" a[2][0] """) == 4
-        assert tot.walk(""" a[2][-1] """) == 5
+        tot.walk(r""" a := [2, 3, [4, 5]] """)
+        assert tot.walk(r""" a[2][0] """) == 4
+        assert tot.walk(r""" a[2][-1] """) == 5
 
-        tot.walk(""" c := func do [add, sub] end """)
-        assert tot.walk(""" c()[0](2, 3) """) == 5
+        tot.walk(r""" c := func do [add, sub] end """)
+        assert tot.walk(r""" c()[0](2, 3) """) == 5
 
-        tot.walk(""" e := [1] """)
+        tot.walk(r""" e := [1] """)
         with pytest.raises(Exception):
-            tot.walk(""" e[None] = 2 """)
+            tot.walk(r""" e[None] = 2 """)
         with pytest.raises(Exception):
-            tot.walk(""" None[2] = 3 """)
+            tot.walk(r""" None[2] = 3 """)
         with pytest.raises(Exception):
-            tot.walk(""" [1, 2][5] """)
+            tot.walk(r""" [1, 2][5] """)
         with pytest.raises(Exception):
-            tot.walk(""" [1, 2][None] """)
+            tot.walk(r""" [1, 2][None] """)
         with pytest.raises(Exception):
-            tot.walk(""" None[0] """)
+            tot.walk(r""" None[0] """)
 
     def test_dot_notation(self):
         tot.walk(r""" a := {aaa: 2, bbb: 3} """)
@@ -475,36 +503,40 @@ class TestToT:
 
     def test_string_functions(self):
         assert tot.walk(r""" join(["ab", "cd", "ef"], ",") """) == "ab,cd,ef"
+        assert tot.walk(r""" format("a: {}, b: {}", 1, 2) """) == "a: 1, b: 2"
 
     def test_grouping(self):
         assert tot.walk(r""" (2 + 3) * 4 """) == 20
         assert tot.walk(r""" (2) * 3 """) == 6
 
     def test_list(self, capsys):
-        assert tot.walk(""" [] """) == []
-        assert tot.walk(""" [2 + 3] """) == [5]
-        assert tot.walk(""" [2, 3, [4, 5]] """) == [2, 3, [4, 5]]
-        tot.walk(""" [print(2), print(3)] """)
+        assert tot.walk(r""" [] """) == []
+        assert tot.walk(r""" [2 + 3] """) == [5]
+        assert tot.walk(r""" [2, 3, [4, 5]] """) == [2, 3, [4, 5]]
+        tot.walk(r""" [print(2), print(3)] """)
+
+        with pytest.raises(Exception, match="Unexpected token"):
+            tot.walk(r""" [1, 2,] """)
         assert capsys.readouterr().out == "2\n3\n"
 
     def test_list_functions(self, capsys):
-        tot.walk(""" d := [2, 3, 4] """)
-        assert tot.walk(""" len(d) """) == 3
-        assert tot.walk(""" index(d, 2) """) == 4
-        assert tot.walk(""" slice(d, 1, None) """) == [3, 4]
-        assert tot.walk(""" slice(d, 1, 2) """) == [3]
-        assert tot.walk(""" slice(d, None, 2) """) == [2, 3]
-        assert tot.walk(""" slice(d, None, None) """) == [2, 3, 4]
-        assert tot.walk(""" push(d, 5) """) is None
-        assert tot.walk(""" d """) == [2, 3, 4, 5]
-        assert tot.walk(""" pop(d) """) == 5
-        assert tot.walk(""" d """) == [2, 3, 4]
-        assert tot.walk(""" in(2, d) """) is True
-        assert tot.walk(""" in(5, d) """) is False
-        assert tot.walk(""" dd := copy(d); dd[0] = 6; [d, dd] """) == [[2, 3, 4], [6, 3, 4]]
+        tot.walk(r""" d := [2, 3, 4] """)
+        assert tot.walk(r""" len(d) """) == 3
+        assert tot.walk(r""" index(d, 2) """) == 4
+        assert tot.walk(r""" slice(d, 1, None) """) == [3, 4]
+        assert tot.walk(r""" slice(d, 1, 2) """) == [3]
+        assert tot.walk(r""" slice(d, None, 2) """) == [2, 3]
+        assert tot.walk(r""" slice(d, None, None) """) == [2, 3, 4]
+        assert tot.walk(r""" push(d, 5) """) is None
+        assert tot.walk(r""" d """) == [2, 3, 4, 5]
+        assert tot.walk(r""" pop(d) """) == 5
+        assert tot.walk(r""" d """) == [2, 3, 4]
+        assert tot.walk(r""" in(2, d) """) is True
+        assert tot.walk(r""" in(5, d) """) is False
+        assert tot.walk(r""" dd := copy(d); dd[0] = 6; [d, dd] """) == [[2, 3, 4], [6, 3, 4]]
 
-        assert tot.walk(""" [2, 3] + [4, 5] """) == [2, 3, 4, 5]
-        assert tot.walk(""" [2, 3] * 3 """) == [2, 3, 2, 3, 2, 3]
+        assert tot.walk(r""" [2, 3] + [4, 5] """) == [2, 3, 4, 5]
+        assert tot.walk(r""" [2, 3] * 3 """) == [2, 3, 2, 3, 2, 3]
 
     def test_dict(self):
         assert tot.walk(r""" {} """) == {}
@@ -527,6 +559,9 @@ class TestToT:
             tot.walk(r""" a["eee"] """)
         with pytest.raises(AssertionError, match="Undefined variable"):
             tot.walk(r""" {undefined_var} """)
+
+        with pytest.raises(Exception, match="Expected ,"):
+            tot.walk(r""" {"a": 1,} """)
 
     def test_dict_functions(self):
         assert tot.walk(r""" a := dict([["aaa", 2], ["bbb", 3], ["ccc", 4]]) """) == {'aaa': 2, 'bbb': 3, 'ccc': 4}
@@ -554,6 +589,7 @@ class TestToT:
         assert tot.walk(r""" list({a: 2, b: 3}) """) == ["a", "b"]
         assert tot.walk(r""" dict({a: 2, b: 3}) """) == {"a": 2, "b": 3}
         assert tot.walk(r""" dict([["a", 2], ["b", 3]]) """) == {"a": 2, "b": 3}
+        assert tot.walk(r""" type(tuple([2, 3])) """) == "tuple"
 
     def test_scope(self):
         assert tot.walk(r""" a := 2; scope a end """) == 2
@@ -569,25 +605,31 @@ class TestToT:
         with pytest.raises(AssertionError, match="Undefined variable"):
             tot.walk(r""" d """)
 
-    def test_func(self):
-        assert tot.walk("func do 2 end ()") == 2
-        assert tot.walk("func a do add(a, 2) end (3)") == 5
-        assert tot.walk("func a, b do add(a, b) end (2, 3)") == 5
+        assert tot.walk(r"""
+            a := 1;
+            def f do a := 2; a end;
+            [f(), a]
+        """) == [2, 1]
 
-        assert tot.walk("func a, b do add(a, b) end (add(2, 3), 4; 5)") == 10
-        assert tot.walk("""
+    def test_func(self):
+        assert tot.walk(r"""func do 2 end ()""") == 2
+        assert tot.walk(r"""func a do add(a, 2) end (3)""") == 5
+        assert tot.walk(r"""func a, b do add(a, b) end (2, 3)""") == 5
+
+        assert tot.walk(r"""func a, b do add(a, b) end (add(2, 3), 4; 5)""") == 10
+        assert tot.walk(r"""
            myadd := func a, b do add(a, b) end;
            myadd(2, 3)
         """) == 5
 
         with pytest.raises(AssertionError, match="Pattern mismatch"):
-            tot.walk("func a, b do add(a, b) end (2)")
+            tot.walk(r"""func a, b do add(a, b) end (2)""")
 
         with pytest.raises(AssertionError, match="Expected do"):
-            tot.walk("func a add(a, 2) end")
+            tot.walk(r"""func a add(a, 2) end""")
 
         with pytest.raises(AssertionError, match="Expected end"):
-            tot.walk("func a do add(a, 2)")
+            tot.walk(r"""func a do add(a, 2)""")
 
     def test_destructure_function_arguments(self):
         assert tot.walk(r""" func a, *rest do [a, rest] end (2, 3, 4) """) == [2, [3, 4]]
@@ -607,30 +649,40 @@ class TestToT:
         assert tot.walk(r""" func do "ok" end () """) == "ok"
 
     def test_return(self):
-        tot.walk("""
+        tot.walk(r"""
             def f(a) do
                 if a == 2 then return(3) end;
                 4
             end
         """)
-        assert tot.walk(""" f(2) """) == 3
-        assert tot.walk(""" f(3) """) == 4
+        assert tot.walk(r""" f(2) """) == 3
+        assert tot.walk(r""" f(3) """) == 4
 
-        tot.walk("""
+        tot.walk(r"""
             def fib(n) do
                 if n == 0 then return(0) end;
                 if n == 1 then return(1) end;
                 fib(n - 1) + fib(n - 2)
             end
         """)
-        assert tot.walk(""" fib(0) """) == 0
-        assert tot.walk(""" fib(1) """) == 1
-        assert tot.walk(""" fib(6) """) == 8
+        assert tot.walk(r""" fib(0) """) == 0
+        assert tot.walk(r""" fib(1) """) == 1
+        assert tot.walk(r""" fib(6) """) == 8
 
-        assert tot.walk(""" func do return() end () """) is None
+        assert tot.walk(r""" func do return() end () """) is None
 
         with pytest.raises(Exception):
-            tot.walk(""" return() """)
+            tot.walk(r""" return() """)
+
+        assert tot.walk(r"""
+            def find_even(nums) do
+                for x in nums do
+                    if x % 2 == 0 then return(x) end
+                end;
+                -1
+            end;
+            [find_even([1, 3, 5]), find_even([1, 4, 5])]
+        """) == [-1, 4]
 
     def test_def(self):
         tot.walk(r""" def myadd(a, b) do a + b end """)
@@ -773,40 +825,40 @@ class TestToT:
         assert tot.walk(r""" match [2, 3] case [a, 4] then "no" case _ then a end """) == 2
 
     def test_while(self):
-        assert tot.walk(""" i := 0; while i < 2 do i = i + 1 end """) == None
-        assert tot.walk("""
+        assert tot.walk(r""" i := 0; while i < 2 do i = i + 1 end """) == None
+        assert tot.walk(r"""
             a := [];
             i := 0; while i < 3 do push(a, i); i = i + 1 end;
             a
         """) == [0, 1, 2]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := [];
             i := 0; while i < 3 do push(a, i); i = i + 1 then a else 1/0 end
         """) == [0, 1, 2]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := [];
             i := 0; while i < 3 do push(a, i); i = i + 1 then a end
         """) == [0, 1, 2]
 
-        assert tot.walk(""" while False do 1 / 0 then 3 else 4 end """) == 3
+        assert tot.walk(r""" while False do 1 / 0 then 3 else 4 end """) == 3
 
         with pytest.raises(Exception, match="Expected do"):
-            tot.walk(""" while do 2 then 3 else 4 end """)
+            tot.walk(r""" while do 2 then 3 else 4 end """)
         with pytest.raises(Exception, match="Expected do"):
-            tot.walk(""" while True 2 then 3 else 4 end """)
+            tot.walk(r""" while True 2 then 3 else 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            tot.walk(""" while True do 2 3 else 4 end """)
+            tot.walk(r""" while True do 2 3 else 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            tot.walk(""" while True do 2 then 3 4 end """)
+            tot.walk(r""" while True do 2 then 3 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            tot.walk(""" while True do 2 then 3 else end """)
+            tot.walk(r""" while True do 2 then 3 else end """)
         with pytest.raises(Exception, match="Expected end"):
-            tot.walk(""" while True do 2 then 3 else 4 """)
+            tot.walk(r""" while True do 2 then 3 else 4 """)
 
     def test_continue(self):
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := [];
             i := 0; while i < 3 do
                 i = i + 1; if i == 2 then continue end;
@@ -814,7 +866,7 @@ class TestToT:
             then a end
         """) == [1, 3]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := []; i := 0; while i < 2 do
                 j := 0; while j < 3 do
                     j = j + 1; if j == 2 then continue end;
@@ -825,11 +877,11 @@ class TestToT:
         """) == [[0, 1], [0, 3], [1, 1], [1, 3]]
 
         with pytest.raises(Exception, match="Continue at top level"):
-            tot.walk(""" continue """)
+            tot.walk(r""" continue """)
 
     def test_break(self):
-        assert tot.walk(""" i := 0; while i < 2 do break end """) == None
-        assert tot.walk("""
+        assert tot.walk(r""" i := 0; while i < 2 do break end """) == None
+        assert tot.walk(r"""
             a := [];
             i := 0; while i < 3 do
                 if i == 1 then break end;
@@ -837,7 +889,7 @@ class TestToT:
             then 1/0 else a end
         """) == [0]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := [];
             i := 0; while i < 3 do
                 if i == 1 then break end;
@@ -845,7 +897,7 @@ class TestToT:
             else a end
         """) == [0]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := [];
             i := 0; while i < 2 do
                 j := 0; while j < 3 do
@@ -857,7 +909,7 @@ class TestToT:
             then a end
         """) == [[0, 0], [1, 0], [1, 1], [1, 2]]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := [];
             i := 0; while i < 2 do
                 j := 0; while j < 3 do
@@ -869,70 +921,70 @@ class TestToT:
             else a end
         """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
 
-        assert tot.walk(""" while True do break end """) is None
-        assert tot.walk(""" while True do break else 2 end """) == 2
+        assert tot.walk(r""" while True do break end """) is None
+        assert tot.walk(r""" while True do break else 2 end """) == 2
 
         with pytest.raises(Exception, match="Break at top level"):
-            tot.walk(""" break """)
+            tot.walk(r""" break """)
 
     def test_for(self):
-        assert tot.walk(""" for i in [0, 1, 2] do i end """) == None
-        assert tot.walk(""" a := []; for i in [0, 1, 2] do push(a, i) end; a """) == [0, 1, 2]
+        assert tot.walk(r""" for i in [0, 1, 2] do i end """) == None
+        assert tot.walk(r""" a := []; for i in [0, 1, 2] do push(a, i) end; a """) == [0, 1, 2]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := []; for i in [0, 1, 2] do push(a, i) then [i, a] else 1/0 end
         """) == [2, [0, 1, 2]]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := []; for i in [0, 1, 2] do push(a, i) then a end
         """) == [0, 1, 2]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := []; for [i, j] in [[1, 2], [3, 4]] do push(a, [i, j]) then a end
         """) == [[1, 2], [3, 4]]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := [];
             for [k, v] in {"a": 2, "b": 3}.items() do push(a, [k, v]) then a end
         """) == [['a', 2], ['b', 3]]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := [];
             keys := ["a", "b", "c"];
             values := [2, 3, 4];
             for [k, v] in zip(keys, values) do push(a, [k, v]) then a end
         """) == [['a', 2], ['b', 3], ['c', 4]]
 
-        assert tot.walk(""" for i in [] do 1/0 then 2 end """) == 2
+        assert tot.walk(r""" for i in [] do 1/0 then 2 end """) == 2
 
         with pytest.raises(Exception):
-            tot.walk(""" for in [] do 2 then 3 else 4 end """)
+            tot.walk(r""" for in [] do 2 then 3 else 4 end """)
         with pytest.raises(Exception):
-            tot.walk(""" for i [] do 2 then 3 else 4 end """)
+            tot.walk(r""" for i [] do 2 then 3 else 4 end """)
         with pytest.raises(Exception, match="Expected do"):
-            tot.walk(""" for i in do 2 then 3 else 4 end """)
+            tot.walk(r""" for i in do 2 then 3 else 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            tot.walk(""" for i in [] do then 3 else 4 end """)
+            tot.walk(r""" for i in [] do then 3 else 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            tot.walk(""" for i in [] do 2 3 else 4 end """)
+            tot.walk(r""" for i in [] do 2 3 else 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            tot.walk(""" for i in [] do 2 then else 4 end """)
+            tot.walk(r""" for i in [] do 2 then else 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            tot.walk(""" for i in [] do 2 then 3 4 end """)
+            tot.walk(r""" for i in [] do 2 then 3 4 end """)
         with pytest.raises(Exception, match="Expected end"):
-            tot.walk(""" for i in [] do 2 then 3 else end """)
+            tot.walk(r""" for i in [] do 2 then 3 else end """)
         with pytest.raises(Exception, match="Expected end"):
-            tot.walk(""" for i in [] do 2 then 3 else 4 """)
+            tot.walk(r""" for i in [] do 2 then 3 else 4 """)
 
     def test_for_continue(self):
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := []; for i in [0, 1, 2] do
                 if i == 1 then continue end;
                 push(a, i)
             then a end
         """) == [0, 2]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := []; for i in [0, 1] do
                 for j in [0, 1, 2] do
                     if j == 1 then continue end;
@@ -942,22 +994,22 @@ class TestToT:
         """) == [[0, 0], [0, 2], [1, 0], [1, 2]]
 
     def test_for_break(self):
-        assert tot.walk(""" for i in [0, 1, 2] do break end """) == None
-        assert tot.walk("""
+        assert tot.walk(r""" for i in [0, 1, 2] do break end """) == None
+        assert tot.walk(r"""
             a := []; for i in [0, 1, 2] do
                 if i == 1 then break end;
                 push(a, i)
             then 1/0 else a end
         """) == [0]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := []; for i in [0, 1, 2] do
                 if i == 1 then break end;
                 push(a, i)
             else a end
         """) == [0]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := [];
             for i in [0, 1] do
                 for j in [0, 1, 2] do
@@ -967,7 +1019,7 @@ class TestToT:
             then a end
         """) == [[0, 0], [1, 0], [1, 1], [1, 2]]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := [];
             for i in [0, 1] do
                 for j in [0, 1, 2] do
@@ -978,11 +1030,11 @@ class TestToT:
         """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
 
     def test_try_except(self):
-        assert tot.walk(""" try 2; 3 end """) == 3
-        assert tot.walk(""" try 2; 3 except e then e end """) == 3
-        assert tot.walk(""" try 2; raise(2 + 3); 3 except e then e end """) == 5
+        assert tot.walk(r""" try 2; 3 end """) == 3
+        assert tot.walk(r""" try 2; 3 except e then e end """) == 3
+        assert tot.walk(r""" try 2; raise(2 + 3); 3 except e then e end """) == 5
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             try
                 raise(["foo", 3])
             except ["foo", val] then ["foo", val]
@@ -990,7 +1042,7 @@ class TestToT:
             end
         """) == ['foo', 3]
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             try
                 raise(["bar", 3])
             except ["foo", val] then ["foo", val]
@@ -999,25 +1051,25 @@ class TestToT:
         """) == ['bar', 3]
 
         with pytest.raises(Exception):
-            tot.walk("""
+            tot.walk(r"""
                 try
                     raise(["baz", 3])
                 except ["foo", val] then ["foo", val]
                 end
             """)
 
-        assert tot.walk(""" try raise(2) except _ then 3 end """) == 3
+        assert tot.walk(r""" try raise(2) except _ then 3 end """) == 3
 
-        assert tot.walk(""" func do try return(2) except _ then 3 end end () """) == 2
+        assert tot.walk(r""" func do try return(2) except _ then 3 end end () """) == 2
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             a := 0; while a < 5 do
                 try a = a + 1; if a == 3 then break end
                 except _ then a = 10 end
             end; a
         """) == 3
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             try
                 try
                     raise(2)
@@ -1029,7 +1081,7 @@ class TestToT:
             end
         """) == 3
 
-        assert tot.walk("""
+        assert tot.walk(r"""
             try
                 try
                     raise("outer")
@@ -1058,46 +1110,50 @@ class TestToT:
         """) == [12, 25]
 
         with pytest.raises(Exception, match="Invalid defclass syntax"):
-            tot.walk(""" defclass 2 do 2 end """)
+            tot.walk(r""" defclass 2 do 2 end """)
         with pytest.raises(Exception, match="Expected do"):
-            tot.walk(""" defclass Foo(x) end """)
+            tot.walk(r""" defclass Foo(x) end """)
         with pytest.raises(Exception, match="Invalid defmethod syntax"):
-            tot.walk(""" defclass Foo do defmethod 2 do end end """)
+            tot.walk(r""" defclass Foo do defmethod 2 do end end """)
 
     def test_assert(self):
-        assert tot.walk(""" assert 2 == 2 else 1/0 end """) is None
+        assert tot.walk(r""" assert 2 == 2 else 1/0 end """) is None
 
         with pytest.raises(Exception, match="Assert exception"):
-            tot.walk(""" assert 2 == 3 else "Assert exception" end """)
+            tot.walk(r""" assert 2 == 3 else "Assert exception" end """)
 
         with pytest.raises(Exception, match="Expected else"):
-            tot.walk(""" assert 2 == 3 "Assert exception" end """)
+            tot.walk(r""" assert 2 == 3 "Assert exception" end """)
 
         with pytest.raises(Exception, match="Expected end"):
-            tot.walk(""" assert 2 == 3 else "Assert exception" """)
+            tot.walk(r""" assert 2 == 3 else "Assert exception" """)
 
     def test_read_load(self, tmp_path):
-        assert tot.walk(""" type(read("scripts/fib.toil")) """) == "str"
-        assert tot.walk(""" load("scripts/fib.toil")(4) """) == 3
+        assert tot.walk(r""" type(read("scripts/fib.toil")) """) == "str"
+        assert tot.walk(r""" load("scripts/fib.toil")(4) """) == 3
 
     def test_eval_apply(self):
-        assert tot.walk(""" eval("2 + 3") """) == 5
-        assert tot.walk(""" eval_expr(tuple(Ident("add"), [2, 3])) """) == 5
-        assert tot.walk(""" apply(add, [2, 3]) """) == 5
-        assert tot.walk(""" apply(func a, b do a + b end, [2, 3]) """) == 5
+        assert tot.walk(r""" eval("2 + 3") """) == 5
+        assert tot.walk(r""" eval_expr(tuple(Ident("add"), [2, 3])) """) == 5
+        assert tot.walk(r""" apply(add, [2, 3]) """) == 5
+        assert tot.walk(r""" apply(func a, b do a + b end, [2, 3]) """) == 5
 
     def test_stdlib(self):
-        assert tot.walk(""" a := range(2, 10, 1) """) == [2, 3, 4, 5, 6, 7, 8, 9]
-        assert tot.walk(""" b := range(2, 10, 3) """) == [2, 5, 8]
-        assert tot.walk(""" first(a) """) == 2
-        assert tot.walk(""" rest(a) """) == [3, 4, 5, 6, 7, 8, 9]
-        assert tot.walk(""" last(a) """) == 9
-        assert tot.walk(""" map(a, n -> n * 2) """) == [4, 6, 8, 10, 12, 14, 16, 18]
-        assert tot.walk(""" filter(a, n -> n % 2 == 0) """) == [2, 4, 6, 8]
-        assert tot.walk(""" reverse(a) """) == [9, 8, 7, 6, 5, 4, 3, 2]
-        assert tot.walk(""" reverse([]) """) == []
-        assert tot.walk(""" zip(a, [4, 5, 6]) """) == [[2, 4], [3, 5], [4, 6]]
-        assert tot.walk(""" enumerate(a) """) == [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
+        assert tot.walk(r""" a := range(2, 10, 1) """) == [2, 3, 4, 5, 6, 7, 8, 9]
+        assert tot.walk(r""" b := range(2, 10, 3) """) == [2, 5, 8]
+        assert tot.walk(r""" first(a) """) == 2
+        assert tot.walk(r""" rest(a) """) == [3, 4, 5, 6, 7, 8, 9]
+        assert tot.walk(r""" last(a) """) == 9
+        assert tot.walk(r""" map(a, n -> n * 2) """) == [4, 6, 8, 10, 12, 14, 16, 18]
+        assert tot.walk(r""" filter(a, n -> n % 2 == 0) """) == [2, 4, 6, 8]
+        assert tot.walk(r""" reverse(a) """) == [9, 8, 7, 6, 5, 4, 3, 2]
+        assert tot.walk(r""" reverse([]) """) == []
+        assert tot.walk(r""" zip(a, [4, 5, 6]) """) == [[2, 4], [3, 5], [4, 6]]
+        assert tot.walk(r""" enumerate(a) """) == [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
+        assert tot.walk(r""" all([True, True], x -> x) """) is True
+        assert tot.walk(r""" all([True, False], x -> x) """) is False
+        assert tot.walk(r""" any([False, True], x -> x) """) is True
+        assert tot.walk(r""" any([False, False], x -> x) """) is False
 
     def test_whitespace(self):
         assert tot.walk(r"""   2 """) == 2
@@ -1126,15 +1182,15 @@ class TestToT:
 
 class TestExamples:
     def test_recursion_gcd(self):
-        tot.walk("""
+        tot.walk(r"""
             def gcd(a, b) do
                 if b == 0 then a else gcd(b, a % b) end
             end
         """)
-        assert tot.walk("gcd(12, 18)") == 6
+        assert tot.walk(r"""gcd(12, 18)""") == 6
 
     def test_iteration_gcd(self):
-        tot.walk("""
+        tot.walk(r"""
             def gcd(a, b) do
                 while b > 0 do
                     tmp := b; b = a % b; a = tmp
@@ -1142,20 +1198,20 @@ class TestExamples:
                 a
             end
         """)
-        assert tot.walk("gcd(12, 18)") == 6
+        assert tot.walk(r"""gcd(12, 18)""") == 6
 
     def test_recursion_fac(self):
-        tot.walk("""
+        tot.walk(r"""
             def fac(n) do
                 if n == 0 then 1 else n * fac(n - 1) end
             end
         """)
-        assert tot.walk("fac(0)") == 1
-        assert tot.walk("fac(1)") == 1
-        assert tot.walk("fac(4)") == 24
+        assert tot.walk(r"""fac(0)""") == 1
+        assert tot.walk(r"""fac(1)""") == 1
+        assert tot.walk(r"""fac(4)""") == 24
 
     def test_iteration_fac(self):
-        tot.walk("""
+        tot.walk(r"""
             def fac(n) do
                 result := 1;
                 for n in range(1, n + 1, 1) do
@@ -1163,12 +1219,12 @@ class TestExamples:
                 then result end
             end
         """)
-        assert tot.walk("fac(0)") == 1
-        assert tot.walk("fac(1)") == 1
-        assert tot.walk("fac(4)") == 24
+        assert tot.walk(r"""fac(0)""") == 1
+        assert tot.walk(r"""fac(1)""") == 1
+        assert tot.walk(r"""fac(4)""") == 24
 
     def test_recursion_fib(self):
-        tot.walk("""
+        tot.walk(r"""
             def fib(n) do
                 if n == 0 then 0
                 elif n == 1 then 1
@@ -1176,12 +1232,12 @@ class TestExamples:
                 end
             end
         """)
-        assert tot.walk("fib(0)") == 0
-        assert tot.walk("fib(1)") == 1
-        assert tot.walk("fib(6)") == 8
+        assert tot.walk(r"""fib(0)""") == 0
+        assert tot.walk(r"""fib(1)""") == 1
+        assert tot.walk(r"""fib(6)""") == 8
 
     def test_iteration_fib(self):
-        tot.walk("""
+        tot.walk(r"""
             def fib(n) do
                 a := 0; b := 1;
                 for n in range(0, n, 1) do
@@ -1189,22 +1245,22 @@ class TestExamples:
                 then a end
             end
         """)
-        assert tot.walk("fib(0)") == 0
-        assert tot.walk("fib(1)") == 1
-        assert tot.walk("fib(6)") == 8
+        assert tot.walk(r"""fib(0)""") == 0
+        assert tot.walk(r"""fib(1)""") == 1
+        assert tot.walk(r"""fib(6)""") == 8
 
     def test_mutual_recursion(self):
-        tot.walk("""
+        tot.walk(r"""
             def even(n) do if n == 0 then True else odd(n - 1) end end;
             def odd(n) do if n == 0 then False else even(n - 1) end end
         """)
-        assert tot.walk("even(2)") is True
-        assert tot.walk("even(3)") is False
-        assert tot.walk("odd(2)") is False
-        assert tot.walk("odd(3)") is True
+        assert tot.walk(r"""even(2)""") is True
+        assert tot.walk(r"""even(3)""") is False
+        assert tot.walk(r"""odd(2)""") is False
+        assert tot.walk(r"""odd(3)""") is True
 
     def test_closure_counter(self):
-        tot.walk("""
+        tot.walk(r"""
             def make_counter do
                 count := 0;
                 func do count = count + 1 end
@@ -1213,13 +1269,13 @@ class TestExamples:
             c1 := make_counter();
             c2 := make_counter()
         """)
-        assert tot.walk("c1()") == 1
-        assert tot.walk("c1()") == 2
-        assert tot.walk("c2()") == 1
-        assert tot.walk("c2()") == 2
+        assert tot.walk(r"""c1()""") == 1
+        assert tot.walk(r"""c1()""") == 2
+        assert tot.walk(r"""c2()""") == 1
+        assert tot.walk(r"""c2()""") == 2
 
     def test_bubblesort(self):
-        assert tot.walk("""
+        assert tot.walk(r"""
             def bubblesort(a) do
                 n := len(a);
                 for i in range(0, n, 1) do
@@ -1235,7 +1291,7 @@ class TestExamples:
         """) == [2, 3, 4, 5, 8]
 
     def test_quicksort(self):
-        assert tot.walk("""
+        assert tot.walk(r"""
             def quicksort(a) do
                 if len(a) <= 1 then a else
                     pivot := first(a); rem := rest(a);
@@ -1249,7 +1305,7 @@ class TestExamples:
         """) == [2, 3, 4, 5, 8]
 
     def test_sieve(self):
-        assert tot.walk("""
+        assert tot.walk(r"""
             def sieve(n) do
                 s := [False, False] + [True] * (n - 2);
                 i := 2; while i * i < n do
@@ -1266,7 +1322,7 @@ class TestExamples:
         """) == [2, 3, 5, 7]
 
     def test_poor_mans_object(self, capsys):
-        tot.walk("""
+        tot.walk(r"""
             def Animal(name) do
                 self := {};
                 self._name = name;
@@ -1275,7 +1331,7 @@ class TestExamples:
                 self
             end
         """)
-        tot.walk("""
+        tot.walk(r"""
             animal1 := Animal("Rocky");
             animal2 := Animal("Lucy");
             animal1.introduce();
@@ -1285,14 +1341,14 @@ class TestExamples:
         """)
         assert capsys.readouterr().out == "I am Rocky\ncrying\nI am Lucy\ncrying\n"
 
-        tot.walk("""
+        tot.walk(r"""
             def Dog(name) do
                 self := Animal(name);
                 self.make_sound = func self do print("woof") end;
                 self
             end
         """)
-        tot.walk("""
+        tot.walk(r"""
             dog1 := Dog("Leo");
             dog1.introduce();
             dog1.make_sound()
@@ -1300,7 +1356,7 @@ class TestExamples:
         assert capsys.readouterr().out == "I am Leo\nwoof\n"
 
     def test_lazy_evaluation_with_thunks(self):
-        assert tot.walk("""
+        assert tot.walk(r"""
             def force(thunk) do thunk() end;
             def stream_car(s) do s[0] end;
             def stream_cdr(s) do force(s[1]) end;

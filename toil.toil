@@ -152,7 +152,7 @@ defclass Parser(tokens) do
     end;
 
     defmethod _and_or do
-        self._binary_right({ 'and': Ident('and'), 'or': Ident('or') }, self._not)
+        self._binary_left({ 'and': Ident('and'), 'or': Ident('or') }, self._not)
     end;
 
     defmethod _not do
@@ -979,4 +979,3 @@ end;
     Interpreter, Environment,
     isalpha, isdigit, isalnum, isspace, is_ident_first, is_ident_rest, is_ident
 }
-
