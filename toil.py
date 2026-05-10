@@ -521,6 +521,79 @@ class ReturnException(Exception):
 class ContinueException(Exception): pass
 class BreakException(Exception): pass
 
+
+class Expander:
+    def expand(self, expr: Expr, env) -> Expr:
+        # print(expr)
+        match expr:
+            case None | bool() | int() | str() | Ident(): return expr
+            case list() as exprs:
+                return [self.expand(expr, env) for expr in exprs]
+            case dict() as exprs:
+                return {key: self.expand(val, env) for key, val in exprs.items()}
+            case (Ident("func"), [params, body_expr]):
+                return (Ident("func"), [params, self.expand(body_expr, env)])
+            case (Ident("return"), args):
+                return (Ident("return"), [self.expand(expr, env) for expr in args])
+            case (Ident("define"), [pat, expr]):
+                return (Ident("define"), [pat, self.expand(expr, env)])
+            case (Ident("assign"), [pat, expr]):
+                return (Ident("assign"), [pat, self.expand(expr, env)])
+            case (Ident("scope"), [body_expr]):
+                return (Ident("scope"), [self.expand(body_expr, env)])
+            case (Ident("seq"), exprs):
+                return (Ident("seq"), [self.expand(expr, env) for expr in exprs])
+            case (Ident("if"), [cond_expr, then_expr, else_expr]):
+                return (Ident("if"), [
+                    self.expand(cond_expr, env),
+                    self.expand(then_expr, env),
+                    self.expand(else_expr, env)
+                ])
+            case (Ident("match"), [val_expr, cases]):
+                return (Ident("match"), [
+                    self.expand(val_expr, env),
+                    [(pat, self.expand(body_expr, env)) for pat, body_expr in cases]
+                ])
+            case (Ident("and"), [left_expr, right_expr]):
+                return (Ident("and"), [
+                    self.expand(left_expr, env), self.expand(right_expr, env)
+                ])
+            case (Ident("or"), [left_expr, right_expr]):
+                return (Ident("or"), [
+                    self.expand(left_expr, env), self.expand(right_expr, env)
+                ])
+            case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
+                return (Ident("while"), [
+                    self.expand(cond_expr, env),
+                    self.expand(body_expr, env),
+                    self.expand(then_expr, env),
+                    self.expand(else_expr, env)
+                ])
+            case (Ident("for"), [var_pat, coll_expr, body_expr, then_expr, else_expr]):
+                return (Ident("for"), [
+                    var_pat,
+                    self.expand(coll_expr, env),
+                    self.expand(body_expr, env),
+                    self.expand(then_expr, env),
+                    self.expand(else_expr, env)
+                ])
+            case (Ident("try"), [body_expr, clauses]):
+                return (Ident("try"), [
+                    self.expand(body_expr, env),
+                    [(pat, self.expand(expr, env)) for pat, expr in clauses]
+                ])
+            case (Ident("raise"), args):
+                return(Ident("raise"), [self.expand(expr, env) for expr in args])
+            case (Ident("dot"), [target_expr, attr_name]):
+                return (Ident("dot"), [self.expand(target_expr, env), attr_name])
+            case (op_expr, args_expr):
+                return (
+                    self.expand(op_expr, env),
+                    [self.expand(expr, env) for expr in args_expr]
+                )
+            case unexpected:
+                assert False, f"Unexpected expression @ expand(): {unexpected}"
+
 class Evaluator:
     def eval(self, expr: Expr, env: Environment) -> Value:
         # print(expr)
@@ -872,8 +945,11 @@ class Interpreter:
     def parse(self, tokens: list[Token]) -> Expr:
         return Parser(tokens).parse()
 
+    def expand(self, ast: Expr) -> Expr:
+        return Expander().expand(ast, Environment(self._env))
+
     def ast(self, src: Source) -> Expr:
-        return self.parse(self.scan(src))
+        return self.expand(self.parse(self.scan(src)))
 
     def eval(self, ast: Expr) -> Value:
         try:
