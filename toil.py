@@ -207,6 +207,7 @@ class Parser:
             case Ident("{"): return self._dict()
             case Ident("func"): return self._func()
             case Ident("def"): return self._def()
+            case Ident("macro"): return self._macro()
             case Ident("scope"): return self._scope()
             case Ident("if"): return self._if()
             case Ident("match"): return self._match()
@@ -269,6 +270,14 @@ class Parser:
         body_expr = self._expression()
         self._consume(Ident("end"))
         return (Ident("func"), [params, body_expr])
+
+    def _macro(self):
+        self._current_and_advance()
+        params = self._comma_separated_exprs(Ident("do"))
+        self._consume(Ident("do"))
+        body_expr = self._expression()
+        self._consume(Ident("end"))
+        return (Ident("macro"), [params, body_expr])
 
     def _def(self):
         self._current_and_advance()
@@ -511,19 +520,86 @@ class Environment:
         vars[name] = val
         return val
 
+class Matcher:
+    def match(self, pattern, value, env):
+        match pattern:
+            case Ident(name):
+                env.define(name, value)
+                return True
+            case list():
+                return toil_type(value) == "list" and self._match_list(pattern, value, env)
+            case dict():
+                return toil_type(value) == "dict" and self._match_dict(pattern, value, env)
+            case (Ident("or"), [left_pat, right_pat]):
+                return self.match(left_pat, value, env) or \
+                       self.match(right_pat, value, env)
+            case (Ident("Ident"), [name_pat]):
+                return toil_type(value) == "Ident" and \
+                    self.match(name_pat, value.name, env)
+            case (Ident("tuple"), expr_pats):
+                return (
+                    toil_type(value) == "tuple" and len(expr_pats) == len(value) and
+                    all(self.match(p, v, env) for p, v in zip(expr_pats, value))
+                )
+            case (Ident(typ), [val_pat]):
+                return toil_type(value) == typ and \
+                    self.match(val_pat, value, env)
+            case _:
+                return type(pattern) is type(value) and pattern == value
 
-class ToilException(Exception):
-    def __init__(self, e: Value = None) -> None: self.e = e
+    def _match_list(self, pattern, value, env):
+        i = 0; lpat = len(pattern); lval = len(value)
 
-class ReturnException(Exception):
-    def __init__(self, val: Value = None) -> None: self.val = val
+        # Before "*"
+        while i < lpat:
+            sub_pat = pattern[i]
+            match sub_pat:
+                case (Ident("*"), [Ident(rest_name)]): break
+            if i >= lval: return False
+            sub_val = value[i]
+            if not self.match(sub_pat, sub_val, env):
+                return False
+            i += 1
+        else:
+            # No "*"
+            return i == lval
 
-class ContinueException(Exception): pass
-class BreakException(Exception): pass
+        # At "*"
+        lrest = lval - lpat + 1
+        if lrest < 0: return False
+        env.define(rest_name, value[i:i + lrest])
+        i += 1
+
+        # After "*"
+        while i < lpat:
+            sub_pat = pattern[i]
+            match sub_pat:
+                case (Ident("*"), [Ident(rest_name)]): return False
+            sub_val = value[i + lrest - 1]
+            if not self.match(sub_pat, sub_val, env):
+                return False
+            i += 1
+
+        return True
+
+    def _match_dict(self, pattern, value, env):
+        tmp_pat, tmp_val = pattern.copy(), value.copy()
+
+        rest_name = tmp_pat.get("*")
+        if rest_name is not None: tmp_pat.pop("*")
+
+        for key, sub_pattern in tmp_pat.items():
+            if key not in tmp_val: return False
+            if not self.match(sub_pattern, tmp_val[key], env):
+                return False
+            tmp_val.pop(key)
+
+        if rest_name is not None: env.define(rest_name.name, tmp_val)
+        return True
 
 
 class Expander:
-    def expand(self, expr: Expr, env) -> Expr:
+    def expand(self, expr: Expr, env: Environment) -> Expr:
         # print(expr)
         match expr:
             case None | bool() | int() | str() | Ident(): return expr
@@ -532,15 +608,23 @@ class Expander:
             case dict() as exprs:
                 return {key: self.expand(val, env) for key, val in exprs.items()}
             case (Ident("func"), [params, body_expr]):
-                return (Ident("func"), [params, self.expand(body_expr, env)])
+                return (Ident("func"), [params, self.expand(body_expr, Environment(env))])
+            case (Ident("macro"), [params, body_expr]):
+                return (Ident("macro"), [params, self.expand(body_expr, env)])
             case (Ident("return"), args):
                 return (Ident("return"), [self.expand(expr, env) for expr in args])
             case (Ident("define"), [pat, expr]):
-                return (Ident("define"), [pat, self.expand(expr, env)])
+                expanded = self.expand(expr, env)
+                match expanded:
+                    case (Ident("macro"), [params, body_expr]):
+                        env.define(str(pat), (Ident("macro"), [params, body_expr]))
+                        return None
+                    case _:
+                        return (Ident("define"), [pat, expanded])
             case (Ident("assign"), [pat, expr]):
                 return (Ident("assign"), [pat, self.expand(expr, env)])
             case (Ident("scope"), [body_expr]):
-                return (Ident("scope"), [self.expand(body_expr, env)])
+                return (Ident("scope"), [self.expand(body_expr, Environment(env))])
             case (Ident("seq"), exprs):
                 return (Ident("seq"), [self.expand(expr, env) for expr in exprs])
             case (Ident("if"), [cond_expr, then_expr, else_expr]):
@@ -587,12 +671,38 @@ class Expander:
             case (Ident("dot"), [target_expr, attr_name]):
                 return (Ident("dot"), [self.expand(target_expr, env), attr_name])
             case (op_expr, args_expr):
-                return (
-                    self.expand(op_expr, env),
-                    [self.expand(expr, env) for expr in args_expr]
-                )
+                op_expanded = self.expand(op_expr, env)
+
+                target_node = op_expanded
+                match op_expanded:
+                    case Ident(name):
+                        if (vars := env.lookup(name)) is not None:
+                            target_node = vars[name]
+
+                match target_node:
+                    case (Ident("macro"), [params, body_expr]):
+                        new_env = Environment(env)
+                        if Matcher().match(params, args_expr, new_env):
+                            expanded_ast = Evaluator().eval(body_expr, new_env)
+                            return self.expand(expanded_ast, env)
+                        else:
+                            assert False, f"Pattern mismatch @ apply(): {params}, {args_expr}"
+                    case _:
+                        args_expanded = [self.expand(expr, env) for expr in args_expr]
+                        return (op_expanded, args_expanded)
             case unexpected:
                 assert False, f"Unexpected expression @ expand(): {unexpected}"
+
+
+class ToilException(Exception):
+    def __init__(self, e: Value = None) -> None: self.e = e
+
+class ReturnException(Exception):
+    def __init__(self, val: Value = None) -> None: self.val = val
+
+class ContinueException(Exception): pass
+class BreakException(Exception): pass
+
 
 class Evaluator:
     def eval(self, expr: Expr, env: Environment) -> Value:
@@ -644,7 +754,7 @@ class Evaluator:
 
     def _define(self, pat, expr, env):
         val = self.eval(expr, env)
-        if self._match_pattern(pat, val, env):
+        if Matcher().match(pat, val, env):
             return val
         assert False, f"Pattern mismatch @ _define(): {pat}, {val}"
 
@@ -677,7 +787,7 @@ class Evaluator:
     def _match(self, val_expr, cases, env):
         val = self.eval(val_expr, env)
         for pattern, body_expr in cases:
-            if self._match_pattern(pattern, val, env):
+            if Matcher().match(pattern, val, env):
                 return self.eval(body_expr, env)
         return None
 
@@ -693,7 +803,7 @@ class Evaluator:
     def _for(self, var_pat, coll_expr, body_expr, then_expr, else_expr, env):
         coll_val = self.eval(coll_expr, env)
         for val in coll_val:
-            assert self._match_pattern(var_pat, val, env), \
+            assert Matcher().match(var_pat, val, env), \
                 "Pattern mismatch @ _for(): " + str(var_pat) + ", " + str(val)
             try:
                 self.eval(body_expr, env)
@@ -710,7 +820,7 @@ class Evaluator:
             return self.eval(body_expr, env)
         except ToilException as e:
             for exc_pat, exc_expr in clauses:
-                if self._match_pattern(exc_pat, e.e, env):
+                if Matcher().match(exc_pat, e.e, env):
                     return self.eval(exc_expr, env)
             raise e
 
@@ -738,89 +848,13 @@ class Evaluator:
                 return c(args_val)
             case (Ident("closure"), [params, body_expr, closure_env]):
                 new_env = Environment(closure_env)
-                if self._match_pattern(params, args_val, new_env):
+                if Matcher().match(params, args_val, new_env):
                     try:
                         return self.eval(body_expr, new_env)
                     except ReturnException as e: return e.val
                 assert False, f"Pattern mismatch @ apply(): {params}, {args_val}"
             case _:
                 assert False, f"Invalid operator @ apply(): {op_val}"
-
-    def _match_pattern(self, pattern, value, env):
-        def _match_list():
-            i = 0; lpat = len(pattern); lval = len(value)
-
-            # Before "*"
-            while i < lpat:
-                sub_pat = pattern[i]
-                match sub_pat:
-                    case (Ident("*"), [Ident(rest_name)]): break
-                if i >= lval: return False
-                sub_val = value[i]
-                if not self._match_pattern(sub_pat, sub_val, env):
-                    return False
-                i += 1
-            else:
-                # No "*"
-                return i == lval
-
-            # At "*"
-            lrest = lval - lpat + 1
-            if lrest < 0: return False
-            env.define(rest_name, value[i:i + lrest])
-            i += 1
-
-            # After "*"
-            while i < lpat:
-                sub_pat = pattern[i]
-                match sub_pat:
-                    case (Ident("*"), [Ident(rest_name)]): return False
-                sub_val = value[i + lrest - 1]
-                if not self._match_pattern(sub_pat, sub_val, env):
-                    return False
-                i += 1
-
-            return True
-
-        def _match_dict():
-            tmp_pat, tmp_val = pattern.copy(), value.copy()
-
-            rest_name = tmp_pat.get("*")
-            if rest_name is not None: tmp_pat.pop("*")
-
-            for key, sub_pattern in tmp_pat.items():
-                if key not in tmp_val: return False
-                if not self._match_pattern(sub_pattern, tmp_val[key], env):
-                    return False
-                tmp_val.pop(key)
-
-            if rest_name is not None: env.define(rest_name.name, tmp_val)
-            return True
-
-        match pattern:
-            case Ident(name):
-                env.define(name, value)
-                return True
-            case list():
-                return toil_type(value) == "list" and _match_list()
-            case dict():
-                return toil_type(value) == "dict" and _match_dict()
-            case (Ident("or"), [left_pat, right_pat]):
-                return self._match_pattern(left_pat, value, env) or \
-                       self._match_pattern(right_pat, value, env)
-            case (Ident("Ident"), [name_pat]):
-                return toil_type(value) == "Ident" and \
-                    self._match_pattern(name_pat, value.name, env)
-            case (Ident("tuple"), expr_pats):
-                return (
-                    toil_type(value) == "tuple" and len(expr_pats) == len(value) and
-                    all(self._match_pattern(p, v, env) for p, v in zip(expr_pats, value))
-                )
-            case (Ident(typ), [val_pat]):
-                return toil_type(value) == typ and \
-                    self._match_pattern(val_pat, value, env)
-            case _:
-                return type(pattern) is type(value) and pattern == value
 
 
 class Interpreter:
@@ -946,7 +980,7 @@ class Interpreter:
         return Parser(tokens).parse()
 
     def expand(self, ast: Expr) -> Expr:
-        return Expander().expand(ast, Environment(self._env))
+        return Expander().expand(ast, self._env)
 
     def ast(self, src: Source) -> Expr:
         return self.expand(self.parse(self.scan(src)))
@@ -993,4 +1027,35 @@ if __name__ == "__main__":
 
     # Example
 
-    toil.walk(""" print('hello, world') """)
+    print(toil.ast(r""" macro do 2 + 3 end """)) # -> (macro, [[], (add, [2, 3])])
+    print(toil.ast(r""" macro do 2 + 3 end () """)) # -> 5
+
+    print(toil.ast(r""" macro cond, body do tuple(Ident('if'), [cond, body, None]) end """)) # -> (macro, [[cond, body], (tuple, [(Ident, ['if']), [cond, body, None]])])
+    print(toil.ast(r""" macro cond, body do tuple(Ident('if'), [cond, body, None]) end (2 == 3, 1/0)""")) # -> (if, [(equal, [2, 3]), (div, [1, 0]), None])
+
+    print(toil.ast(r""" when := macro cond, body do tuple(Ident('if'), [cond, body, None]) end """)) # -> None
+    toil.walk(r""" when := macro cond, body do tuple(Ident('if'), [cond, body, None]) end """)
+    toil.walk(r""" a := 2; b := 3 """)
+    print(toil.ast(r""" when(a == b, 1 / 0) """)) # -> (if, [(equal, [a, b]), (div, [1, 0]), None])
+    print(toil.walk(r""" when(a == b, 1 / 0) """)) # -> None
+
+    toil.walk(r"""
+        def test_macro_scope() do
+            local_when := macro cond, body do tuple(Ident('if'), [cond, body, None]) end;
+            local_when(2 == 2, "inside func")
+        end
+    """)
+    print(toil.walk(" test_macro_scope() ")) # -> inside func
+    # toil.walk(" local_when(2 == 2, \"outside func\") ") # -> Undefined variable
+
+    # toil.walk(r""" def when_func(cond, body) do if cond then body end end """)
+    # toil.walk(r""" when_func(a == b, 1 / 0) """) # -> ZeroDivisionError
+
+    toil.walk(r""" unless := macro cond, body do tuple(Ident('when'), [tuple(Ident('not'), [cond]), body]) end """)
+    print(toil.ast(r""" unless(a == b, 2 + 3) """)) # -> (if, [(not, [(equal, [a, b])]), (add, [2, 3]), None])
+    print(toil.walk(r""" unless(a == b, 2 + 3) """)) # -> 5
+
+    toil.walk(r""" obj := { when: func self, cond, body do "method called" end } """)
+    print(toil.walk(r""" obj.when(True, "foo") """)) # -> method called
+
+    # toil.walk(r""" when(True) """) # -> Pattern mismatch
