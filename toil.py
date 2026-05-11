@@ -611,8 +611,6 @@ class Expander:
                 return (Ident("func"), [params, self.expand(body_expr, Environment(env))])
             case (Ident("macro"), [params, body_expr]):
                 return (Ident("macro"), [params, self.expand(body_expr, env)])
-            case (Ident("return"), args):
-                return (Ident("return"), [self.expand(expr, env) for expr in args])
             case (Ident("define"), [pat, expr]):
                 expanded = self.expand(expr, env)
                 match expanded:
@@ -625,33 +623,10 @@ class Expander:
                 return (Ident("assign"), [pat, self.expand(expr, env)])
             case (Ident("scope"), [body_expr]):
                 return (Ident("scope"), [self.expand(body_expr, Environment(env))])
-            case (Ident("seq"), exprs):
-                return (Ident("seq"), [self.expand(expr, env) for expr in exprs])
-            case (Ident("if"), [cond_expr, then_expr, else_expr]):
-                return (Ident("if"), [
-                    self.expand(cond_expr, env),
-                    self.expand(then_expr, env),
-                    self.expand(else_expr, env)
-                ])
             case (Ident("match"), [val_expr, cases]):
                 return (Ident("match"), [
                     self.expand(val_expr, env),
                     [(pat, self.expand(body_expr, env)) for pat, body_expr in cases]
-                ])
-            case (Ident("and"), [left_expr, right_expr]):
-                return (Ident("and"), [
-                    self.expand(left_expr, env), self.expand(right_expr, env)
-                ])
-            case (Ident("or"), [left_expr, right_expr]):
-                return (Ident("or"), [
-                    self.expand(left_expr, env), self.expand(right_expr, env)
-                ])
-            case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
-                return (Ident("while"), [
-                    self.expand(cond_expr, env),
-                    self.expand(body_expr, env),
-                    self.expand(then_expr, env),
-                    self.expand(else_expr, env)
                 ])
             case (Ident("for"), [var_pat, coll_expr, body_expr, then_expr, else_expr]):
                 return (Ident("for"), [
@@ -666,8 +641,6 @@ class Expander:
                     self.expand(body_expr, env),
                     [(pat, self.expand(expr, env)) for pat, expr in clauses]
                 ])
-            case (Ident("raise"), args):
-                return(Ident("raise"), [self.expand(expr, env) for expr in args])
             case (Ident("dot"), [target_expr, attr_name]):
                 return (Ident("dot"), [self.expand(target_expr, env), attr_name])
             case (op_expr, args_expr):
