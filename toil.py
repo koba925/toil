@@ -520,34 +520,33 @@ class Environment:
         vars[name] = val
         return val
 
-class Matcher:
-    def match(self, pattern, value, env):
+    def bind(self, pattern, value):
         match pattern:
             case Ident(name):
-                env.define(name, value)
+                self.define(name, value)
                 return True
             case list():
-                return toil_type(value) == "list" and self._match_list(pattern, value, env)
+                return toil_type(value) == "list" and self._bind_list(pattern, value)
             case dict():
-                return toil_type(value) == "dict" and self._match_dict(pattern, value, env)
+                return toil_type(value) == "dict" and self._bind_dict(pattern, value)
             case (Ident("or"), [left_pat, right_pat]):
-                return self.match(left_pat, value, env) or \
-                       self.match(right_pat, value, env)
+                return self.bind(left_pat, value) or \
+                       self.bind(right_pat, value)
             case (Ident("Ident"), [name_pat]):
                 return toil_type(value) == "Ident" and \
-                    self.match(name_pat, value.name, env)
+                    self.bind(name_pat, value.name)
             case (Ident("tuple"), expr_pats):
                 return (
                     toil_type(value) == "tuple" and len(expr_pats) == len(value) and
-                    all(self.match(p, v, env) for p, v in zip(expr_pats, value))
+                    all(self.bind(p, v) for p, v in zip(expr_pats, value))
                 )
             case (Ident(typ), [val_pat]):
                 return toil_type(value) == typ and \
-                    self.match(val_pat, value, env)
+                    self.bind(val_pat, value)
             case _:
                 return type(pattern) is type(value) and pattern == value
 
-    def _match_list(self, pattern, value, env):
+    def _bind_list(self, pattern, value):
         i = 0; lpat = len(pattern); lval = len(value)
 
         # Before "*"
@@ -557,7 +556,7 @@ class Matcher:
                 case (Ident("*"), [Ident(rest_name)]): break
             if i >= lval: return False
             sub_val = value[i]
-            if not self.match(sub_pat, sub_val, env):
+            if not self.bind(sub_pat, sub_val):
                 return False
             i += 1
         else:
@@ -567,7 +566,7 @@ class Matcher:
         # At "*"
         lrest = lval - lpat + 1
         if lrest < 0: return False
-        env.define(rest_name, value[i:i + lrest])
+        self.define(rest_name, value[i:i + lrest])
         i += 1
 
         # After "*"
@@ -576,13 +575,13 @@ class Matcher:
             match sub_pat:
                 case (Ident("*"), [Ident(rest_name)]): return False
             sub_val = value[i + lrest - 1]
-            if not self.match(sub_pat, sub_val, env):
+            if not self.bind(sub_pat, sub_val):
                 return False
             i += 1
 
         return True
 
-    def _match_dict(self, pattern, value, env):
+    def _bind_dict(self, pattern, value):
         tmp_pat, tmp_val = pattern.copy(), value.copy()
 
         rest_name = tmp_pat.get("*")
@@ -590,11 +589,11 @@ class Matcher:
 
         for key, sub_pattern in tmp_pat.items():
             if key not in tmp_val: return False
-            if not self.match(sub_pattern, tmp_val[key], env):
+            if not self.bind(sub_pattern, tmp_val[key]):
                 return False
             tmp_val.pop(key)
 
-        if rest_name is not None: env.define(rest_name.name, tmp_val)
+        if rest_name is not None: self.define(rest_name.name, tmp_val)
         return True
 
 
@@ -655,7 +654,7 @@ class Expander:
                 match target_node:
                     case (Ident("macro"), [params, body_expr]):
                         new_env = Environment(env)
-                        if Matcher().match(params, args_expr, new_env):
+                        if new_env.bind(params, args_expr):
                             expanded_ast = Evaluator().eval(body_expr, new_env)
                             return self.expand(expanded_ast, env)
                         else:
@@ -727,7 +726,7 @@ class Evaluator:
 
     def _define(self, pat, expr, env):
         val = self.eval(expr, env)
-        if Matcher().match(pat, val, env):
+        if env.bind(pat, val):
             return val
         assert False, f"Pattern mismatch @ _define(): {pat}, {val}"
 
@@ -760,7 +759,7 @@ class Evaluator:
     def _match(self, val_expr, cases, env):
         val = self.eval(val_expr, env)
         for pattern, body_expr in cases:
-            if Matcher().match(pattern, val, env):
+            if env.bind(pattern, val):
                 return self.eval(body_expr, env)
         return None
 
@@ -776,7 +775,7 @@ class Evaluator:
     def _for(self, var_pat, coll_expr, body_expr, then_expr, else_expr, env):
         coll_val = self.eval(coll_expr, env)
         for val in coll_val:
-            assert Matcher().match(var_pat, val, env), \
+            assert env.bind(var_pat, val), \
                 "Pattern mismatch @ _for(): " + str(var_pat) + ", " + str(val)
             try:
                 self.eval(body_expr, env)
@@ -793,7 +792,7 @@ class Evaluator:
             return self.eval(body_expr, env)
         except ToilException as e:
             for exc_pat, exc_expr in clauses:
-                if Matcher().match(exc_pat, e.e, env):
+                if env.bind(exc_pat, e.e):
                     return self.eval(exc_expr, env)
             raise e
 
@@ -821,7 +820,7 @@ class Evaluator:
                 return c(args_val)
             case (Ident("closure"), [params, body_expr, closure_env]):
                 new_env = Environment(closure_env)
-                if Matcher().match(params, args_val, new_env):
+                if new_env.bind(params, args_val):
                     try:
                         return self.eval(body_expr, new_env)
                     except ReturnException as e: return e.val

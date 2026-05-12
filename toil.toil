@@ -551,6 +551,77 @@ defclass Environment(parent) do
         vars := self.lookup(name);
         assert vars != None else 'Undefined variable @ assign(): {}'.format(name) end;
         vars[name] = val
+    end;
+
+    defmethod bind(pattern, value) do
+        match pattern
+            case Ident(name) then self.define(name, value); True
+            case list(_) then value.type() == 'list' and self._bind_list(pattern, value)
+            case dict(_) then value.type() == 'dict' and self._bind_dict(pattern, value)
+            case tuple(Ident('or'), [left_pat, right_pat]) then
+                self.bind(left_pat, value) or self.bind(right_pat, value)
+            case tuple(Ident('Ident'), [name_pat]) then
+                value.type() == 'Ident' and self.bind(name_pat, str(value))
+            case tuple(Ident('tuple'), expr_pats) then
+                value.type() == 'tuple' and expr_pats.len() == value.len() and
+                zip(expr_pats, value).all([[p, v]] -> self.bind(p, v))
+            case tuple(Ident(typ), [val_pat]) then
+                value.type() == typ and self.bind(val_pat, value)
+            case _ then
+                pattern.type() == value.type() and pattern == value
+        end
+    end;
+
+    defmethod _bind_list(pattern, value) do
+        i := 0; lpat := pattern.len(); lval := value.len();
+
+        while i < lpat do
+            sub_pat := pattern[i];
+            match sub_pat
+                case tuple(Ident('*'), [Ident(rest_name)]) then break
+            end;
+            if i >= lval then return(False) end;
+            sub_val := value[i];
+            if not self.bind(sub_pat, sub_val) then
+                return(False)
+            end;
+            i = i + 1
+        then return(i == lval) end;
+
+        lrest := lval - lpat + 1;
+        if lrest < 0 then return(False) end;
+        self.define(rest_name, value.slice(i, i + lrest));
+        i = i + 1;
+
+        while i < lpat do
+            sub_pat := pattern[i];
+            match sub_pat
+                case tuple(Ident('*'), [Ident(rest_name)]) then return(False)
+            end;
+            sub_val := value[i + lrest - 1];
+            if not self.bind(sub_pat, sub_val) then
+                return(False)
+            end;
+            i = i + 1
+        then True end
+    end;
+
+    defmethod _bind_dict(pattern, value) do
+        tmp_pat := pattern.copy(); tmp_val := value.copy();
+
+        rest_name := None;
+        if '*'.in(pattern) then rest_name = tmp_pat['*']; tmp_pat.pop('*') end;
+
+        for [key, sub_pat] in tmp_pat.items() do
+            if not key.in(tmp_val) then return(False) end;
+            if not self.bind(sub_pat, tmp_val[key]) then
+                return(False)
+            end;
+            tmp_val.pop(key)
+        end;
+
+        if rest_name != None then self.define(str(rest_name), tmp_val) end;
+        True
     end
 end;
 
@@ -610,7 +681,7 @@ defclass Evaluator do
 
     defmethod _define(pat, expr, env) do
         val := self.eval(expr, env);
-        assert self._match_pattern(pat, val, env) else
+        assert env.bind(pat, val) else
             'Pattern mismatch @ _define(): {}, {}'.format(pat, val)
         end;
         val
@@ -648,7 +719,7 @@ defclass Evaluator do
     defmethod _match(val_expr, cases, env) do
         val := self.eval(val_expr, env);
         for tuple(pattern, body_expr) in cases do
-            if self._match_pattern(pattern, val, env) then
+            if env.bind(pattern, val) then
                 return(self.eval(body_expr, env))
             end
         end;
@@ -674,7 +745,7 @@ defclass Evaluator do
     ) do
         coll_val := self.eval(coll_expr, env);
         for val in coll_val do
-            assert self._match_pattern(var_pat, val, env) else
+            assert env.bind(var_pat, val) else
                 'Pattern mismatch @ _for(): {}, {}'.format(var_pat, val)
             end;
             try
@@ -704,7 +775,7 @@ defclass Evaluator do
                 case _ then None
             end;
             for [exc_pat, exc_expr] in clauses do
-                if self._match_pattern(exc_pat, e, env) then
+                if env.bind(exc_pat, e) then
                     return(self.eval(exc_expr, env))
                 end
             end;
@@ -743,7 +814,7 @@ defclass Evaluator do
             case tuple(Ident('hostfunc'), f) then f(args_val)
             case tuple(Ident('closure'), [params, body_expr, closure_env]) then
                 new_env := Environment(closure_env);
-                if self._match_pattern(params, args_val, new_env) then
+                if new_env.bind(params, args_val) then
                     try
                         return(self.eval(body_expr, new_env))
                     except ['ReturnException', val] then
@@ -752,81 +823,6 @@ defclass Evaluator do
                 end;
                 raise('Pattern mismatch @ apply(): {}, {}'.format(params, args_val))
             case _ then raise('Invalid operator @ apply(): {}'.format(op_val))
-        end
-    end;
-
-    defmethod _match_pattern(pattern, value, env) do
-        def _match_list do
-            i := 0; lpat := pattern.len(); lval := value.len();
-
-            while i < lpat do
-                sub_pat := pattern[i];
-                match sub_pat
-                    case tuple(Ident('*'), [Ident(rest_name)]) then break
-                end;
-                if i >= lval then return(False) end;
-                sub_val := value[i];
-                if not self._match_pattern(sub_pat, sub_val, env) then
-                    return(False)
-                end;
-                i = i + 1
-            then return(i == lval) end;
-
-            lrest := lval - lpat + 1;
-            if lrest < 0 then return(False) end;
-            env.define(rest_name, value.slice(i, i + lrest));
-            i = i + 1;
-
-            while i < lpat do
-                sub_pat := pattern[i];
-                match sub_pat
-                    case tuple(Ident('*'), [Ident(rest_name)]) then return(False)
-                end;
-                sub_val := value[i + lrest - 1];
-                if not self._match_pattern(sub_pat, sub_val, env) then
-                    return(False)
-                end;
-                i = i + 1
-            then True end
-        end;
-
-        def _match_dict do
-            tmp_pat := pattern.copy(); tmp_val := value.copy();
-
-            rest_name := None;
-            if '*'.in(pattern) then rest_name = tmp_pat['*']; tmp_pat.pop('*') end;
-
-            for [key, sub_pat] in tmp_pat.items() do
-                if not key.in(tmp_val) then return(False) end;
-                if not self._match_pattern(sub_pat, tmp_val[key], env) then
-                    return(False)
-                end;
-                tmp_val.pop(key)
-            end;
-
-            if rest_name != None then env.define(str(rest_name), tmp_val) end;
-            True
-        end;
-
-        match pattern
-            case Ident(name) then env.define(name, value); True
-            case list(_) then value.type() == 'list' and _match_list()
-            case dict(_) then value.type() == 'dict' and _match_dict()
-            case tuple(Ident('or'), [left_pat, right_pat]) then
-                self._match_pattern(left_pat, value, env) or
-                self._match_pattern(right_pat, value, env)
-            case tuple(Ident('Ident'), [name_pat]) then
-                value.type() == 'Ident' and
-                self._match_pattern(name_pat, str(value), env)
-            case tuple(Ident('tuple'), expr_pats) then
-                value.type() == 'tuple' and expr_pats.len() == value.len() and
-                zip(expr_pats, value).all(
-                    [[p, v]] -> self._match_pattern(p, v, env)
-                )
-            case tuple(Ident(typ), [val_pat]) then
-                value.type() == typ and self._match_pattern(val_pat, value, env)
-            case _ then
-                pattern.type() == value.type() and pattern == value
         end
     end
 end;
