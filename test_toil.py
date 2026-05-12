@@ -1045,6 +1045,50 @@ class TestToil:
         assert toil.walk(r""" any([False, True], x -> x) """) is True
         assert toil.walk(r""" any([False, False], x -> x) """) is False
 
+    def test_macro(self):
+        assert toil.walk(r""" macro do 2 + 3 end () """) == 5
+        assert toil.walk(r""" macro cond, body do tuple(Ident('if'), [cond, body, None]) end (2 == 3, 1/0) """) is None
+
+        toil.walk(r""" when := macro cond, body do tuple(Ident('if'), [cond, body, None]) end """)
+        toil.walk(r""" a := 2; b := 3 """)
+        assert toil.walk(r""" when(a == b, 1 / 0) """) is None
+
+        toil.walk(r"""
+            def test_macro_scope() do
+                local_when := macro cond, body do tuple(Ident('if'), [cond, body, None]) end;
+                local_when(2 == 2, 3)
+            end
+        """)
+        assert toil.walk(" test_macro_scope() ") == 3
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            toil.walk(" local_when(2 == 2, 3) ")
+
+        toil.walk(r""" def when_func(cond, body) do if cond then body end end """)
+        with pytest.raises(Exception):
+            toil.walk(r""" when_func(a == b, 1 / 0) """)
+
+        toil.walk(r""" unless := macro cond, body do tuple(Ident('when'), [tuple(Ident('not'), [cond]), body]) end """)
+        assert toil.walk(r""" unless(a == b, 2 + 3) """) == 5
+
+        toil.walk(r""" obj := { when: func self, cond, body do "method called" end } """)
+        assert toil.walk(r""" obj.when(True, "foo") """) == "method called"
+
+        toil.walk(r"""
+            multi_and := macro a, *rest do
+                if len(rest) == 0 then
+                    a
+                else
+                    tuple(Ident('if'), [a, tuple(Ident('multi_and'), rest), False])
+                end
+            end
+        """)
+        assert toil.walk(r""" multi_and(1 == 1) """) is True
+        assert toil.walk(r""" multi_and(1 == 1, 2 == 2, 3 == 3) """) is True
+        assert toil.walk(r""" multi_and(False, 1 / 0) """) is False
+
+        with pytest.raises(AssertionError, match="Pattern mismatch"):
+            toil.walk(r""" when(True) """)
+
     def test_whitespace(self):
         assert toil.walk(r"""   2 """) == 2
         assert toil.walk(r""" 2   """) == 2

@@ -1015,11 +1015,11 @@ if __name__ == "__main__":
     toil.walk(r"""
         def test_macro_scope() do
             local_when := macro cond, body do tuple(Ident('if'), [cond, body, None]) end;
-            local_when(2 == 2, "inside func")
+            local_when(2 == 2, 3)
         end
     """)
     print(toil.walk(" test_macro_scope() ")) # -> inside func
-    # toil.walk(" local_when(2 == 2, \"outside func\") ") # -> Undefined variable
+    # toil.walk(" local_when(2 == 2, 3) ") # -> Undefined variable
 
     # toil.walk(r""" def when_func(cond, body) do if cond then body end end """)
     # toil.walk(r""" when_func(a == b, 1 / 0) """) # -> ZeroDivisionError
@@ -1030,5 +1030,19 @@ if __name__ == "__main__":
 
     toil.walk(r""" obj := { when: func self, cond, body do "method called" end } """)
     print(toil.walk(r""" obj.when(True, "foo") """)) # -> method called
+
+    toil.walk(r"""
+        multi_and := macro a, *rest do
+            if len(rest) == 0 then
+                a
+            else
+                tuple(Ident('if'), [a, tuple(Ident('multi_and'), rest), False])
+            end
+        end
+    """)
+    print(toil.ast(r""" multi_and(1 == 1) """)) # -> (equal, [1, 1])
+    print(toil.ast(r""" multi_and(1 == 1, 2 == 2, 3 == 3) """)) # -> (if, [(equal, [1, 1]), (if, [(equal, [2, 2]), (equal, [3, 3]), False]), False])
+    print(toil.walk(r""" multi_and(1 == 1, 2 == 2, 3 == 3) """)) # -> True
+    print(toil.walk(r""" multi_and(False, 1 / 0) """)) # -> False
 
     # toil.walk(r""" when(True) """) # -> Pattern mismatch
