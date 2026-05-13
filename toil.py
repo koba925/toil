@@ -49,7 +49,8 @@ class Scanner:
                 case "\"": self._string()
                 case c if is_ident_first(c): self._ident()
                 case "-": self._two_char_operator(">")
-                case c if c in "=!<>:": self._two_char_operator("=")
+                case "!": self._two_char_operator("!=")
+                case c if c in "=<>:": self._two_char_operator("=")
                 case c if c in "+*/%()[]{}.,;":
                     self._tokens.append(Ident(c))
                     self._advance()
@@ -177,7 +178,8 @@ class Parser:
 
     def _unaries(self):
         return self._unary({
-            Ident("-"): Ident("neg"), Ident("+"): Ident("+"), Ident("*"): Ident("*")
+            Ident("-"): Ident("neg"), Ident("+"): Ident("+"), Ident("*"): Ident("*"),
+            Ident("!"): Ident("!"), Ident("!!"): Ident("!!")
         }, self._call_index_dot)
 
     def _call_index_dot(self):
@@ -205,6 +207,7 @@ class Parser:
             case Ident("("): return self._group()
             case Ident("["): return self._list()
             case Ident("{"): return self._dict()
+            case Ident("quote"): return self._quote()
             case Ident("func"): return self._func()
             case Ident("def"): return self._def()
             case Ident("macro"): return self._macro()
@@ -262,6 +265,12 @@ class Parser:
                 _parse_key_value(dic)
         self._current_and_advance()
         return dic
+
+    def _quote(self):
+        self._current_and_advance()
+        expr = self._expression()
+        self._consume(Ident("end"))
+        return (Ident("quote"), [expr])
 
     def _func(self):
         self._current_and_advance()
@@ -606,65 +615,103 @@ class Expander:
                 return [self.expand(expr, env) for expr in exprs]
             case dict() as exprs:
                 return {key: self.expand(val, env) for key, val in exprs.items()}
-            case (Ident("func"), [params, body_expr]):
-                return (Ident("func"), [params, self.expand(body_expr, Environment(env))])
+            case (Ident("quote"), [expr]):
+                return self._quote(expr, env)
             case (Ident("macro"), [params, body_expr]):
                 return (Ident("macro"), [params, self.expand(body_expr, env)])
+            case (Ident("func"), [params, body_expr]):
+                return (Ident("func"), [params, self.expand(body_expr, Environment(env))])
             case (Ident("define"), [pat, expr]):
-                expanded = self.expand(expr, env)
-                match expanded:
-                    case (Ident("macro"), [params, body_expr]):
-                        env.define(str(pat), (Ident("macro"), [params, body_expr]))
-                        return None
-                    case _:
-                        return (Ident("define"), [pat, expanded])
+                return self._define(pat, expr, env)
             case (Ident("assign"), [pat, expr]):
                 return (Ident("assign"), [pat, self.expand(expr, env)])
             case (Ident("scope"), [body_expr]):
                 return (Ident("scope"), [self.expand(body_expr, Environment(env))])
             case (Ident("match"), [val_expr, cases]):
-                return (Ident("match"), [
-                    self.expand(val_expr, env),
-                    [(pat, self.expand(body_expr, env)) for pat, body_expr in cases]
-                ])
+                return self._match(val_expr, cases, env)
             case (Ident("for"), [var_pat, coll_expr, body_expr, then_expr, else_expr]):
-                return (Ident("for"), [
-                    var_pat,
-                    self.expand(coll_expr, env),
-                    self.expand(body_expr, env),
-                    self.expand(then_expr, env),
-                    self.expand(else_expr, env)
-                ])
+                return self._for(var_pat, coll_expr, body_expr, then_expr, else_expr, env)
             case (Ident("try"), [body_expr, clauses]):
-                return (Ident("try"), [
-                    self.expand(body_expr, env),
-                    [(pat, self.expand(expr, env)) for pat, expr in clauses]
-                ])
+                return self._try(body_expr, clauses, env)
             case (Ident("dot"), [target_expr, attr_name]):
                 return (Ident("dot"), [self.expand(target_expr, env), attr_name])
             case (op_expr, args_expr):
-                op_expanded = self.expand(op_expr, env)
-
-                target_node = op_expanded
-                match op_expanded:
-                    case Ident(name):
-                        if (vars := env.lookup(name)) is not None:
-                            target_node = vars[name]
-
-                match target_node:
-                    case (Ident("macro"), [params, body_expr]):
-                        new_env = Environment(env)
-                        if new_env.bind(params, args_expr):
-                            expanded_ast = Evaluator().eval(body_expr, new_env)
-                            return self.expand(expanded_ast, env)
-                        else:
-                            assert False, f"Pattern mismatch @ apply(): {params}, {args_expr}"
-                    case _:
-                        args_expanded = [self.expand(expr, env) for expr in args_expr]
-                        return (op_expanded, args_expanded)
+                return self._op(op_expr, args_expr, env)
             case unexpected:
                 assert False, f"Unexpected expression @ expand(): {unexpected}"
 
+    def _quote(self, expr, env):
+        match expr:
+            case list() as exprs:
+                res = []
+                for e in exprs:
+                    match e:
+                        case (Ident("!!"), [unq]) if isinstance(e, tuple):
+                            res = (Ident("add"), [res, self.expand(unq, env)])
+                        case _:
+                            res = (Ident("add"), [res, [self._quote(e, env)]])
+                return res
+            case dict() as exprs:
+                return {key: self._quote(val, env) for key, val in exprs.items()}
+            case Ident(name):
+                return (Ident("Ident"), [name])
+            case (Ident("!"), [unquote_expr]):
+                return self.expand(unquote_expr, env)
+            case (op, args):
+                return (Ident("tuple"), [self._quote(op, env), self._quote(args, env)])
+            case _:
+                return expr
+
+    def _define(self, pat, expr, env):
+        expanded = self.expand(expr, env)
+        match expanded:
+            case (Ident("macro"), [params, body_expr]):
+                env.define(str(pat), (Ident("macro"), [params, body_expr]))
+                return None
+            case _:
+                return (Ident("define"), [pat, expanded])
+
+    def _match(self, val_expr, cases, env):
+        return (Ident("match"), [
+            self.expand(val_expr, env),
+            [(pat, self.expand(body_expr, env)) for pat, body_expr in cases]
+        ])
+
+    def _for(self, var_pat, coll_expr, body_expr, then_expr, else_expr, env):
+        return (Ident("for"), [
+            var_pat,
+            self.expand(coll_expr, env),
+            self.expand(body_expr, env),
+            self.expand(then_expr, env),
+            self.expand(else_expr, env)
+        ])
+
+    def _try(self, body_expr, clauses, env):
+        return (Ident("try"), [
+            self.expand(body_expr, env),
+            [(pat, self.expand(expr, env)) for pat, expr in clauses]
+        ])
+
+    def _op(self, op_expr, args_expr, env):
+        op_expanded = self.expand(op_expr, env)
+
+        target_node = op_expanded
+        match op_expanded:
+            case Ident(name):
+                if (vars := env.lookup(name)) is not None:
+                    target_node = vars[name]
+
+        match target_node:
+            case (Ident("macro"), [params, body_expr]):
+                new_env = Environment(env)
+                if new_env.bind(params, args_expr):
+                    expanded_ast = Evaluator().eval(body_expr, new_env)
+                    return self.expand(expanded_ast, env)
+                else:
+                    assert False, f"Pattern mismatch @ apply(): {params}, {args_expr}"
+            case _:
+                args_expanded = [self.expand(expr, env) for expr in args_expr]
+                return (op_expanded, args_expanded)
 
 class ToilException(Exception):
     def __init__(self, e: Value = None) -> None: self.e = e
@@ -689,6 +736,7 @@ class Evaluator:
             case Ident("continue"): raise ContinueException()
             case Ident("break"): raise BreakException()
             case Ident(name): return env.val(name)
+            case (Ident("quote"), [expr]): return expr
             case (Ident("func"), [params, body_expr]):
                 return (Ident("closure"), [params, body_expr, env])
             case (Ident("return"), args):
@@ -999,43 +1047,37 @@ if __name__ == "__main__":
 
     # Example
 
-    print(toil.ast(r""" macro do 2 + 3 end """)) # -> (macro, [[], (add, [2, 3])])
-    print(toil.ast(r""" macro do 2 + 3 end () """)) # -> 5
+    print(toil.walk(r""" quote 2 + 3 end """)) # -> (add, [2, 3])
+    print(toil.ast(r""" quote a + 3 end """)) # -> (tuple, [(Ident, ['add']), (add, [(add, [[], [(Ident, ['a'])]]), [3]])])
+    print(toil.walk(r""" a := 2; quote a + 3 end """)) # -> (add, [a, 3])
 
-    print(toil.ast(r""" macro cond, body do tuple(Ident('if'), [cond, body, None]) end """)) # -> (macro, [[cond, body], (tuple, [(Ident, ['if']), [cond, body, None]])])
-    print(toil.ast(r""" macro cond, body do tuple(Ident('if'), [cond, body, None]) end (2 == 3, 1/0)""")) # -> (if, [(equal, [2, 3]), (div, [1, 0]), None])
+    print(toil.walk(r""" quote !(2 + 3) end """)) # -> 5
+    print(toil.ast(r""" quote !(a + 3) end """)) # -> (add, [a, 3])
+    print(toil.walk(r""" a := 2; quote !(a + 3) end """)) # -> 5
 
-    print(toil.ast(r""" when := macro cond, body do tuple(Ident('if'), [cond, body, None]) end """)) # -> None
-    toil.walk(r""" when := macro cond, body do tuple(Ident('if'), [cond, body, None]) end """)
+    print(toil.walk(r""" quote [2, 3, 4, 5] end """)) # -> [2, 3, 4, 5]
+    print(toil.ast(r""" quote [2, !!a, 5] end """)) # -> (add, [(add, [(add, [[], [2]]), a]), [5]])
+    print(toil.walk(r""" a := [3, 4]; quote [2, !!a, 5] end """)) # -> [2, 3, 4, 5]
+
+    print(toil.ast(r""" quote {a: !a, b: 3} end """)) # -> {'a': a, 'b': 3}
+    print(toil.walk(r""" a := 2; quote {a: !a, b: 3} end """)) # -> {'a': 2, 'b': 3}
+
+    print(toil.walk(r""" a := [3, 4]; quote { list: [2, !!a, 5] } end """)) # -> {'list': [2, 3, 4, 5]}
+    # print(toil.walk(r""" !(2 + 3) """)) # -> Undefined variable
+
+    toil.walk(r""" when := macro cond, body do quote if !cond then !body else None end end end """)
     toil.walk(r""" a := 2; b := 3 """)
     print(toil.ast(r""" when(a == b, 1 / 0) """)) # -> (if, [(equal, [a, b]), (div, [1, 0]), None])
     print(toil.walk(r""" when(a == b, 1 / 0) """)) # -> None
 
-    toil.walk(r"""
-        def test_macro_scope() do
-            local_when := macro cond, body do tuple(Ident('if'), [cond, body, None]) end;
-            local_when(2 == 2, 3)
-        end
-    """)
-    print(toil.walk(" test_macro_scope() ")) # -> inside func
-    # toil.walk(" local_when(2 == 2, 3) ") # -> Undefined variable
-
-    # toil.walk(r""" def when_func(cond, body) do if cond then body end end """)
-    # toil.walk(r""" when_func(a == b, 1 / 0) """) # -> ZeroDivisionError
-
-    toil.walk(r""" unless := macro cond, body do tuple(Ident('when'), [tuple(Ident('not'), [cond]), body]) end """)
+    toil.walk(r""" unless := macro cond, body do quote when(not !cond, !body) end end """)
     print(toil.ast(r""" unless(a == b, 2 + 3) """)) # -> (if, [(not, [(equal, [a, b])]), (add, [2, 3]), None])
     print(toil.walk(r""" unless(a == b, 2 + 3) """)) # -> 5
 
-    toil.walk(r""" obj := { when: func self, cond, body do "method called" end } """)
-    print(toil.walk(r""" obj.when(True, "foo") """)) # -> method called
-
     toil.walk(r"""
         multi_and := macro a, *rest do
-            if len(rest) == 0 then
-                a
-            else
-                tuple(Ident('if'), [a, tuple(Ident('multi_and'), rest), False])
+            if rest == [] then a else
+                quote if !a then multi_and(!!rest) else False end end
             end
         end
     """)
@@ -1043,5 +1085,3 @@ if __name__ == "__main__":
     print(toil.ast(r""" multi_and(1 == 1, 2 == 2, 3 == 3) """)) # -> (if, [(equal, [1, 1]), (if, [(equal, [2, 2]), (equal, [3, 3]), False]), False])
     print(toil.walk(r""" multi_and(1 == 1, 2 == 2, 3 == 3) """)) # -> True
     print(toil.walk(r""" multi_and(False, 1 / 0) """)) # -> False
-
-    # toil.walk(r""" when(True) """) # -> Pattern mismatch
