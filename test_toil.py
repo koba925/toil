@@ -1155,6 +1155,19 @@ class TestToil:
         with pytest.raises(AssertionError, match="Undefined variable"):
             toil.walk(r""" local_macro() """)
 
+    def test_def_(self):
+        toil.walk(r""" def_(myadd(a, b), a + b) """)
+        assert toil.walk(r""" myadd(2, 3) """) == 5
+
+        toil.walk(r""" def_(say_hello(), "hello") """)
+        assert toil.walk(r""" say_hello() """) == "hello"
+
+        toil.walk(r""" def_(say_world, "world") """)
+        assert toil.walk(r""" say_world() """) == "world"
+
+        with pytest.raises(Exception, match="Invalid def syntax"):
+            toil.walk(r""" def_(2, 3) """)
+
     def test_whitespace(self):
         assert toil.walk(r"""   2 """) == 2
         assert toil.walk(r""" 2   """) == 2

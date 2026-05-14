@@ -952,7 +952,18 @@ class Interpreter:
                     case _ then
                         raise("Invalid defmacro syntax")
                 end
-            end
+            end;
+
+            defmacro_(def_(call_expr, body),
+                match call_expr
+                    case tuple(name, args) then
+                        quote !name := func !!args do !body end end
+                    case Ident(name) then
+                        quote !call_expr := func do !body end end
+                    case _ then
+                        raise("Invalid def syntax")
+                end
+            )
         """)
 
         self._env = Environment(self._env)
@@ -1066,40 +1077,13 @@ if __name__ == "__main__":
 
     # Example
 
-    toil.walk(r""" defmacro_(MAGIC_NUMBER, 2) """)
-    print(toil.ast(r""" MAGIC_NUMBER() + 3 """)) # -> (add, [2, 3])
-    print(toil.walk(r""" MAGIC_NUMBER() + 3 """)) # -> 5
+    toil.walk(r""" def_(myadd(a, b), a + b) """)
+    print(toil.walk(r""" myadd(2, 3) """))
 
-    toil.walk(r""" defmacro_(when(cond, body),
-        quote if !cond then !body else None end end
-    ) """)
-    toil.walk(r""" a := 2; b := 3 """)
-    print(toil.ast(r""" when(a == b, 1 / 0) """)) # -> (if, [(equal, [a, b]), (div, [1, 0]), None])
-    print(toil.walk(r""" when(a == b, 1 / 0) """)) # -> None
+    toil.walk(r""" def_(say_hello(), "hello") """)
+    print(toil.walk(r""" say_hello() """))
 
-    toil.walk(r""" defmacro_(unless(cond, body),
-        quote when(not !cond, !body) end
-    ) """)
-    print(toil.ast(r""" unless(a == b, 2 + 3) """)) # -> (if, [(not, [(equal, [a, b])]), (add, [2, 3]), None])
-    print(toil.walk(r""" unless(a == b, 2 + 3) """)) # -> 5
+    toil.walk(r""" def_(say_world, "world") """)
+    print(toil.walk(r""" say_world() """))
 
-    toil.walk(r""" defmacro_(multi_and(a, *rest),
-        if rest == [] then a else
-            quote if !a then multi_and(!!rest) else False end end
-        end
-    ) """)
-    print(toil.ast(r""" multi_and(1 == 1) """)) # -> (equal, [1, 1])
-    print(toil.ast(r""" multi_and(1 == 1, 2 == 2, 3 == 3) """)) # -> (if, [(equal, [1, 1]), (if, [(equal, [2, 2]), (equal, [3, 3]), False]), False])
-    print(toil.walk(r""" multi_and(1 == 1, 2 == 2, 3 == 3) """)) # -> True
-    print(toil.walk(r""" multi_and(False, 1 / 0) """)) # -> False
-
-    # toil.walk(r""" defmacro_(2, 3) """) # -> Error: Invalid defmacro syntax
-
-    toil.walk(r"""
-        def test_macro_scope() do
-            defmacro_(local_macro(), 2);
-            local_macro()
-        end
-    """)
-    print(toil.walk(r""" test_macro_scope() """)) # -> 2
-    # toil.walk(r""" local_macro() """) # -> Error: Undefined variable
+    # toil.walk(r""" def_(2, 3) """) # -> Error: Invalid def syntax
