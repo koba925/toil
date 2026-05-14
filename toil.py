@@ -950,10 +950,12 @@ class Interpreter:
                     case Ident(name) then
                         quote !call_expr := macro do !body end end
                     case _ then
-                        raise("Invalid defmacro syntax")
+                        raise('Invalid defmacro syntax')
                 end
-            end;
+            end
+        """)
 
+        self.walk(r"""
             defmacro_(def_(call_expr, body),
                 match call_expr
                     case tuple(name, args) then
@@ -961,7 +963,35 @@ class Interpreter:
                     case Ident(name) then
                         quote !call_expr := func do !body end end
                     case _ then
-                        raise("Invalid def syntax")
+                        raise('Invalid def syntax @ def() : {}'.format(call_expr))
+                end
+            )
+        """)
+
+        self.walk(r"""
+            defmacro_(defclass_(call_expr, body),
+                match call_expr
+                    case tuple(name, args) then
+                        quote def (!name)(!!args) do self := {}; !body; self end end
+                    case Ident(name) then
+                        quote def (!call_expr)() do self := {}; !body; self end end
+                    case _ then
+                        raise("Invalid defclass_ syntax @ defclass_() : {}".format(call_expr))
+                end
+            );
+
+            defmacro_(inherits(super),
+                quote self = !super end
+            );
+
+            defmacro_(defmethod_(call_expr, body),
+                match call_expr
+                    case tuple(name, args) then
+                        quote self[!str(name)] = func self, !!args do !body end end
+                    case Ident(name) then
+                        quote self[!str(name)] = func self do !body end end
+                    case _ then
+                        raise("Invalid defmethod_ syntax @ defmethod_(): {}".format(call_expr))
                 end
             )
         """)
@@ -1077,13 +1107,52 @@ if __name__ == "__main__":
 
     # Example
 
-    toil.walk(r""" def_(myadd(a, b), a + b) """)
-    print(toil.walk(r""" myadd(2, 3) """))
+    toil.walk(r"""
+        defclass_(Animal(name),
+            self._name = name;
+            defmethod_(introduce, print("I am", self._name));
+            defmethod_(make_sound, print("crying"))
+        )
+    """)
+    toil.walk(r"""
+        animal1 := Animal("Rocky");
+        animal2 := Animal("Lucy");
+        animal1.introduce();
+        animal1.make_sound();
+        animal2.introduce();
+        animal2.make_sound()
+    """)
 
-    toil.walk(r""" def_(say_hello(), "hello") """)
-    print(toil.walk(r""" say_hello() """))
+    toil.walk(r"""
+        defclass_(Dog(name),
+            inherits(Animal(name));
+            defmethod_(make_sound, print("woof"))
+        )
+    """)
+    toil.walk(r"""
+        dog1 := Dog("Leo");
+        dog1.introduce();
+        dog1.make_sound()
+    """)
 
-    toil.walk(r""" def_(say_world, "world") """)
-    print(toil.walk(r""" say_world() """))
+    print(toil.walk(r"""
+        defclass_(Counter(start),
+            self.count = start;
+            defmethod_(inc(step),
+                self.count = self.count + step
+            );
+            defmethod_(get,
+                self.count
+            )
+        );
+        c1 := Counter(10);
+        c2 := Counter(20);
+        c1.inc(2);
+        c2.inc(5);
+        [c1.get(), c2.get()]
+    """)) # ->  [12, 25]
 
-    # toil.walk(r""" def_(2, 3) """) # -> Error: Invalid def syntax
+    # toil.walk(r""" defclass_(2, 2) """) # -> Invalid defclass_ syntax
+    # toil.walk(r""" defclass_(Foo(x)) """) # -> Pattern mismatch
+    # toil.walk(r""" defclass_(Foo, defmethod_(2)) """) # -> Pattern mismatch
+    # toil.walk(r""" defclass_(Foo, defmethod_(2, 3)) """) # -> Invalid defmethod_ syntax

@@ -1168,6 +1168,63 @@ class TestToil:
         with pytest.raises(Exception, match="Invalid def syntax"):
             toil.walk(r""" def_(2, 3) """)
 
+    def test_defclass_(self, capsys):
+        toil.walk(r"""
+            defclass_(Animal(name),
+                self._name = name;
+                defmethod_(introduce, print("I am", self._name));
+                defmethod_(make_sound, print("crying"))
+            )
+        """)
+        toil.walk(r"""
+            animal1 := Animal("Rocky");
+            animal2 := Animal("Lucy");
+            animal1.introduce();
+            animal1.make_sound();
+            animal2.introduce();
+            animal2.make_sound()
+        """)
+        assert capsys.readouterr().out == "I am Rocky\ncrying\nI am Lucy\ncrying\n"
+
+        toil.walk(r"""
+            defclass_(Dog(name),
+                inherits(Animal(name));
+                defmethod_(make_sound, print("woof"))
+            )
+        """)
+        toil.walk(r"""
+            dog1 := Dog("Leo");
+            dog1.introduce();
+            dog1.make_sound()
+        """)
+        assert capsys.readouterr().out == "I am Leo\nwoof\n"
+
+        assert toil.walk(r"""
+            defclass_(Counter(start),
+                self.count = start;
+                defmethod_(inc(step),
+                    self.count = self.count + step
+                );
+                defmethod_(get,
+                    self.count
+                )
+            );
+            c1 := Counter(10);
+            c2 := Counter(20);
+            c1.inc(2);
+            c2.inc(5);
+            [c1.get(), c2.get()]
+        """) == [12, 25]
+
+        with pytest.raises(Exception, match="Invalid defclass_ syntax"):
+            toil.walk(r""" defclass_(2, 2) """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.walk(r""" defclass_(Foo(x)) """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.walk(r""" defclass_(Foo, defmethod_(2)) """)
+        with pytest.raises(Exception, match="Invalid defmethod_ syntax"):
+            toil.walk(r""" defclass_(Foo, defmethod_(2, 3)) """)
+
     def test_whitespace(self):
         assert toil.walk(r"""   2 """) == 2
         assert toil.walk(r""" 2   """) == 2
