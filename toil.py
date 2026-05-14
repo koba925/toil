@@ -884,6 +884,7 @@ class Interpreter:
     def init_env(self) -> 'Interpreter':
         self._env = Environment()
         self._builtins()
+        self._corelib()
         return self
 
     def _builtins(self):
@@ -935,6 +936,24 @@ class Interpreter:
         self._env.define("eval", lambda args: Evaluator().eval(self.ast(args[0]), self._env))
         self._env.define("eval_expr", lambda args: Evaluator().eval(args[0], self._env))
         self._env.define("apply", lambda args: Evaluator().apply(args[0], args[1]))
+
+        self._env = Environment(self._env)
+
+    def _corelib(self):
+        self.walk(r"""
+            __corelib := None;
+
+            defmacro_ := macro call_expr, body do
+                match call_expr
+                    case tuple(name, args) then
+                        quote !name := macro !!args do !body end end
+                    case Ident(name) then
+                        quote !call_expr := macro do !body end end
+                    case _ then
+                        raise("Invalid defmacro syntax")
+                end
+            end
+        """)
 
         self._env = Environment(self._env)
 
@@ -1047,41 +1066,40 @@ if __name__ == "__main__":
 
     # Example
 
-    print(toil.walk(r""" quote 2 + 3 end """)) # -> (add, [2, 3])
-    print(toil.ast(r""" quote a + 3 end """)) # -> (tuple, [(Ident, ['add']), (add, [(add, [[], [(Ident, ['a'])]]), [3]])])
-    print(toil.walk(r""" a := 2; quote a + 3 end """)) # -> (add, [a, 3])
+    toil.walk(r""" defmacro_(MAGIC_NUMBER, 2) """)
+    print(toil.ast(r""" MAGIC_NUMBER() + 3 """)) # -> (add, [2, 3])
+    print(toil.walk(r""" MAGIC_NUMBER() + 3 """)) # -> 5
 
-    print(toil.walk(r""" quote !(2 + 3) end """)) # -> 5
-    print(toil.ast(r""" quote !(a + 3) end """)) # -> (add, [a, 3])
-    print(toil.walk(r""" a := 2; quote !(a + 3) end """)) # -> 5
-
-    print(toil.walk(r""" quote [2, 3, 4, 5] end """)) # -> [2, 3, 4, 5]
-    print(toil.ast(r""" quote [2, !!a, 5] end """)) # -> (add, [(add, [(add, [[], [2]]), a]), [5]])
-    print(toil.walk(r""" a := [3, 4]; quote [2, !!a, 5] end """)) # -> [2, 3, 4, 5]
-
-    print(toil.ast(r""" quote {a: !a, b: 3} end """)) # -> {'a': a, 'b': 3}
-    print(toil.walk(r""" a := 2; quote {a: !a, b: 3} end """)) # -> {'a': 2, 'b': 3}
-
-    print(toil.walk(r""" a := [3, 4]; quote { list: [2, !!a, 5] } end """)) # -> {'list': [2, 3, 4, 5]}
-    # print(toil.walk(r""" !(2 + 3) """)) # -> Undefined variable
-
-    toil.walk(r""" when := macro cond, body do quote if !cond then !body else None end end end """)
+    toil.walk(r""" defmacro_(when(cond, body),
+        quote if !cond then !body else None end end
+    ) """)
     toil.walk(r""" a := 2; b := 3 """)
     print(toil.ast(r""" when(a == b, 1 / 0) """)) # -> (if, [(equal, [a, b]), (div, [1, 0]), None])
     print(toil.walk(r""" when(a == b, 1 / 0) """)) # -> None
 
-    toil.walk(r""" unless := macro cond, body do quote when(not !cond, !body) end end """)
+    toil.walk(r""" defmacro_(unless(cond, body),
+        quote when(not !cond, !body) end
+    ) """)
     print(toil.ast(r""" unless(a == b, 2 + 3) """)) # -> (if, [(not, [(equal, [a, b])]), (add, [2, 3]), None])
     print(toil.walk(r""" unless(a == b, 2 + 3) """)) # -> 5
 
-    toil.walk(r"""
-        multi_and := macro a, *rest do
-            if rest == [] then a else
-                quote if !a then multi_and(!!rest) else False end end
-            end
+    toil.walk(r""" defmacro_(multi_and(a, *rest),
+        if rest == [] then a else
+            quote if !a then multi_and(!!rest) else False end end
         end
-    """)
+    ) """)
     print(toil.ast(r""" multi_and(1 == 1) """)) # -> (equal, [1, 1])
     print(toil.ast(r""" multi_and(1 == 1, 2 == 2, 3 == 3) """)) # -> (if, [(equal, [1, 1]), (if, [(equal, [2, 2]), (equal, [3, 3]), False]), False])
     print(toil.walk(r""" multi_and(1 == 1, 2 == 2, 3 == 3) """)) # -> True
     print(toil.walk(r""" multi_and(False, 1 / 0) """)) # -> False
+
+    # toil.walk(r""" defmacro_(2, 3) """) # -> Error: Invalid defmacro syntax
+
+    toil.walk(r"""
+        def test_macro_scope() do
+            defmacro_(local_macro(), 2);
+            local_macro()
+        end
+    """)
+    print(toil.walk(r""" test_macro_scope() """)) # -> 2
+    # toil.walk(r""" local_macro() """) # -> Error: Undefined variable

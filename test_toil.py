@@ -1045,36 +1045,6 @@ class TestToil:
         assert toil.walk(r""" any([False, True], x -> x) """) is True
         assert toil.walk(r""" any([False, False], x -> x) """) is False
 
-    def test_quote(self):
-        assert toil.walk(r""" quote 2 + 3 end """) == (Ident("add"), [2, 3])
-        assert toil.walk(r""" a := 2; quote a + 3 end """) == (Ident("add"), [Ident("a"), 3])
-        assert toil.walk(r""" quote !(2 + 3) end """) == 5
-        assert toil.walk(r""" a := 2; quote !(a + 3) end """) == 5
-        assert toil.walk(r""" quote [2, 3, 4, 5] end """) == [2, 3, 4, 5]
-        assert toil.walk(r""" a := [3, 4]; quote [2, !!a, 5] end """) == [2, 3, 4, 5]
-        assert toil.walk(r""" a := 2; quote {a: !a, b: 3} end """) == {'a': 2, 'b': 3}
-        assert toil.walk(r""" a := [3, 4]; quote { list: [2, !!a, 5] } end """) == {'list': [2, 3, 4, 5]}
-        with pytest.raises(AssertionError, match="Undefined variable"):
-            toil.walk(r""" !(2 + 3) """)
-
-        toil.walk(r""" when := macro cond, body do quote if !cond then !body else None end end end """)
-        toil.walk(r""" a := 2; b := 3 """)
-        assert toil.walk(r""" when(a == b, 1 / 0) """) is None
-
-        toil.walk(r""" unless := macro cond, body do quote when(not !cond, !body) end end """)
-        assert toil.walk(r""" unless(a == b, 2 + 3) """) == 5
-
-        toil.walk(r"""
-            multi_and := macro a, *rest do
-                if rest == [] then a else
-                    quote if !a then multi_and(!!rest) else False end end
-                end
-            end
-        """)
-        assert toil.walk(r""" multi_and(1 == 1) """) is True
-        assert toil.walk(r""" multi_and(1 == 1, 2 == 2, 3 == 3) """) is True
-        assert toil.walk(r""" multi_and(False, 1 / 0) """) is False
-
     def test_macro(self):
         assert toil.walk(r""" macro do 2 + 3 end () """) == 5
         assert toil.walk(r""" macro cond, body do tuple(Ident('if'), [cond, body, None]) end (2 == 3, 1/0) """) is None
@@ -1118,6 +1088,72 @@ class TestToil:
 
         with pytest.raises(AssertionError, match="Pattern mismatch"):
             toil.walk(r""" when(True) """)
+
+    def test_quote(self):
+        assert toil.walk(r""" quote 2 + 3 end """) == (Ident("add"), [2, 3])
+        assert toil.walk(r""" a := 2; quote a + 3 end """) == (Ident("add"), [Ident("a"), 3])
+        assert toil.walk(r""" quote !(2 + 3) end """) == 5
+        assert toil.walk(r""" a := 2; quote !(a + 3) end """) == 5
+        assert toil.walk(r""" quote [2, 3, 4, 5] end """) == [2, 3, 4, 5]
+        assert toil.walk(r""" a := [3, 4]; quote [2, !!a, 5] end """) == [2, 3, 4, 5]
+        assert toil.walk(r""" a := 2; quote {a: !a, b: 3} end """) == {'a': 2, 'b': 3}
+        assert toil.walk(r""" a := [3, 4]; quote { list: [2, !!a, 5] } end """) == {'list': [2, 3, 4, 5]}
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            toil.walk(r""" !(2 + 3) """)
+
+        toil.walk(r""" when := macro cond, body do quote if !cond then !body else None end end end """)
+        toil.walk(r""" a := 2; b := 3 """)
+        assert toil.walk(r""" when(a == b, 1 / 0) """) is None
+
+        toil.walk(r""" unless := macro cond, body do quote when(not !cond, !body) end end """)
+        assert toil.walk(r""" unless(a == b, 2 + 3) """) == 5
+
+        toil.walk(r"""
+            multi_and := macro a, *rest do
+                if rest == [] then a else
+                    quote if !a then multi_and(!!rest) else False end end
+                end
+            end
+        """)
+        assert toil.walk(r""" multi_and(1 == 1) """) is True
+        assert toil.walk(r""" multi_and(1 == 1, 2 == 2, 3 == 3) """) is True
+        assert toil.walk(r""" multi_and(False, 1 / 0) """) is False
+
+    def test_defmacro_(self):
+        toil.walk(r""" defmacro_(MAGIC_NUMBER, 2) """)
+        assert toil.walk(r""" MAGIC_NUMBER() + 3 """) == 5
+
+        toil.walk(r""" defmacro_(when(cond, body),
+            quote if !cond then !body else None end end
+        ) """)
+        toil.walk(r""" a := 2; b := 3 """)
+        assert toil.walk(r""" when(a == b, 1 / 0) """) is None
+
+        toil.walk(r""" defmacro_(unless(cond, body),
+            quote when(not !cond, !body) end
+        ) """)
+        assert toil.walk(r""" unless(a == b, 2 + 3) """) == 5
+
+        toil.walk(r""" defmacro_(multi_and(a, *rest),
+            if rest == [] then a else
+                quote if !a then multi_and(!!rest) else False end end
+            end
+        ) """)
+        assert toil.walk(r""" multi_and(1 == 1, 2 == 2, 3 == 3) """) is True
+        assert toil.walk(r""" multi_and(False, 1 / 0) """) is False
+
+        with pytest.raises(Exception, match="Invalid defmacro syntax"):
+            toil.walk(r""" defmacro_(2, 3) """)
+
+        toil.walk(r"""
+            def test_macro_scope() do
+                defmacro_(local_macro(), 2);
+                local_macro()
+            end
+        """)
+        assert toil.walk(r""" test_macro_scope() """) == 2
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            toil.walk(r""" local_macro() """)
 
     def test_whitespace(self):
         assert toil.walk(r"""   2 """) == 2
