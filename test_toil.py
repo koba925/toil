@@ -1225,6 +1225,15 @@ class TestToil:
         with pytest.raises(Exception, match="Invalid defmethod_ syntax"):
             toil.walk(r""" defclass_(Foo, defmethod_(2, 3)) """)
 
+    def test_assert_(self):
+        assert toil.walk(r""" assert_(2 == 2, "Assert exception") """) is None
+
+        with pytest.raises(Exception, match="Assert exception"):
+            toil.walk(r""" assert_(2 == 3, "Assert exception") """)
+
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.walk(r""" assert_(2 == 3) """)
+
     def test_whitespace(self):
         assert toil.walk(r"""   2 """) == 2
         assert toil.walk(r""" 2   """) == 2
