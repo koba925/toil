@@ -1234,6 +1234,71 @@ class TestToil:
         with pytest.raises(Exception, match="Pattern mismatch"):
             toil.walk(r""" assert_(2 == 3) """)
 
+    def test_for_(self):
+        assert toil.walk(r"""
+            a := []; for_(i, [0, 1, 2], push(a, i), [i, a], 1/0)
+        """) == [2, [0, 1, 2]]
+
+        assert toil.walk(r"""
+            a := []; for_([i, j], [[1, 2], [3, 4]], push(a, [i, j]), a, 1/0)
+        """) == [[1, 2], [3, 4]]
+
+        assert toil.walk(r"""
+            a := [];
+            for_([k, v], {"a": 2, "b": 3}.items(), push(a, [k, v]), a, 1/0)
+        """) == [['a', 2], ['b', 3]]
+
+        assert toil.walk(r"""
+            a := [];
+            keys := ["a", "b", "c"];
+            values := [2, 3, 4];
+            for_([k, v], zip(keys, values), push(a, [k, v]), a, 1/0)
+        """) == [['a', 2], ['b', 3], ['c', 4]]
+
+        assert toil.walk(r""" for_(i, [], 1/0, 2, 1/0) """) == 2
+
+        assert toil.walk(r"""
+            a := []; for_(i, [0, 1, 2],
+                if i == 1 then continue end;
+                push(a, i),
+                a, 1/0)
+        """) == [0, 2]
+
+        assert toil.walk(r"""
+            a := []; for_(i, [0, 1],
+                for_(j, [0, 1, 2],
+                    if j == 1 then continue end;
+                    push(a, [i, j]),
+                    None, None
+                ), a, 1/0)
+        """) == [[0, 0], [0, 2], [1, 0], [1, 2]]
+
+        assert toil.walk(r"""
+            a := []; for_(i, [0, 1, 2],
+                if i == 1 then break end;
+                push(a, i),
+                1/0, a)
+        """) == [0]
+
+        assert toil.walk(r"""
+            a := []; for_(i, [0, 1],
+                for_(j, [0, 1, 2],
+                    if i == 0 and j == 1 then break end;
+                    push(a, [i, j]),
+                    None, None
+                ),
+                a, 1/0)
+        """) == [[0, 0], [1, 0], [1, 1], [1, 2]]
+
+        assert toil.walk(r"""
+            a := []; for_(i, [0, 1],
+                for_(j, [0, 1, 2],
+                    if i == 1 and j == 1 then break end;
+                    push(a, [i, j]),
+                    None, break),
+                1/0, a)
+        """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
+
     def test_whitespace(self):
         assert toil.walk(r"""   2 """) == 2
         assert toil.walk(r""" 2   """) == 2

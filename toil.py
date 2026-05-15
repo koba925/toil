@@ -882,6 +882,7 @@ class Interpreter:
         self._env = Environment()
 
     def init_env(self) -> 'Interpreter':
+        self._gensym_counter = 0
         self._env = Environment()
         self._builtins()
         self._corelib()
@@ -937,6 +938,8 @@ class Interpreter:
         self._env.define("eval_expr", lambda args: Evaluator().eval(args[0], self._env))
         self._env.define("apply", lambda args: Evaluator().apply(args[0], args[1]))
 
+        self._env.define("gensym", lambda args: self._gensym(args))
+
         self._env = Environment(self._env)
 
     def _corelib(self):
@@ -964,6 +967,21 @@ class Interpreter:
                         quote !call_expr := func do !body end end
                     case _ then
                         raise('Invalid def syntax @ def() : {}'.format(call_expr))
+                end
+            )
+        """)
+
+        self.walk(r"""
+            defmacro_(for_(var, coll, body, thn, els),
+                _coll := gensym("coll");
+                _index := gensym("index");
+                quote
+                    !_coll := !coll; !_index := -1;
+                    while !_index + 1 < len(!_coll) do
+                        !_index = !_index + 1;
+                        !var := (!_coll)[!_index];
+                        !body
+                    then !thn else !els end
                 end
             )
         """)
@@ -1055,6 +1073,11 @@ class Interpreter:
         self._env = Environment(self._env)
         return self
 
+    def _gensym(self, args):
+        self._gensym_counter += 1
+        name = args[0] if args else "gensym"
+        return Ident(f"__{name}_{self._gensym_counter}")
+
     def _load(self, path):
         with open(path, "r") as f: src = f.read()
         return Evaluator().eval(self.ast(src), Environment(self._env))
@@ -1113,7 +1136,73 @@ if __name__ == "__main__":
 
     # Example
 
-    print(toil.walk(r""" assert_(2 == 2, "Assert exception") """)) # -> None
+    print(toil.walk(r"""
+        a := []; for_(i, [0, 1, 2], push(a, i), [i, a], 1/0)
+    """)) # -> [2, [0, 1, 2]]
 
-    # toil.walk(r""" assert_(2 == 3, "Assert exception") """) # -> Assert exception
-    # toil.walk(r""" assert_(2 == 3) """) # -> Pattern mismatch
+    print(toil.walk(r"""
+        a := []; for_([i, j], [[1, 2], [3, 4]], push(a, [i, j]), a, 1/0)
+    """)) # -> [[1, 2], [3, 4]]
+
+    print(toil.walk(r"""
+        a := [];
+        for_([k, v], {"a": 2, "b": 3}.items(), push(a, [k, v]), a, 1/0)
+    """)) # -> [['a', 2], ['b', 3]]
+
+    print(toil.walk(r"""
+        a := [];
+        keys := ["a", "b", "c"];
+        values := [2, 3, 4];
+        for_([k, v], zip(keys, values), push(a, [k, v]), a, 1/0)
+    """)) # -> [['a', 2], ['b', 3], ['c', 4]]
+
+    print(toil.walk(r""" for_(i, [], 1/0, 2, 1/0) """)) # -> 2
+
+    print(toil.walk(r"""
+        a := []; for_(i, [0, 1, 2],
+            if i == 1 then continue end;
+            push(a, i),
+            a, 1/0)
+    """)) # -> [0, 2]
+
+    print(toil.walk(r"""
+        a := []; for_(i, [0, 1],
+            for_(j, [0, 1, 2],
+                if j == 1 then continue end;
+                push(a, [i, j]),
+                None, None
+            ), a, 1/0)
+    """)) # -> [[0, 0], [0, 2], [1, 0], [1, 2]]
+
+    print(toil.walk(r"""
+        a := []; for_(i, [0, 1, 2],
+            if i == 1 then break end;
+            push(a, i),
+            1/0, a)
+    """)) # -> [0]
+
+    print(toil.walk(r"""
+        a := []; for_(i, [0, 1, 2],
+            if i == 1 then break end;
+            push(a, i),
+            1/0, a)
+    """)) # -> [0]
+
+    print(toil.walk(r"""
+        a := []; for_(i, [0, 1],
+            for_(j, [0, 1, 2],
+                if i == 0 and j == 1 then break end;
+                push(a, [i, j]),
+                None, None
+            ),
+            a, 1/0)
+    """)) # -> [[0, 0], [1, 0], [1, 1], [1, 2]]
+
+    print(toil.walk(r"""
+        a := []; for_(i, [0, 1],
+            for_(j, [0, 1, 2],
+                if i == 1 and j == 1 then break end;
+                push(a, [i, j]),
+                None, break),
+            1/0, a)
+    """)) # -> [[0, 0], [0, 1], [0, 2], [1, 0]]
