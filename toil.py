@@ -221,9 +221,6 @@ class Parser:
             case Ident("match"): return self._match()
             case Ident("while"): return self._while()
             case Ident("try"): return self._try()
-            case Ident("assert"): return self._assert()
-            case Ident("defclass"): return self._defclass()
-            case Ident("defmethod"): return self._defmethod()
             case Ident() as keyword  if keyword in self._syntax_rules:
                 return self._apply_syntax(self._syntax_rules[keyword])
             case Ident(name) if is_ident(name): return self._current_and_advance()
@@ -371,70 +368,6 @@ class Parser:
             clauses.append((exc_pat, exc_expr))
         self._consume(Ident("end"))
         return (Ident("try"), [body_expr, clauses])
-
-    def _assert(self):
-        self._current_and_advance()
-        cond_expr = self._expression()
-        self._consume(Ident("else"))
-        exc_expr = self._expression()
-        self._consume(Ident("end"))
-        return (Ident("if"), [
-            (Ident("not"), [cond_expr]),
-            (Ident("raise"), [exc_expr]),
-            None
-        ])
-
-    def _defclass(self):
-        self._current_and_advance()
-        call_expr = self._expression()
-        self._consume(Ident("do"))
-        body_expr = self._expression()
-        self._consume(Ident("end"))
-
-        match call_expr:
-            case (name, args):
-                return (Ident("define"), [name,
-                    (Ident("func"), [args,
-                        (Ident("seq"), [
-                            (Ident("define"), [Ident("self"), {}]),
-                            body_expr,
-                            Ident("self")
-                        ])
-                    ])
-                ])
-            case Ident(name):
-                return (Ident("define"), [call_expr,
-                    (Ident("func"), [[],
-                        (Ident("seq"), [
-                            (Ident("define"), [Ident("self"), {}]),
-                            body_expr,
-                            Ident("self")
-                        ])
-                    ])
-                ])
-            case _:
-                assert False, f"Invalid defclass syntax @ _defclass(): {call_expr}"
-
-    def _defmethod(self):
-        self._current_and_advance()
-        call_expr = self._expression()
-        self._consume(Ident("do"))
-        body_expr = self._expression()
-        self._consume(Ident("end"))
-
-        match call_expr:
-            case(name, args):
-                return (Ident('assign'), [
-                    (Ident('dot'), [Ident('self'), str(name)]),
-                    (Ident('func'), [[Ident('self')] + args, body_expr])
-                ])
-            case Ident(name):
-                return (Ident('assign'), [
-                    (Ident('dot'), [Ident('self'), str(name)]),
-                    (Ident('func'), [[Ident('self')], body_expr])
-                ])
-            case _:
-                assert False, f"Invalid defmethod syntax @ _defmethod(): {call_expr}"
 
     def _apply_syntax(self, rule):
         def match_args(form):
@@ -940,7 +873,7 @@ class Interpreter:
                     case Ident(name) then
                         quote !call_expr := macro do !body end end
                     case _ then
-                        raise('Invalid defmacro syntax')
+                        raise('Invalid defmacro syntax @ defmacro() : {}'.format(call_expr))
                 end
             end;
 
@@ -984,24 +917,25 @@ class Interpreter:
         self.walk(r"""
             defmacro assert_(cond_expr, exc_expr) do
                 quote if not !cond_expr then raise(!exc_expr) end end
-            end
+            end;
+
+            syntax assert, EXPR, else, EXPR, end call assert_ end
         """)
 
         self.walk(r"""
-            defmacro defclass_(call_expr, body) do
+            defmacro defclass_(call_expr, super, body) do
+                init := if super == [] then {} else super[0] end;
                 match call_expr
                     case tuple(name, args) then
-                        quote def (!name)(!!args) do self := {}; !body; self end end
+                        quote def (!name)(!!args) do self := !init; !body; self end end
                     case Ident(name) then
-                        quote def (!call_expr)() do self := {}; !body; self end end
+                        quote def (!call_expr)() do self := !init; !body; self end end
                     case _ then
-                        raise("Invalid defclass_ syntax @ defclass_() : {}".format(call_expr))
+                        raise("Invalid defclass syntax @ defclass() : {}".format(call_expr))
                 end
             end;
 
-            defmacro inherits(super) do
-                quote self = !super end
-            end;
+            syntax defclass, EXPR, +[inherits, EXPR], do, EXPR, end call defclass_ end;
 
             defmacro defmethod_(call_expr, body) do
                 match call_expr
@@ -1010,9 +944,11 @@ class Interpreter:
                     case Ident(name) then
                         quote self[!str(name)] = func self do !body end end
                     case _ then
-                        raise("Invalid defmethod_ syntax @ defmethod_(): {}".format(call_expr))
+                        raise("Invalid defmethod syntax @ defmethod(): {}".format(call_expr))
                 end
-            end
+            end;
+
+            syntax defmethod, EXPR, do, EXPR, end call defmethod_ end
         """)
 
         self._env = Environment(self._env)

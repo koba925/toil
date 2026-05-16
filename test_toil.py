@@ -981,7 +981,36 @@ class TestToil:
             end
         """) == "caught outer"
 
-    def test_defclass(self):
+    def test_defclass(self, capsys):
+        toil.walk(r"""
+            defclass Animal(name) do
+                self._name = name;
+                defmethod introduce do print("I am", self._name) end;
+                defmethod make_sound do print("crying") end
+            end
+        """)
+        toil.walk(r"""
+            animal1 := Animal("Rocky");
+            animal2 := Animal("Lucy");
+            animal1.introduce();
+            animal1.make_sound();
+            animal2.introduce();
+            animal2.make_sound()
+        """)
+        assert capsys.readouterr().out == "I am Rocky\ncrying\nI am Lucy\ncrying\n"
+
+        toil.walk(r"""
+            defclass Dog(name) inherits Animal(name) do
+                defmethod make_sound do print("woof") end
+            end
+        """)
+        toil.walk(r"""
+            dog1 := Dog("Leo");
+            dog1.introduce();
+            dog1.make_sound()
+        """)
+        assert capsys.readouterr().out == "I am Leo\nwoof\n"
+
         assert toil.walk(r"""
             defclass Counter(start) do
                 self.count = start;
@@ -1004,7 +1033,7 @@ class TestToil:
         with pytest.raises(Exception, match="Expected do"):
             toil.walk(r""" defclass Foo(x) end """)
         with pytest.raises(Exception, match="Invalid defmethod syntax"):
-            toil.walk(r""" defclass Foo do defmethod 2 do end end """)
+            toil.walk(r""" defclass Foo do defmethod 2 do 3 end end """)
 
     def test_assert(self):
         assert toil.walk(r""" assert 2 == 2 else 1/0 end """) is None
@@ -1154,72 +1183,6 @@ class TestToil:
         assert toil.walk(r""" test_macro_scope() """) == 2
         with pytest.raises(AssertionError, match="Undefined variable"):
             toil.walk(r""" local_macro() """)
-
-    def test_defclass_(self, capsys):
-        toil.walk(r"""
-            defclass_(Animal(name),
-                self._name = name;
-                defmethod_(introduce, print("I am", self._name));
-                defmethod_(make_sound, print("crying"))
-            )
-        """)
-        toil.walk(r"""
-            animal1 := Animal("Rocky");
-            animal2 := Animal("Lucy");
-            animal1.introduce();
-            animal1.make_sound();
-            animal2.introduce();
-            animal2.make_sound()
-        """)
-        assert capsys.readouterr().out == "I am Rocky\ncrying\nI am Lucy\ncrying\n"
-
-        toil.walk(r"""
-            defclass_(Dog(name),
-                inherits(Animal(name));
-                defmethod_(make_sound, print("woof"))
-            )
-        """)
-        toil.walk(r"""
-            dog1 := Dog("Leo");
-            dog1.introduce();
-            dog1.make_sound()
-        """)
-        assert capsys.readouterr().out == "I am Leo\nwoof\n"
-
-        assert toil.walk(r"""
-            defclass_(Counter(start),
-                self.count = start;
-                defmethod_(inc(step),
-                    self.count = self.count + step
-                );
-                defmethod_(get,
-                    self.count
-                )
-            );
-            c1 := Counter(10);
-            c2 := Counter(20);
-            c1.inc(2);
-            c2.inc(5);
-            [c1.get(), c2.get()]
-        """) == [12, 25]
-
-        with pytest.raises(Exception, match="Invalid defclass_ syntax"):
-            toil.walk(r""" defclass_(2, 2) """)
-        with pytest.raises(Exception, match="Pattern mismatch"):
-            toil.walk(r""" defclass_(Foo(x)) """)
-        with pytest.raises(Exception, match="Pattern mismatch"):
-            toil.walk(r""" defclass_(Foo, defmethod_(2)) """)
-        with pytest.raises(Exception, match="Invalid defmethod_ syntax"):
-            toil.walk(r""" defclass_(Foo, defmethod_(2, 3)) """)
-
-    def test_assert_(self):
-        assert toil.walk(r""" assert_(2 == 2, "Assert exception") """) is None
-
-        with pytest.raises(Exception, match="Assert exception"):
-            toil.walk(r""" assert_(2 == 3, "Assert exception") """)
-
-        with pytest.raises(Exception, match="Pattern mismatch"):
-            toil.walk(r""" assert_(2 == 3) """)
 
     def test_syntax(self):
         assert toil.walk(r""" syntax myadd, EXPR, to, EXPR, end call add end """) is None
