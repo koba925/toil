@@ -1299,6 +1299,40 @@ class TestToil:
                 1/0, a)
         """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
 
+    def test_syntax(self):
+        assert toil.walk(r""" syntax myadd, EXPR, to, EXPR, end call add end """) is None
+        assert toil.ast(r""" myadd 2 * 3 to 4 * 5 end """) == (
+            Ident("add"), [(Ident("mul"), [2, 3]), (Ident("mul"), [4, 5])]
+        )
+        assert toil.walk(r""" myadd 2 * 3 to 4 * 5 end """) == 26
+
+        toil.walk(r"""
+            defmacro_(when_(cond, body), quote if !cond then !body else None end end);
+            syntax when, EXPR, do, EXPR, end call when_ end
+        """)
+        assert toil.ast(r""" when a == b do 1 / 0 end """) == (
+            Ident("if"), [(Ident("equal"), [Ident("a"), Ident("b")]), (Ident("div"), [1, 0]), None]
+        )
+        assert toil.walk(r""" a := 2; b := 3; when a == b do 1 / 0 end """) is None
+
+        toil.walk(""" syntax repstx, *[rep, EXPR], do, EXPR, end call repstx_ end """)
+        assert toil.ast(""" repstx do 4 end """) == (Ident("repstx_"), [[], 4])
+        assert toil.ast(""" repstx rep 2 + 3 do 4 end """) == (
+            Ident("repstx_"), [[[ (Ident("add"), [2, 3]) ]], 4]
+        )
+        assert toil.ast(""" repstx rep 2 + 3 rep 4 + 5 do 6 end """) == (
+            Ident("repstx_"), [[[ (Ident("add"), [2, 3]) ], [ (Ident("add"), [4, 5]) ]], 6]
+        )
+
+        toil.walk(""" syntax optstx, +[opt, EXPR], do, EXPR, end call optstx_ end """)
+        assert toil.ast(""" optstx do 4 end """) == (Ident("optstx_"), [[], 4])
+        assert toil.ast(""" optstx opt 2 + 3 do 4 end """) == (
+            Ident("optstx_"), [[ (Ident("add"), [2, 3]) ], 4]
+        )
+
+        with pytest.raises(Exception, match="Expected do"):
+            toil.ast(""" optstx opt 2 + 3 opt 4 + 5 do 6 end """)
+
     def test_whitespace(self):
         assert toil.walk(r"""   2 """) == 2
         assert toil.walk(r""" 2   """) == 2

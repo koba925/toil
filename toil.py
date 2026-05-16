@@ -12,11 +12,15 @@ class Ident:
     def __eq__(self, other):
         return isinstance(other, Ident) and self.name == other.name
 
-Source = str
-Token = Ident | int | str | bool | None
-Expr = Any
-Value = Any
-SymbolTable = dict[str, Value]
+type SyntaxElement = Ident | tuple[Ident, list[SyntaxElement]]
+type SyntaxForm = list[SyntaxElement]
+type SyntaxRule = tuple[Ident, SyntaxForm]
+type SyntaxRules = dict[Ident, SyntaxRule]
+type Source = str
+type Token = Ident | int | str | bool | None
+type Expr = Any
+type Value = Any
+type SymbolTable = dict[str, Value]
 
 
 def is_ident_first(c): return c.isalpha() or c == "_"
@@ -118,8 +122,9 @@ class Scanner:
 
 
 class Parser:
-    def __init__(self, tokens: list[Token]) -> None:
+    def __init__(self, tokens: list[Token], syntax_rules: SyntaxRules) -> None:
         self._tokens = tokens
+        self._syntax_rules = syntax_rules
         self._pos = 0
 
     def parse(self) -> Expr:
@@ -207,6 +212,7 @@ class Parser:
             case Ident("("): return self._group()
             case Ident("["): return self._list()
             case Ident("{"): return self._dict()
+            case Ident("syntax"): return self._syntax()
             case Ident("quote"): return self._quote()
             case Ident("func"): return self._func()
             case Ident("def"): return self._def()
@@ -220,6 +226,8 @@ class Parser:
             case Ident("assert"): return self._assert()
             case Ident("defclass"): return self._defclass()
             case Ident("defmethod"): return self._defmethod()
+            case Ident() as keyword  if keyword in self._syntax_rules:
+                return self._apply_syntax(self._syntax_rules[keyword])
             case Ident(name) if is_ident(name): return self._current_and_advance()
             case unexpected:
                 assert False, f"Unexpected token @ _primary(): {unexpected}"
@@ -265,6 +273,18 @@ class Parser:
                 _parse_key_value(dic)
         self._current_and_advance()
         return dic
+
+    def _syntax(self):
+        self._current_and_advance()
+        syntax = self._comma_separated_exprs(Ident("call"))
+        keyword, *form = syntax
+        assert isinstance(keyword, Ident), f"Invalid keyword @ _syntax(): {keyword}"
+        self._consume(Ident("call"))
+        op = self._expression()
+        assert isinstance(op, Ident), f"Invalid operator @ _syntax(): {op}"
+        self._consume(Ident("end"))
+        self._syntax_rules[keyword] = (op, form)
+        return None
 
     def _quote(self):
         self._current_and_advance()
@@ -451,6 +471,33 @@ class Parser:
                 ])
             case _:
                 assert False, f"Invalid defmethod syntax @ _defmethod(): {call_expr}"
+
+    def _apply_syntax(self, rule):
+        def match_args(form):
+            args = []
+            for current, next in zip(form, form[1:] + [None]):
+                match current:
+                    case Ident("EXPR"):
+                        args.append(self._expression())
+                    case Ident("EXPRS"):
+                        args.append(self._comma_separated_exprs(next))
+                    case (Ident("*"), [subform]):
+                        subargs = []
+                        while self._current_token() == subform[0]:
+                            subargs.append(match_args(subform))
+                        args.append(subargs)
+                    case (Ident("+"), [subform]):
+                        if self._current_token() == subform[0]:
+                            args.append(match_args(subform))
+                        else:
+                            args.append([])
+                    case delimiter:
+                        self._consume(delimiter)
+            return args
+
+        self._current_and_advance()
+        operator, form = rule
+        return (operator, match_args(form))
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
@@ -879,6 +926,7 @@ class Evaluator:
 
 class Interpreter:
     def __init__(self) -> None:
+        self._syntax_rules = {}
         self._env = Environment()
 
     def init_env(self) -> 'Interpreter':
@@ -1086,7 +1134,7 @@ class Interpreter:
         return Scanner(src).tokenize()
 
     def parse(self, tokens: list[Token]) -> Expr:
-        return Parser(tokens).parse()
+        return Parser(tokens, self._syntax_rules).parse()
 
     def expand(self, ast: Expr) -> Expr:
         return Expander().expand(ast, self._env)
@@ -1135,74 +1183,23 @@ if __name__ == "__main__":
             walk_file(sys.argv[1])
 
     # Example
+    print(toil.walk(r""" syntax myadd, EXPR, to, EXPR, end call add end """)) # -> None
+    print(toil.ast(r""" myadd 2 * 3 to 4 * 5 end """)) # -> (add, [(mul, [2, 3]), (mul, [4, 5])])
+    print(toil.walk(r""" myadd 2 * 3 to 4 * 5 end """)) # -> 26
 
-    print(toil.walk(r"""
-        a := []; for_(i, [0, 1, 2], push(a, i), [i, a], 1/0)
-    """)) # -> [2, [0, 1, 2]]
+    toil.walk(r"""
+        defmacro_(when_(cond, body), quote if !cond then !body else None end end);
+        syntax when, EXPR, do, EXPR, end call when_ end
+    """)
+    print(toil.ast(r""" when a == b do 1 / 0 end """)) # -> (if, [(equal, [a, b]), (div, [1, 0]), None])
+    print(toil.walk(r""" a := 2; b := 3; when a == b do 1 / 0 end """)) # -> None
 
-    print(toil.walk(r"""
-        a := []; for_([i, j], [[1, 2], [3, 4]], push(a, [i, j]), a, 1/0)
-    """)) # -> [[1, 2], [3, 4]]
+    toil.walk(""" syntax repstx, *[rep, EXPR], do, EXPR, end call repstx_ end """)
+    print(toil.ast(""" repstx do 4 end """)) # ->  (repstx_, [[], 4])
+    print(toil.ast(""" repstx rep 2 + 3 do 4 end """)) # -> (repstx_, [[[(add, [2, 3])]], 4])
+    print(toil.ast(""" repstx rep 2 + 3 rep 4 + 5 do 6 end """)) # -> (repstx_, [[[(add, [2, 3])], [(add, [4, 5])]], 6])
 
-    print(toil.walk(r"""
-        a := [];
-        for_([k, v], {"a": 2, "b": 3}.items(), push(a, [k, v]), a, 1/0)
-    """)) # -> [['a', 2], ['b', 3]]
-
-    print(toil.walk(r"""
-        a := [];
-        keys := ["a", "b", "c"];
-        values := [2, 3, 4];
-        for_([k, v], zip(keys, values), push(a, [k, v]), a, 1/0)
-    """)) # -> [['a', 2], ['b', 3], ['c', 4]]
-
-    print(toil.walk(r""" for_(i, [], 1/0, 2, 1/0) """)) # -> 2
-
-    print(toil.walk(r"""
-        a := []; for_(i, [0, 1, 2],
-            if i == 1 then continue end;
-            push(a, i),
-            a, 1/0)
-    """)) # -> [0, 2]
-
-    print(toil.walk(r"""
-        a := []; for_(i, [0, 1],
-            for_(j, [0, 1, 2],
-                if j == 1 then continue end;
-                push(a, [i, j]),
-                None, None
-            ), a, 1/0)
-    """)) # -> [[0, 0], [0, 2], [1, 0], [1, 2]]
-
-    print(toil.walk(r"""
-        a := []; for_(i, [0, 1, 2],
-            if i == 1 then break end;
-            push(a, i),
-            1/0, a)
-    """)) # -> [0]
-
-    print(toil.walk(r"""
-        a := []; for_(i, [0, 1, 2],
-            if i == 1 then break end;
-            push(a, i),
-            1/0, a)
-    """)) # -> [0]
-
-    print(toil.walk(r"""
-        a := []; for_(i, [0, 1],
-            for_(j, [0, 1, 2],
-                if i == 0 and j == 1 then break end;
-                push(a, [i, j]),
-                None, None
-            ),
-            a, 1/0)
-    """)) # -> [[0, 0], [1, 0], [1, 1], [1, 2]]
-
-    print(toil.walk(r"""
-        a := []; for_(i, [0, 1],
-            for_(j, [0, 1, 2],
-                if i == 1 and j == 1 then break end;
-                push(a, [i, j]),
-                None, break),
-            1/0, a)
-    """)) # -> [[0, 0], [0, 1], [0, 2], [1, 0]]
+    toil.walk(""" syntax optstx, +[opt, EXPR], do, EXPR, end call optstx_ end """)
+    print(toil.ast(""" optstx do 4 end """)) # ->  (optstx_, [[], 4])
+    print(toil.ast(""" optstx opt 2 + 3 do 4 end """)) # ->  (optstx_, [[(add, [2, 3])], 4])
+    # toil.ast(""" optstx opt 2 + 3 opt 4 + 5 do 6 end """) # -> Expected do
