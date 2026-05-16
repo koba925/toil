@@ -213,7 +213,6 @@ class Parser:
             case Ident("["): return self._list()
             case Ident("{"): return self._dict()
             case Ident("syntax"): return self._syntax()
-            case Ident("quote"): return self._quote()
             case Ident("func"): return self._func()
             case Ident("macro"): return self._macro()
             case Ident("scope"): return self._scope()
@@ -280,12 +279,6 @@ class Parser:
         self._consume(Ident("end"))
         self._syntax_rules[keyword] = (op, form)
         return None
-
-    def _quote(self):
-        self._current_and_advance()
-        expr = self._expression()
-        self._consume(Ident("end"))
-        return (Ident("quote"), [expr])
 
     def _func(self):
         self._current_and_advance()
@@ -863,9 +856,13 @@ class Interpreter:
         self._env = Environment(self._env)
 
     def _corelib(self):
-        self.walk(r"""
-            __corelib := None;
+        self.walk(r""" __corelib := None """)
 
+        self.walk(r"""
+            syntax quote, EXPR, end call quote end
+        """)
+
+        self.walk(r"""
             defmacro_ := macro call_expr, body do
                 match call_expr
                     case tuple(name, args) then
