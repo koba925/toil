@@ -215,7 +215,6 @@ class Parser:
             case Ident("syntax"): return self._syntax()
             case Ident("quote"): return self._quote()
             case Ident("func"): return self._func()
-            case Ident("def"): return self._def()
             case Ident("macro"): return self._macro()
             case Ident("scope"): return self._scope()
             case Ident("if"): return self._if()
@@ -307,20 +306,6 @@ class Parser:
         body_expr = self._expression()
         self._consume(Ident("end"))
         return (Ident("macro"), [params, body_expr])
-
-    def _def(self):
-        self._current_and_advance()
-        call_expr = self._expression()
-        self._consume(Ident("do"))
-        body_expr = self._expression()
-        self._consume(Ident("end"))
-        match call_expr:
-            case (name, params) if isinstance(call_expr, tuple):
-                return (Ident("define"), [name, (Ident("func"), [params, body_expr])])
-            case Ident(name):
-                return (Ident("define"), [call_expr, (Ident("func"), [[], body_expr])])
-            case _:
-                assert False, "Invalid def syntax @ _def(): " + str(call_expr)
 
     def _scope(self):
         self._current_and_advance()
@@ -1018,7 +1003,9 @@ class Interpreter:
                     case _ then
                         raise('Invalid def syntax @ def() : {}'.format(call_expr))
                 end
-            end
+            end;
+
+            syntax def, EXPR, do, EXPR, end call def_ end
         """)
 
         self.walk(r"""
