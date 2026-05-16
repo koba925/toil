@@ -1003,11 +1003,13 @@ class Interpreter:
                     case _ then
                         raise('Invalid defmacro syntax')
                 end
-            end
+            end;
+
+            syntax defmacro, EXPR, do, EXPR, end call defmacro_ end
         """)
 
         self.walk(r"""
-            defmacro_(def_(call_expr, body),
+            defmacro def_(call_expr, body) do
                 match call_expr
                     case tuple(name, args) then
                         quote !name := func !!args do !body end end
@@ -1016,11 +1018,11 @@ class Interpreter:
                     case _ then
                         raise('Invalid def syntax @ def() : {}'.format(call_expr))
                 end
-            )
+            end
         """)
 
         self.walk(r"""
-            defmacro_(for_(var, coll, body, thn, els),
+            defmacro for_(var, coll, body, thn, els) do
                 _coll := gensym("coll");
                 _index := gensym("index");
                 quote
@@ -1031,17 +1033,17 @@ class Interpreter:
                         !body
                     then !thn else !els end
                 end
-            )
+            end
         """)
 
         self.walk(r"""
-            defmacro_(assert_(cond_expr, exc_expr),
+            defmacro assert_(cond_expr, exc_expr) do
                 quote if not !cond_expr then raise(!exc_expr) end end
-            )
+            end
         """)
 
         self.walk(r"""
-            defmacro_(defclass_(call_expr, body),
+            defmacro defclass_(call_expr, body) do
                 match call_expr
                     case tuple(name, args) then
                         quote def (!name)(!!args) do self := {}; !body; self end end
@@ -1050,13 +1052,13 @@ class Interpreter:
                     case _ then
                         raise("Invalid defclass_ syntax @ defclass_() : {}".format(call_expr))
                 end
-            );
+            end;
 
-            defmacro_(inherits(super),
+            defmacro inherits(super) do
                 quote self = !super end
-            );
+            end;
 
-            defmacro_(defmethod_(call_expr, body),
+            defmacro defmethod_(call_expr, body) do
                 match call_expr
                     case tuple(name, args) then
                         quote self[!str(name)] = func self, !!args do !body end end
@@ -1065,7 +1067,7 @@ class Interpreter:
                     case _ then
                         raise("Invalid defmethod_ syntax @ defmethod_(): {}".format(call_expr))
                 end
-            )
+            end
         """)
 
         self._env = Environment(self._env)
