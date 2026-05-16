@@ -220,7 +220,6 @@ class Parser:
             case Ident("if"): return self._if()
             case Ident("match"): return self._match()
             case Ident("while"): return self._while()
-            case Ident("for"): return self._for()
             case Ident("try"): return self._try()
             case Ident("assert"): return self._assert()
             case Ident("defclass"): return self._defclass()
@@ -359,26 +358,6 @@ class Parser:
             else_expr = []
         self._consume(Ident("end"))
         return (Ident("while"), [cond_expr, body_expr, then_expr, else_expr])
-
-    def _for(self):
-        self._current_and_advance()
-        var_pat = self._expression()
-        self._consume(Ident("in"))
-        coll_expr = self._expression()
-        self._consume(Ident("do"))
-        body_expr = self._expression();
-        if self._current_token() == Ident("then"):
-            self._current_and_advance()
-            then_expr = [self._expression()]
-        else:
-            then_expr = []
-        if self._current_token() == Ident("else"):
-            self._current_and_advance()
-            else_expr = [self._expression()]
-        else:
-            else_expr = []
-        self._consume(Ident("end"));
-        return (Ident("for"), [var_pat, coll_expr, body_expr, then_expr, else_expr])
 
     def _try(self):
         self._current_and_advance()
@@ -661,8 +640,6 @@ class Expander:
                 return (Ident("scope"), [self.expand(body_expr, Environment(env))])
             case (Ident("match"), [val_expr, cases]):
                 return self._match(val_expr, cases, env)
-            case (Ident("for"), [var_pat, coll_expr, body_expr, then_expr, else_expr]):
-                return self._for(var_pat, coll_expr, body_expr, then_expr, else_expr, env)
             case (Ident("try"), [body_expr, clauses]):
                 return self._try(body_expr, clauses, env)
             case (Ident("dot"), [target_expr, attr_name]):
@@ -707,15 +684,6 @@ class Expander:
         return (Ident("match"), [
             self.expand(val_expr, env),
             [(pat, self.expand(body_expr, env)) for pat, body_expr in cases]
-        ])
-
-    def _for(self, var_pat, coll_expr, body_expr, then_expr, else_expr, env):
-        return (Ident("for"), [
-            var_pat,
-            self.expand(coll_expr, env),
-            self.expand(body_expr, env),
-            self.expand(then_expr, env),
-            self.expand(else_expr, env)
         ])
 
     def _try(self, body_expr, clauses, env):
@@ -791,8 +759,6 @@ class Evaluator:
                 return self.eval(left_expr, env) or self.eval(right_expr, env)
             case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
                 return self._while(cond_expr, body_expr, then_expr, else_expr, env)
-            case (Ident("for"), [var_pat, coll_expr, body_expr, then_expr, else_expr]):
-                return self._for(var_pat, coll_expr, body_expr, then_expr, else_expr, env)
             case (Ident("try"), [body_expr, clauses]):
                 return self._try(body_expr, clauses, env)
             case (Ident("raise"), args):
@@ -845,18 +811,6 @@ class Evaluator:
 
     def _while(self, cond_expr, body_expr, then_expr, else_expr, env):
         while self.eval(cond_expr, env):
-            try:
-                self.eval(body_expr, env)
-            except ContinueException: continue
-            except BreakException:
-                return self._eval_optional_arg(else_expr, env)
-        return self._eval_optional_arg(then_expr, env)
-
-    def _for(self, var_pat, coll_expr, body_expr, then_expr, else_expr, env):
-        coll_val = self.eval(coll_expr, env)
-        for val in coll_val:
-            assert env.bind(var_pat, val), \
-                "Pattern mismatch @ _for(): " + str(var_pat) + ", " + str(val)
             try:
                 self.eval(body_expr, env)
             except ContinueException: continue
@@ -1010,6 +964,8 @@ class Interpreter:
 
         self.walk(r"""
             defmacro for_(var, coll, body, thn, els) do
+                thn = if thn == [] then None else thn[0] end;
+                els = if els == [] then None else els[0] end;
                 _coll := gensym("coll");
                 _index := gensym("index");
                 quote
@@ -1020,7 +976,9 @@ class Interpreter:
                         !body
                     then !thn else !els end
                 end
-            end
+            end;
+
+            syntax for, EXPR, in, EXPR, do, EXPR, +[then, EXPR], +[else, EXPR], end call for_ end
         """)
 
         self.walk(r"""
@@ -1172,23 +1130,7 @@ if __name__ == "__main__":
             walk_file(sys.argv[1])
 
     # Example
-    print(toil.walk(r""" syntax myadd, EXPR, to, EXPR, end call add end """)) # -> None
-    print(toil.ast(r""" myadd 2 * 3 to 4 * 5 end """)) # -> (add, [(mul, [2, 3]), (mul, [4, 5])])
-    print(toil.walk(r""" myadd 2 * 3 to 4 * 5 end """)) # -> 26
 
-    toil.walk(r"""
-        defmacro_(when_(cond, body), quote if !cond then !body else None end end);
-        syntax when, EXPR, do, EXPR, end call when_ end
-    """)
-    print(toil.ast(r""" when a == b do 1 / 0 end """)) # -> (if, [(equal, [a, b]), (div, [1, 0]), None])
-    print(toil.walk(r""" a := 2; b := 3; when a == b do 1 / 0 end """)) # -> None
-
-    toil.walk(""" syntax repstx, *[rep, EXPR], do, EXPR, end call repstx_ end """)
-    print(toil.ast(""" repstx do 4 end """)) # ->  (repstx_, [[], 4])
-    print(toil.ast(""" repstx rep 2 + 3 do 4 end """)) # -> (repstx_, [[[(add, [2, 3])]], 4])
-    print(toil.ast(""" repstx rep 2 + 3 rep 4 + 5 do 6 end """)) # -> (repstx_, [[[(add, [2, 3])], [(add, [4, 5])]], 6])
-
-    toil.walk(""" syntax optstx, +[opt, EXPR], do, EXPR, end call optstx_ end """)
-    print(toil.ast(""" optstx do 4 end """)) # ->  (optstx_, [[], 4])
-    print(toil.ast(""" optstx opt 2 + 3 do 4 end """)) # ->  (optstx_, [[(add, [2, 3])], 4])
-    # toil.ast(""" optstx opt 2 + 3 opt 4 + 5 do 6 end """) # -> Expected do
+    print(toil.walk(r"""
+        a := []; for i in [0, 1, 2] do push(a, i) then [i, a] else 1/0 end
+    """))

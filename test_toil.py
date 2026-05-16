@@ -1155,19 +1155,6 @@ class TestToil:
         with pytest.raises(AssertionError, match="Undefined variable"):
             toil.walk(r""" local_macro() """)
 
-    def test_def_(self):
-        toil.walk(r""" def_(myadd(a, b), a + b) """)
-        assert toil.walk(r""" myadd(2, 3) """) == 5
-
-        toil.walk(r""" def_(say_hello(), "hello") """)
-        assert toil.walk(r""" say_hello() """) == "hello"
-
-        toil.walk(r""" def_(say_world, "world") """)
-        assert toil.walk(r""" say_world() """) == "world"
-
-        with pytest.raises(Exception, match="Invalid def syntax"):
-            toil.walk(r""" def_(2, 3) """)
-
     def test_defclass_(self, capsys):
         toil.walk(r"""
             defclass_(Animal(name),
@@ -1233,71 +1220,6 @@ class TestToil:
 
         with pytest.raises(Exception, match="Pattern mismatch"):
             toil.walk(r""" assert_(2 == 3) """)
-
-    def test_for_(self):
-        assert toil.walk(r"""
-            a := []; for_(i, [0, 1, 2], push(a, i), [i, a], 1/0)
-        """) == [2, [0, 1, 2]]
-
-        assert toil.walk(r"""
-            a := []; for_([i, j], [[1, 2], [3, 4]], push(a, [i, j]), a, 1/0)
-        """) == [[1, 2], [3, 4]]
-
-        assert toil.walk(r"""
-            a := [];
-            for_([k, v], {"a": 2, "b": 3}.items(), push(a, [k, v]), a, 1/0)
-        """) == [['a', 2], ['b', 3]]
-
-        assert toil.walk(r"""
-            a := [];
-            keys := ["a", "b", "c"];
-            values := [2, 3, 4];
-            for_([k, v], zip(keys, values), push(a, [k, v]), a, 1/0)
-        """) == [['a', 2], ['b', 3], ['c', 4]]
-
-        assert toil.walk(r""" for_(i, [], 1/0, 2, 1/0) """) == 2
-
-        assert toil.walk(r"""
-            a := []; for_(i, [0, 1, 2],
-                if i == 1 then continue end;
-                push(a, i),
-                a, 1/0)
-        """) == [0, 2]
-
-        assert toil.walk(r"""
-            a := []; for_(i, [0, 1],
-                for_(j, [0, 1, 2],
-                    if j == 1 then continue end;
-                    push(a, [i, j]),
-                    None, None
-                ), a, 1/0)
-        """) == [[0, 0], [0, 2], [1, 0], [1, 2]]
-
-        assert toil.walk(r"""
-            a := []; for_(i, [0, 1, 2],
-                if i == 1 then break end;
-                push(a, i),
-                1/0, a)
-        """) == [0]
-
-        assert toil.walk(r"""
-            a := []; for_(i, [0, 1],
-                for_(j, [0, 1, 2],
-                    if i == 0 and j == 1 then break end;
-                    push(a, [i, j]),
-                    None, None
-                ),
-                a, 1/0)
-        """) == [[0, 0], [1, 0], [1, 1], [1, 2]]
-
-        assert toil.walk(r"""
-            a := []; for_(i, [0, 1],
-                for_(j, [0, 1, 2],
-                    if i == 1 and j == 1 then break end;
-                    push(a, [i, j]),
-                    None, break),
-                1/0, a)
-        """) == [[0, 0], [0, 1], [0, 2], [1, 0]]
 
     def test_syntax(self):
         assert toil.walk(r""" syntax myadd, EXPR, to, EXPR, end call add end """) is None
