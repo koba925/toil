@@ -213,13 +213,6 @@ class Parser:
             case Ident("["): return self._list()
             case Ident("{"): return self._dict()
             case Ident("syntax"): return self._syntax()
-            case Ident("func"): return self._func()
-            case Ident("macro"): return self._macro()
-            case Ident("scope"): return self._scope()
-            case Ident("if"): return self._if()
-            case Ident("match"): return self._match()
-            case Ident("while"): return self._while()
-            case Ident("try"): return self._try()
             case Ident() as keyword  if keyword in self._syntax_rules:
                 return self._apply_syntax(self._syntax_rules[keyword])
             case Ident(name) if is_ident(name): return self._current_and_advance()
@@ -279,88 +272,6 @@ class Parser:
         self._consume(Ident("end"))
         self._syntax_rules[keyword] = (op, form)
         return None
-
-    def _func(self):
-        self._current_and_advance()
-        params = self._comma_separated_exprs(Ident("do"))
-        self._consume(Ident("do"))
-        body_expr = self._expression()
-        self._consume(Ident("end"))
-        return (Ident("func"), [params, body_expr])
-
-    def _macro(self):
-        self._current_and_advance()
-        params = self._comma_separated_exprs(Ident("do"))
-        self._consume(Ident("do"))
-        body_expr = self._expression()
-        self._consume(Ident("end"))
-        return (Ident("macro"), [params, body_expr])
-
-    def _scope(self):
-        self._current_and_advance()
-        body_expr = self._expression()
-        self._consume(Ident("end"))
-        return (Ident("scope"), [body_expr])
-
-    def _if(self):
-        self._current_and_advance()
-        cond_expr = self._expression()
-        self._consume(Ident("then"))
-        then_expr = self._expression()
-        if self._current_token() == Ident("elif"):
-            else_expr = self._if()
-        elif self._current_token() == Ident("else"):
-            self._current_and_advance()
-            else_expr = self._expression()
-            self._consume(Ident("end"))
-        else:
-            else_expr = None
-            self._consume(Ident("end"))
-        return (Ident("if"), [cond_expr, then_expr, else_expr])
-
-    def _match(self):
-        self._current_and_advance()
-        val_expr = self._expression()
-        cases = []
-        while self._current_token() == Ident("case"):
-            self._current_and_advance()
-            pattern = self._expression()
-            self._consume(Ident("then"))
-            body_expr = self._expression()
-            cases.append((pattern, body_expr))
-        self._consume(Ident("end"))
-        return (Ident("match"), [val_expr, cases])
-
-    def _while(self):
-        self._current_and_advance()
-        cond_expr = self._expression()
-        self._consume(Ident("do"))
-        body_expr = self._expression()
-        if self._current_token() == Ident("then"):
-            self._current_and_advance()
-            then_expr = [self._expression()]
-        else:
-            then_expr = []
-        if self._current_token() == Ident("else"):
-            self._current_and_advance()
-            else_expr = [self._expression()]
-        else:
-            else_expr = []
-        self._consume(Ident("end"))
-        return (Ident("while"), [cond_expr, body_expr, then_expr, else_expr])
-
-    def _try(self):
-        self._current_and_advance()
-        body_expr = self._expression()
-        clauses = []
-        while self._current_token() == Ident("except"):
-            self._current_and_advance()
-            exc_pat = self._expression()
-            self._consume(Ident("then"))
-            exc_expr = self._expression()
-            clauses.append((exc_pat, exc_expr))
-        self._consume(Ident("end"))
-        return (Ident("try"), [body_expr, clauses])
 
     def _apply_syntax(self, rule):
         def match_args(form):
@@ -859,7 +770,13 @@ class Interpreter:
         self.walk(r""" __corelib := None """)
 
         self.walk(r"""
-            syntax quote, EXPR, end call quote end
+            syntax quote, EXPR, end call quote end;
+            syntax func, EXPRS, do, EXPR, end call func end;
+            syntax macro, EXPRS, do, EXPR, end call macro end;
+            syntax scope, EXPR, end call scope end;
+            syntax match, EXPR, *[case, EXPR, then, EXPR], end call match end;
+            syntax while, EXPR, do, EXPR, +[then, EXPR], +[else, EXPR], end call while end;
+            syntax try, EXPR, *[except, EXPR, then, EXPR], end call try end
         """)
 
         self.walk(r"""
@@ -890,6 +807,21 @@ class Interpreter:
             end;
 
             syntax def, EXPR, do, EXPR, end call def_ end
+        """)
+
+        self.walk(r"""
+            defmacro if_(cnd, thn, elifs, els) do
+                expr := if(els == [], None, els[0]);
+                i := len(elifs) - 1;
+                while i >= 0 do
+                    [elif_cnd, elif_thn] := elifs[i];
+                    expr = quote if(!elif_cnd, !elif_thn, !expr) end;
+                    i = i - 1
+                end;
+                quote if(!cnd, !thn, !expr) end
+            end;
+
+            syntax if, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], +[else, EXPR], end call if_ end
         """)
 
         self.walk(r"""
