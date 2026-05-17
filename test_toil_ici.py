@@ -52,6 +52,11 @@ class TestICI:
         with pytest.raises(AssertionError, match="Undefined variable"):
             toil.run(r""" d """)
 
+    def test_while(self, capsys):
+        assert toil.run(r""" i := 0; while i < 3 do i = i + 1 then i + 1 end """) == 4
+        assert toil.run(r""" i := 0; while i < 3 do print(i); i = i + 1 end """) is None
+        assert capsys.readouterr().out == "0\n1\n2\n"
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

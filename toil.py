@@ -730,10 +730,12 @@ class Compiler:
             case (Ident('seq'), exprs): self._seq(exprs)
             case (Ident('if'), [cond_expr, then_expr, else_expr]):
                 self._if(cond_expr, then_expr, else_expr)
+            case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
+                self._while(cond_expr, body_expr, then_expr, else_expr)
             case (Ident('print'), [expr]):
                 self._expression(expr)
                 self._code.append(("print",))
-            case (Ident(op), [left, right]) if op in ("add", "mul", "equal"):
+            case (Ident(op), [left, right]) if op in ("add", "mul", "equal", "less"):
                 self._expression(left)
                 self._expression(right)
                 self._code.append((op,))
@@ -757,6 +759,17 @@ class Compiler:
         self._set_operand(else_jump, self._current_addr())
         self._expression(else_expr)
         self._set_operand(end_jump, self._current_addr())
+
+    def _while(self, cond_expr, body_expr, then_expr, else_expr):
+        loop_jump = self._current_addr()
+        self._expression(cond_expr)
+        cond_jump = self._current_addr()
+        self._code.append(("jump_if_false", None))
+        self._expression(body_expr)
+        self._code.append(("pop",))
+        self._code.append(("jump", loop_jump))
+        self._set_operand(cond_jump, self._current_addr())
+        self._expression(then_expr[0] if then_expr else None)
 
     def _set_operand(self, ip, operand):
         inst = self._code[ip]
@@ -797,6 +810,7 @@ class VM:
                 case ("add",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l + r)
                 case ("mul",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l * r)
                 case ("equal",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l == r)
+                case ("less",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l < r)
                 case ("print",): val = self._stack.pop(); print(val); self._stack.append(None)
                 case _:
                     assert False, f"Invalid instruction @ execute(): {inst}"
@@ -1162,3 +1176,9 @@ if __name__ == "__main__":
 
     print(toil.run(r""" a := 2; scope d := 3 end """)) # -> 3
     # toil.run(r""" d """) # -> Undefined variable
+
+    # While
+    print_code(toil.code(r""" while i < 3 do i = i + 1 then i + 1 end """))
+    print(toil.run(r""" i := 0; while i < 3 do i = i + 1 then i + 1 end """)) # -> 4
+    print_code(toil.code(r""" while i < 3 do print(i); i = i + 1 end """))
+    print(toil.run(r""" i := 0; while i < 3 do print(i); i = i + 1 end """)) # -> 0\n1\n2\nNone
