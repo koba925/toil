@@ -45,7 +45,7 @@ defclass Scanner(src) do
     defmethod _number do
         start := self._pos;
         while self._current_char().isdigit() do self._advance() end;
-        self._tokens.push(int(self._src.slice(start, self._pos)))
+        self._tokens.push(to_int(self._src.slice(start, self._pos)))
     end;
 
     defmethod _raw_string do
@@ -203,7 +203,7 @@ defclass Parser(tokens) do
                     assert attr_name.type() == 'Ident' else
                         'Invalid attribute @ _call_index_dot(): {}'.format(attr_name)
                     end;
-                    target = tuple(Ident('dot'), [target, str(attr_name)])
+                    target = tuple(Ident('dot'), [target, to_str(attr_name)])
             end
         end;
         target
@@ -461,12 +461,12 @@ defclass Parser(tokens) do
         match call_expr
             case tuple(name, args) then
                 tuple(Ident('assign'), [
-                    tuple(Ident('dot'), [Ident('self'), str(name)]),
+                    tuple(Ident('dot'), [Ident('self'), to_str(name)]),
                     tuple(Ident('func'), [[Ident('self')] + args, body_expr])
                 ])
             case Ident(name) then
                 tuple(Ident('assign'), [
-                    tuple(Ident('dot'), [Ident('self'), str(name)]),
+                    tuple(Ident('dot'), [Ident('self'), to_str(name)]),
                     tuple(Ident('func'), [[Ident('self')], body_expr])
                 ])
             case _ then
@@ -476,26 +476,26 @@ defclass Parser(tokens) do
 
     defmethod _binary_left(ops, sub_elem) do
         left := sub_elem();
-        while type(op := self._current_token()) == 'Ident' and str(op).in(ops) do
+        while type(op := self._current_token()) == 'Ident' and to_str(op).in(ops) do
             self._current_and_advance();
             right := sub_elem();
-            left = tuple(ops[str(op)], [left, right])
+            left = tuple(ops[to_str(op)], [left, right])
         then left end
     end;
 
     defmethod _binary_right(ops, sub_elem) do
         left := sub_elem();
-        if type(op := self._current_token()) == 'Ident' and str(op).in(ops) then
+        if type(op := self._current_token()) == 'Ident' and to_str(op).in(ops) then
             self._current_and_advance();
             right := self._binary_right(ops, sub_elem);
-            tuple(ops[str(op)], [left, right])
+            tuple(ops[to_str(op)], [left, right])
         else left end
     end;
 
     defmethod _unary(ops, sub_elem) do
-        if type(op := self._current_token()) == 'Ident' and str(op).in(ops) then
+        if type(op := self._current_token()) == 'Ident' and to_str(op).in(ops) then
             self._current_and_advance();
-            tuple(ops[str(op)], [self._unary(ops, sub_elem)])
+            tuple(ops[to_str(op)], [self._unary(ops, sub_elem)])
         else sub_elem() end
     end;
 
@@ -561,7 +561,7 @@ defclass Environment(parent) do
             case tuple(Ident('or'), [left_pat, right_pat]) then
                 self.bind(left_pat, value) or self.bind(right_pat, value)
             case tuple(Ident('Ident'), [name_pat]) then
-                value.type() == 'Ident' and self.bind(name_pat, str(value))
+                value.type() == 'Ident' and self.bind(name_pat, to_str(value))
             case tuple(Ident('tuple'), expr_pats) then
                 value.type() == 'tuple' and expr_pats.len() == value.len() and
                 zip(expr_pats, value).all([[p, v]] -> self.bind(p, v))
@@ -620,7 +620,7 @@ defclass Environment(parent) do
             tmp_val.pop(key)
         end;
 
-        if rest_name != None then self.define(str(rest_name), tmp_val) end;
+        if rest_name != None then self.define(to_str(rest_name), tmp_val) end;
         True
     end
 end;
@@ -634,7 +634,7 @@ defclass Evaluator do
             case bool(_) or int(_) or str(_) then expr
             case list(_) then expr.map(e -> self.eval(e, env))
             case dict(_) then
-                expr.items().map([[k, v]] -> [k, self.eval(v, env)]).dict()
+                expr.items().map([[k, v]] -> [k, self.eval(v, env)]).to_dict()
             case Ident('continue') then raise(['ContinueException'])
             case Ident('break') then raise(['BreakException'])
             case Ident(name) then env.val(name)
@@ -855,6 +855,10 @@ defclass Interpreter do
         self._env.define('greater_equal', tuple(Ident('hostfunc'), args -> args[0] >= args[1]));
         self._env.define('not', tuple(Ident('hostfunc'), args -> not args[0]));
 
+        self._env.define('list', tuple(Ident('hostfunc'), args -> args));
+        self._env.define('tuple', tuple(Ident('hostfunc'), args -> apply(tuple, args)));
+        self._env.define('Ident', tuple(Ident('hostfunc'), args -> Ident(args[0])));
+
         self._env.define('len', tuple(Ident('hostfunc'), args -> len(args[0])));
         self._env.define('index', tuple(Ident('hostfunc'), args -> index(args[0], args[1])));
         self._env.define('slice', tuple(Ident('hostfunc'), args -> slice(args[0], args[1], args[2])));
@@ -870,13 +874,12 @@ defclass Interpreter do
         self._env.define('items', tuple(Ident('hostfunc'), args -> items(args[0])));
 
         self._env.define('type', tuple(Ident('hostfunc'), args -> type(args[0])));
-        self._env.define('bool', tuple(Ident('hostfunc'), args -> bool(args[0])));
-        self._env.define('int', tuple(Ident('hostfunc'), args -> int(args[0])));
-        self._env.define('str', tuple(Ident('hostfunc'), args -> str(args[0])));
-        self._env.define('list', tuple(Ident('hostfunc'), args -> list(args[0])));
-        self._env.define('dict', tuple(Ident('hostfunc'), args -> dict(args[0])));
-        self._env.define('Ident', tuple(Ident('hostfunc'), args -> Ident(args[0])));
-        self._env.define('tuple', tuple(Ident('hostfunc'), args -> apply(tuple, args)));
+        self._env.define('to_bool', tuple(Ident('hostfunc'), args -> to_bool(args[0])));
+        self._env.define('to_int', tuple(Ident('hostfunc'), args -> to_int(args[0])));
+        self._env.define('to_str', tuple(Ident('hostfunc'), args -> to_str(args[0])));
+        self._env.define('to_list', tuple(Ident('hostfunc'), args -> to_list(args[0])));
+        self._env.define('to_dict', tuple(Ident('hostfunc'), args -> to_dict(args[0])));
+        self._env.define('to_tuple', tuple(Ident('hostfunc'), args -> to_tuple(args[0])));
 
         self._env.define('print', tuple(Ident('hostfunc'), args -> apply(print, args)));
 

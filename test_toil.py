@@ -411,7 +411,7 @@ class TestToil:
             toil.walk(r""" [1, 2,] """)
         assert capsys.readouterr().out == "2\n3\n"
 
-    def test_list_functions(self, capsys):
+    def test_list_functions(self):
         toil.walk(r""" d := [2, 3, 4] """)
         assert toil.walk(r""" len(d) """) == 3
         assert toil.walk(r""" index(d, 2) """) == 4
@@ -456,7 +456,7 @@ class TestToil:
             toil.walk(r""" {"a": 1,} """)
 
     def test_dict_functions(self):
-        assert toil.walk(r""" a := dict([["aaa", 2], ["bbb", 3], ["ccc", 4]]) """) == {'aaa': 2, 'bbb': 3, 'ccc': 4}
+        assert toil.walk(r""" a := to_dict([["aaa", 2], ["bbb", 3], ["ccc", 4]]) """) == {'aaa': 2, 'bbb': 3, 'ccc': 4}
         assert toil.walk(r""" len(a) """) == 3
         assert toil.walk(r""" in("aaa", a) """) is True
         assert toil.walk(r""" in("ddd", a) """) is False
@@ -471,17 +471,20 @@ class TestToil:
         assert toil.walk(r""" type([]) """) == "list"
         assert toil.walk(r""" type({}) """) == "dict"
 
-        assert toil.walk(r""" bool(True) """) is True
-        assert toil.walk(r""" bool(1) """) is True
-        assert toil.walk(r""" int(2) """) == 2
-        assert toil.walk(r""" int("2") """) == 2
-        assert toil.walk(r""" str("a") """) == "a"
-        assert toil.walk(r""" str(2) """) == "2"
-        assert toil.walk(r""" list([2, 3]) """) == [2, 3]
-        assert toil.walk(r""" list({a: 2, b: 3}) """) == ["a", "b"]
-        assert toil.walk(r""" dict({a: 2, b: 3}) """) == {"a": 2, "b": 3}
-        assert toil.walk(r""" dict([["a", 2], ["b", 3]]) """) == {"a": 2, "b": 3}
-        assert toil.walk(r""" type(tuple([2, 3])) """) == "tuple"
+        assert toil.walk(r""" to_bool(True) """) is True
+        assert toil.walk(r""" to_bool(1) """) is True
+        assert toil.walk(r""" to_int(2) """) == 2
+        assert toil.walk(r""" to_int("2") """) == 2
+        assert toil.walk(r""" to_str("a") """) == "a"
+        assert toil.walk(r""" to_str(2) """) == "2"
+        assert toil.walk(r""" to_list(to_tuple([2, 3])) """) == [2, 3]
+        assert toil.walk(r""" to_list({a: 2, b: 3}) """) == ["a", "b"]
+        assert toil.walk(r""" to_dict({a: 2, b: 3}) """) == {"a": 2, "b": 3}
+        assert toil.walk(r""" to_dict([["a", 2], ["b", 3]]) """) == {"a": 2, "b": 3}
+        assert toil.walk(r""" to_tuple([2, 3]) """) == (2, 3)
+
+        assert toil.walk(r""" list(2, 3) """) == [2, 3]
+        assert toil.walk(r""" tuple(2, 3) """) == (2, 3)
 
     def test_scope(self):
         assert toil.walk(r""" a := 2; scope a end """) == 2
@@ -820,6 +823,7 @@ class TestToil:
             toil.walk(r""" break """)
 
     def test_for(self):
+        assert toil.walk(r""" for i in [0, 1, 2] do i end """) is None
         assert toil.walk(r""" a := []; for i in [0, 1, 2] do push(a, i) end; a """) == [0, 1, 2]
 
         assert toil.walk(r"""
@@ -885,6 +889,7 @@ class TestToil:
         """) == [[0, 0], [0, 2], [1, 0], [1, 2]]
 
     def test_for_break(self):
+        assert toil.walk(r""" for i in [0, 1, 2] do break end """) is None
         assert toil.walk(r"""
             a := []; for i in [0, 1, 2] do
                 if i == 1 then break end;

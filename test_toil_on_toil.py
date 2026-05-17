@@ -519,7 +519,7 @@ class TestToT:
             tot.walk(r""" [1, 2,] """)
         assert capsys.readouterr().out == "2\n3\n"
 
-    def test_list_functions(self, capsys):
+    def test_list_functions(self):
         tot.walk(r""" d := [2, 3, 4] """)
         assert tot.walk(r""" len(d) """) == 3
         assert tot.walk(r""" index(d, 2) """) == 4
@@ -564,7 +564,7 @@ class TestToT:
             tot.walk(r""" {"a": 1,} """)
 
     def test_dict_functions(self):
-        assert tot.walk(r""" a := dict([["aaa", 2], ["bbb", 3], ["ccc", 4]]) """) == {'aaa': 2, 'bbb': 3, 'ccc': 4}
+        assert tot.walk(r""" a := to_dict([["aaa", 2], ["bbb", 3], ["ccc", 4]]) """) == {'aaa': 2, 'bbb': 3, 'ccc': 4}
         assert tot.walk(r""" len(a) """) == 3
         assert tot.walk(r""" in("aaa", a) """) is True
         assert tot.walk(r""" in("ddd", a) """) is False
@@ -579,17 +579,20 @@ class TestToT:
         assert tot.walk(r""" type([]) """) == "list"
         assert tot.walk(r""" type({}) """) == "dict"
 
-        assert tot.walk(r""" bool(True) """) is True
-        assert tot.walk(r""" bool(1) """) is True
-        assert tot.walk(r""" int(2) """) == 2
-        assert tot.walk(r""" int("2") """) == 2
-        assert tot.walk(r""" str("a") """) == "a"
-        assert tot.walk(r""" str(2) """) == "2"
-        assert tot.walk(r""" list([2, 3]) """) == [2, 3]
-        assert tot.walk(r""" list({a: 2, b: 3}) """) == ["a", "b"]
-        assert tot.walk(r""" dict({a: 2, b: 3}) """) == {"a": 2, "b": 3}
-        assert tot.walk(r""" dict([["a", 2], ["b", 3]]) """) == {"a": 2, "b": 3}
-        assert tot.walk(r""" type(tuple([2, 3])) """) == "tuple"
+        assert tot.walk(r""" to_bool(True) """) is True
+        assert tot.walk(r""" to_bool(1) """) is True
+        assert tot.walk(r""" to_int(2) """) == 2
+        assert tot.walk(r""" to_int("2") """) == 2
+        assert tot.walk(r""" to_str("a") """) == "a"
+        assert tot.walk(r""" to_str(2) """) == "2"
+        assert tot.walk(r""" to_list([2, 3]) """) == [2, 3]
+        assert tot.walk(r""" to_list({a: 2, b: 3}) """) == ["a", "b"]
+        assert tot.walk(r""" to_dict({a: 2, b: 3}) """) == {"a": 2, "b": 3}
+        assert tot.walk(r""" to_dict([["a", 2], ["b", 3]]) """) == {"a": 2, "b": 3}
+        assert tot.walk(r""" type(to_tuple([2, 3])) """) == "tuple"
+
+        assert tot.walk(r""" list(2, 3) """) == [2, 3]
+        assert tot.walk(r""" tuple(2, 3) """) == (2, 3)
 
     def test_scope(self):
         assert tot.walk(r""" a := 2; scope a end """) == 2
@@ -825,7 +828,7 @@ class TestToT:
         assert tot.walk(r""" match [2, 3] case [a, 4] then "no" case _ then a end """) == 2
 
     def test_while(self):
-        assert tot.walk(r""" i := 0; while i < 2 do i = i + 1 end """) == None
+        assert tot.walk(r""" i := 0; while i < 2 do i = i + 1 end """) is None
         assert tot.walk(r"""
             a := [];
             i := 0; while i < 3 do push(a, i); i = i + 1 end;
@@ -880,7 +883,7 @@ class TestToT:
             tot.walk(r""" continue """)
 
     def test_break(self):
-        assert tot.walk(r""" i := 0; while i < 2 do break end """) == None
+        assert tot.walk(r""" i := 0; while i < 2 do break end """) is None
         assert tot.walk(r"""
             a := [];
             i := 0; while i < 3 do
@@ -928,7 +931,7 @@ class TestToT:
             tot.walk(r""" break """)
 
     def test_for(self):
-        assert tot.walk(r""" for i in [0, 1, 2] do i end """) == None
+        assert tot.walk(r""" for i in [0, 1, 2] do i end """) is None
         assert tot.walk(r""" a := []; for i in [0, 1, 2] do push(a, i) end; a """) == [0, 1, 2]
 
         assert tot.walk(r"""
@@ -994,7 +997,7 @@ class TestToT:
         """) == [[0, 0], [0, 2], [1, 0], [1, 2]]
 
     def test_for_break(self):
-        assert tot.walk(r""" for i in [0, 1, 2] do break end """) == None
+        assert tot.walk(r""" for i in [0, 1, 2] do break end """) is None
         assert tot.walk(r"""
             a := []; for i in [0, 1, 2] do
                 if i == 1 then break end;
@@ -1114,7 +1117,7 @@ class TestToT:
         with pytest.raises(Exception, match="Expected do"):
             tot.walk(r""" defclass Foo(x) end """)
         with pytest.raises(Exception, match="Invalid defmethod syntax"):
-            tot.walk(r""" defclass Foo do defmethod 2 do end end """)
+            tot.walk(r""" defclass Foo do defmethod 2 do 3 end end """)
 
     def test_assert(self):
         assert tot.walk(r""" assert 2 == 2 else 1/0 end """) is None

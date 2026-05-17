@@ -19,6 +19,8 @@ type SyntaxRules = dict[Ident, SyntaxRule]
 type Source = str
 type Token = Ident | int | str | bool | None
 type Expr = Any
+type Inst = tuple
+type Code = list[Inst]
 type Value = Any
 type SymbolTable = dict[str, Value]
 
@@ -700,6 +702,109 @@ class Evaluator:
                 assert False, f"Invalid operator @ apply(): {op_val}"
 
 
+class Compiler:
+    def __init__(self):
+        self._code = []
+
+    def compile(self,expr: Expr) -> Code:
+        self._code = []
+        self._expression(expr)
+        self._code.append(("halt",))
+        return self._code
+
+    def _expression(self, expr):
+        match expr:
+            case None | bool() | int() | str():
+                self._code.append(("const", expr))
+            case Ident(name): self._code.append(("get", name))
+            case (Ident("define"), [var, expr]):
+                self._expression(expr)
+                self._code.append(("def", var))
+            case (Ident("assign"), [var, expr]):
+                self._expression(expr)
+                self._code.append(("set", var))
+            case (Ident("scope"), [body_expr]):
+                self._code.append(("push_env",))
+                self._expression(body_expr)
+                self._code.append(("pop_env",))
+            case (Ident('seq'), exprs): self._seq(exprs)
+            case (Ident('if'), [cond_expr, then_expr, else_expr]):
+                self._if(cond_expr, then_expr, else_expr)
+            case (Ident('print'), [expr]):
+                self._expression(expr)
+                self._code.append(("print",))
+            case (Ident(op), [left, right]) if op in ("add", "mul", "equal"):
+                self._expression(left)
+                self._expression(right)
+                self._code.append((op,))
+            case _:
+                assert False, f"Unsupported expression @ compile(): {expr}"
+
+    def _seq(self, exprs):
+        assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
+        for expr in exprs[:-1]:
+            self._expression(expr)
+            self._code.append(("pop",))
+        self._expression(exprs[-1])
+
+    def _if(self, cond_expr, then_expr, else_expr):
+        self._expression(cond_expr)
+        else_jump = self._current_addr()
+        self._code.append(("jump_if_false", None))
+        self._expression(then_expr)
+        end_jump = self._current_addr()
+        self._code.append(("jump", None))
+        self._set_operand(else_jump, self._current_addr())
+        self._expression(else_expr)
+        self._set_operand(end_jump, self._current_addr())
+
+    def _set_operand(self, ip, operand):
+        inst = self._code[ip]
+        self._code[ip] = (inst[0], operand)
+
+    def _current_addr(self):
+        return len(self._code)
+
+class VM:
+    def __init__(self, env: Environment):
+        self._code = []
+        self._ip = 0
+        self._stack = []
+        self._ctrl_stack = []
+        self._env = env
+
+    def load(self, code: Code) -> None:
+        self._code = code
+        self._ip = 0
+
+    def execute(self) -> Value:
+        while True:
+            inst = self._code[self._ip]; self._ip += 1
+            match inst:
+                case ("halt",): break
+                case ("const", val): self._stack.append(val)
+                case ("def", Ident(name)): self._env.define(name, self._stack[-1])
+                case ("set", Ident(name)): self._env.assign(name, self._stack[-1])
+                case ("get", name): self._stack.append(self._env.val(name))
+                case ("pop",): self._stack.pop()
+                case ("push_env",):
+                    self._ctrl_stack.append(self._env)
+                    self._env = Environment(self._env)
+                case ("pop_env",): self._env = self._ctrl_stack.pop()
+                case ("jump", addr): self._ip = addr
+                case ("jump_if_false", addr):
+                    if not self._stack.pop(): self._ip = addr
+                case ("add",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l + r)
+                case ("mul",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l * r)
+                case ("equal",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l == r)
+                case ("print",): val = self._stack.pop(); print(val); self._stack.append(None)
+                case _:
+                    assert False, f"Invalid instruction @ execute(): {inst}"
+        assert len(self._ctrl_stack) == 0, f"Invalid control stack state @ execute(): {self._ctrl_stack}"
+        assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
+        return self._stack.pop()
+
+
 class Interpreter:
     def __init__(self) -> None:
         self._syntax_rules = {}
@@ -730,6 +835,10 @@ class Interpreter:
         self._env.define("greater_equal", lambda args: args[0] >= args[1])
         self._env.define("not", lambda args: not args[0])
 
+        self._env.define("list", lambda args: args)
+        self._env.define("tuple", lambda args: tuple(args))
+        self._env.define("Ident", lambda args: Ident(args[0]))
+
         self._env.define("len", lambda args: len(args[0]))
         self._env.define("index", lambda args: args[0][args[1]])
         self._env.define("slice", lambda args: args[0][args[1]:args[2]])
@@ -745,13 +854,12 @@ class Interpreter:
         self._env.define("items", lambda args: [list(e) for e in args[0].items()])
 
         self._env.define("type", lambda args: toil_type(args[0]))
-        self._env.define("bool", lambda args: bool(args[0]))
-        self._env.define("int", lambda args: int(args[0]))
-        self._env.define("str", lambda args: str(args[0]))
-        self._env.define("list", lambda args: list(args[0]))
-        self._env.define("dict", lambda args: dict(args[0]))
-        self._env.define("Ident", lambda args: Ident(args[0]))
-        self._env.define("tuple", lambda args: tuple(args))
+        self._env.define("to_bool", lambda args: bool(args[0]))
+        self._env.define("to_int", lambda args: int(args[0]))
+        self._env.define("to_str", lambda args: str(args[0]))
+        self._env.define("to_list", lambda args: list(args[0]))
+        self._env.define("to_dict", lambda args: dict(args[0]))
+        self._env.define("to_tuple", lambda args: tuple(args[0]))
 
         self._env.define("print", lambda args: print(*args))
 
@@ -869,9 +977,9 @@ class Interpreter:
             defmacro defmethod_(call_expr, body) do
                 match call_expr
                     case tuple(name, args) then
-                        quote self[!str(name)] = func self, !!args do !body end end
+                        quote self[!to_str(name)] = func self, !!args do !body end end
                     case Ident(name) then
-                        quote self[!str(name)] = func self do !body end end
+                        quote self[!to_str(name)] = func self do !body end end
                     case _ then
                         raise("Invalid defmethod syntax @ defmethod(): {}".format(call_expr))
                 end
@@ -966,36 +1074,91 @@ class Interpreter:
     def walk(self, src: Source) -> Value:
         return self.eval(self.ast(src))
 
+    def compile(self, ast: Expr) -> Code:
+        return Compiler().compile(ast)
+
+    def code(self, src: Source) -> Code:
+        return self.compile(self.ast(src))
+
+    def execute(self, code: Code) -> Value:
+        vm = VM(self._env)
+        vm.load(code)
+        return vm.execute()
+
+    def run(self, src: Source) -> Value:
+        return self.execute(self.code(src))
+
 if __name__ == "__main__":
     import sys
 
     toil = Interpreter().init_env().stdlib()
 
-    def repl():
+    def repl(walk_or_run):
         while True:
             print("\nInput source and enter Ctrl+D:")
-            if (src := sys.stdin.read()) == "": exit(0)
+            if (src := sys.stdin.read()) == "":
+                exit(0)
             try:
                 expr = toil.ast(src)
                 print("AST:", expr, sep="\n")
-                print("Output:")
-                result = toil.eval(expr)
+                if walk_or_run == "walk":
+                    print("Output:")
+                    result = toil.eval(expr)
+                else:
+                    code = toil.code(src)
+                    print("Code:", code, "Output:", sep="\n")
+                    result = toil.execute(code)
                 print("Result:", result, sep="\n")
             except AssertionError as e:
                 print("Error:", e, sep="\n")
 
-    def walk_file(filename):
-        with open(filename, "r") as f: result = toil.walk(f.read())
+    def go_file(walk_or_run, filename):
+        with open(filename, "r") as f:
+            if walk_or_run == "walk":
+                result = toil.walk(f.read())
+            else:
+                result = toil.run(f.read())
         exit(result if isinstance(result, int) else 0)
 
     if len(sys.argv) > 1:
-        if sys.argv[1] == "--repl":
-            repl()
-        else:
-            walk_file(sys.argv[1])
+        match sys.argv[1]:
+            case "--repl": repl("walk")
+            case "--rcepl": repl("run")
+            case "--walk": go_file("walk", sys.argv[2])
+            case "--run": go_file("run", sys.argv[2])
+
+    def print_code(code):
+        print()
+        for addr, inst in enumerate(code):
+            print(f"{addr:3}: {list(inst)}")
 
     # Example
 
-    print(toil.walk(r"""
-        a := []; for i in [0, 1, 2] do push(a, i) then [i, a] else 1/0 end
-    """))
+    # If
+    print_code(toil.code(r""" if 2 == 2 then 4 + 5 else 6 + 7  end """))
+    print(toil.run(r""" if 2 == 2 then 4 + 5 else 6 + 7  end """)) # -> 9
+    print(toil.run(r""" if 2 == 3 then 4 + 5 else 6 + 7  end """)) # -> 13
+    print(toil.run(r""" if False then 2 elif False then 3 else 4 end """)) # -> 4
+
+    # Variable
+    print_code(toil.code(r""" a := 2 + 3 """))
+    print_code(toil.code(r""" a = 2 + 3 """))
+    print(toil.run(r""" a := 2 + 3 """)) # -> 5
+    print(toil.run(r""" a """)) # -> 5
+    print(toil.run(r""" a = 4 + 5 """)) # -> 9
+    print(toil.run(r""" a """)) # -> 9
+    # print(toil.run(r""" b """)) # -> Undefined variable
+
+    # Scope
+    print_code(toil.code(r""" a := 2; scope a end """))
+    print(toil.run(r""" a := 2; scope a end """)) # ->  2
+    print(toil.run(r""" a := 2; scope scope a end end """)) # -> 2
+
+    print(toil.run(r""" a := 2; scope a := 3 end """)) # -> 3
+    print(toil.run(r""" a """)) # -> 2
+
+    print(toil.run(r""" a := 2; scope a = 3 end """)) # -> 3
+    print(toil.run(r""" a """)) # -> 3
+
+    print(toil.run(r""" a := 2; scope d := 3 end """)) # -> 3
+    # toil.run(r""" d """) # -> Undefined variable
