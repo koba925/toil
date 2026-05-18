@@ -57,6 +57,34 @@ class TestICI:
         assert toil.run(r""" i := 0; while i < 3 do print(i); i = i + 1 end """) is None
         assert capsys.readouterr().out == "0\n1\n2\n"
 
+    def test_continue(self, capsys):
+        toil.run(r""" i := 0; while i < 3 do i = i + 1; if i == 2 then continue end; print(i) end """)
+        assert capsys.readouterr().out == "1\n3\n"
+
+        toil.run(r"""
+            i := 0; while i < 2 do
+                j := 0; while j < 3 do
+                    j = j + 1; if j == 2 then continue end;
+                    print(i); print(j)
+                end;
+                i = i + 1
+            end
+        """)
+        assert capsys.readouterr().out == "0\n1\n0\n3\n1\n1\n1\n3\n"
+
+        toil.run(r"""
+            i := 0; while i < 3 do
+                i = i + 1;
+                scope
+                    if i == 2 then continue end;
+                    print(i)
+                end
+            end
+        """)
+        assert capsys.readouterr().out == "1\n3\n"
+
+        with pytest.raises(AssertionError, match="Continue outside of loop"):
+            toil.run(r""" continue """)
 
 if __name__ == "__main__":
     pytest.main([__file__])

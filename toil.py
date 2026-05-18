@@ -705,17 +705,22 @@ class Evaluator:
 class Compiler:
     def __init__(self):
         self._code = []
+        self._control_stack = []
 
     def compile(self,expr: Expr) -> Code:
         self._code = []
         self._expression(expr)
         self._code.append(("halt",))
+        assert self._control_stack == [], \
+            f"Invalid control stack state @ compile(): {self._control_stack}"
         return self._code
 
     def _expression(self, expr):
         match expr:
             case None | bool() | int() | str():
                 self._code.append(("const", expr))
+            case Ident("continue"):
+                self._continue()
             case Ident(name): self._code.append(("get", name))
             case (Ident("define"), [var, expr]):
                 self._expression(expr)
@@ -724,9 +729,7 @@ class Compiler:
                 self._expression(expr)
                 self._code.append(("set", var))
             case (Ident("scope"), [body_expr]):
-                self._code.append(("push_env",))
-                self._expression(body_expr)
-                self._code.append(("pop_env",))
+                self._scope(body_expr)
             case (Ident('seq'), exprs): self._seq(exprs)
             case (Ident('if'), [cond_expr, then_expr, else_expr]):
                 self._if(cond_expr, then_expr, else_expr)
@@ -741,6 +744,13 @@ class Compiler:
                 self._code.append((op,))
             case _:
                 assert False, f"Unsupported expression @ compile(): {expr}"
+
+    def _scope(self, body_expr):
+        self._control_stack.append(("scope",))
+        self._code.append(("push_env",))
+        self._expression(body_expr)
+        self._code.append(("pop_env",))
+        self._control_stack.pop()
 
     def _seq(self, exprs):
         assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
@@ -762,6 +772,7 @@ class Compiler:
 
     def _while(self, cond_expr, body_expr, then_expr, else_expr):
         loop_jump = self._current_addr()
+        self._control_stack.append(("continue", loop_jump))
         self._expression(cond_expr)
         cond_jump = self._current_addr()
         self._code.append(("jump_if_false", None))
@@ -770,6 +781,17 @@ class Compiler:
         self._code.append(("jump", loop_jump))
         self._set_operand(cond_jump, self._current_addr())
         self._expression(then_expr[0] if then_expr else None)
+        self._control_stack.pop()
+
+    def _continue(self):
+        for ctrl in reversed(self._control_stack):
+            match ctrl:
+                case ("scope",):
+                    self._code.append(("pop_env",))
+                case ("continue", loop_jump):
+                    self._code.append(("jump", loop_jump))
+                    return
+        assert False, "Continue outside of loop @ _continue()"
 
     def _set_operand(self, ip, operand):
         inst = self._code[ip]
@@ -1182,3 +1204,29 @@ if __name__ == "__main__":
     print(toil.run(r""" i := 0; while i < 3 do i = i + 1 then i + 1 end """)) # -> 4
     print_code(toil.code(r""" while i < 3 do print(i); i = i + 1 end """))
     print(toil.run(r""" i := 0; while i < 3 do print(i); i = i + 1 end """)) # -> 0\n1\n2\nNone
+
+    # Continue
+    print_code(toil.code(r""" while i < 3 do print(i); i = i + 1; if i == 2 then continue end end """))
+    toil.run(r""" i := 0; while i < 3 do i = i + 1; if i == 2 then continue end; print(i) end """) # -> 1\n3\n
+
+    toil.run(r"""
+        i := 0; while i < 2 do
+            j := 0; while j < 3 do
+                j = j + 1; if j == 2 then continue end;
+                print(i); print(j)
+            end;
+            i = i + 1
+        end
+    """) # -> 0\n1\n0\n3\n1\n1\n1\n3\n
+
+    toil.run(r"""
+        i := 0; while i < 3 do
+            i = i + 1;
+            scope
+                if i == 2 then continue end;
+                print(i)
+            end
+        end
+    """) # ->
+
+    # toil.run(r""" continue """) # -> Continue outside of loop
