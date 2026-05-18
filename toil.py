@@ -719,8 +719,8 @@ class Compiler:
         match expr:
             case None | bool() | int() | str():
                 self._code.append(("const", expr))
-            case Ident("continue"):
-                self._continue()
+            case Ident("continue"): self._continue()
+            case Ident("break"): self._break()
             case Ident(name): self._code.append(("get", name))
             case (Ident("define"), [var, expr]):
                 self._expression(expr)
@@ -772,7 +772,8 @@ class Compiler:
 
     def _while(self, cond_expr, body_expr, then_expr, else_expr):
         loop_jump = self._current_addr()
-        self._control_stack.append(("continue", loop_jump))
+        break_addrs = []
+        self._control_stack.append(("while", loop_jump, break_addrs))
         self._expression(cond_expr)
         cond_jump = self._current_addr()
         self._code.append(("jump_if_false", None))
@@ -780,18 +781,36 @@ class Compiler:
         self._code.append(("pop",))
         self._code.append(("jump", loop_jump))
         self._set_operand(cond_jump, self._current_addr())
-        self._expression(then_expr[0] if then_expr else None)
+
         self._control_stack.pop()
+        self._expression(then_expr[0] if then_expr else None)
+        then_jump = self._current_addr()
+        self._code.append(("jump", None))
+        for break_addr in break_addrs:
+            self._set_operand(break_addr, self._current_addr())
+        self._expression(else_expr[0] if else_expr else None)
+        self._set_operand(then_jump, self._current_addr())
 
     def _continue(self):
         for ctrl in reversed(self._control_stack):
             match ctrl:
                 case ("scope",):
                     self._code.append(("pop_env",))
-                case ("continue", loop_jump):
+                case ("while", loop_jump, _):
                     self._code.append(("jump", loop_jump))
                     return
         assert False, "Continue outside of loop @ _continue()"
+
+    def _break(self):
+        for ctrl in reversed(self._control_stack):
+            match ctrl:
+                case ("scope",):
+                    self._code.append(("pop_env",))
+                case ("while", _, break_addrs):
+                    break_addrs.append(self._current_addr())
+                    self._code.append(("jump", None))
+                    return
+        assert False, "Break outside of loop @ _break()"
 
     def _set_operand(self, ip, operand):
         inst = self._code[ip]
@@ -1206,7 +1225,7 @@ if __name__ == "__main__":
     print(toil.run(r""" i := 0; while i < 3 do print(i); i = i + 1 end """)) # -> 0\n1\n2\nNone
 
     # Continue
-    print_code(toil.code(r""" while i < 3 do print(i); i = i + 1; if i == 2 then continue end end """))
+    print_code(toil.code(r""" while i < 3 do i = i + 1; if i == 2 then continue end end """))
     toil.run(r""" i := 0; while i < 3 do i = i + 1; if i == 2 then continue end; print(i) end """) # -> 1\n3\n
 
     toil.run(r"""
@@ -1217,7 +1236,7 @@ if __name__ == "__main__":
             end;
             i = i + 1
         end
-    """) # -> 0\n1\n0\n3\n1\n1\n1\n3\n
+    """) # -> 0\n1\n0n3\n1\n1\n1\n3\n
 
     toil.run(r"""
         i := 0; while i < 3 do
@@ -1227,6 +1246,47 @@ if __name__ == "__main__":
                 print(i)
             end
         end
-    """) # ->
+    """) # -> 1\n3
 
     # toil.run(r""" continue """) # -> Continue outside of loop
+
+    # Break
+    print_code(toil.code(r""" while i < 3 do if i == 1 then break end; i = i + 1 end """))
+    print(toil.run(r""" i := 0; while i < 3 do if i == 1 then break end; print(i); i = i + 1 end """)) # -> 0\nNone
+
+    print_code(toil.code(r""" while i < 3 do if i == 1 then break end; i = i + 1 then i * 2 else i * 3 end """))
+    print(toil.run(r""" i := 0; while i < 3 do if i == 1 then break end; print(i); i = i + 1 then i * 2 else i * 3 end """)) # -> 0\n3
+
+    toil.run(r"""
+        i := 0; while i < 2 do
+            j := 0; while j < 3 do
+                if i == 0 then if j == 1 then break end end;
+                print(i); print(j);
+                j = j + 1
+            end;
+            i = i + 1
+        end
+    """) # ->  0\n0\n1\n0\n1\n1\n1\n2
+
+    toil.run(r"""
+        i := 0; while i < 2 do
+            j := 0; while j < 3 do
+                if i == 1 then if j == 1 then break end end;
+                print(i); print(j);
+                j = j + 1
+            else break end;
+            i = i + 1
+        end
+    """) # -> 0\n0\n0\n1\n0\n2\n1\n0
+
+    toil.run(r"""
+        i := 0; while i < 3 do
+            scope
+                if i == 1 then break end;
+                print(i)
+            end;
+            i = i + 1
+        end
+    """) # -> 0
+
+    # toil.run(r""" break """) # -> Break outside of loop

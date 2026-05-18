@@ -86,5 +86,50 @@ class TestICI:
         with pytest.raises(AssertionError, match="Continue outside of loop"):
             toil.run(r""" continue """)
 
+    def test_break(self, capsys):
+        assert toil.run(r""" i := 0; while i < 3 do if i == 1 then break end; print(i); i = i + 1 end """) is None
+        assert capsys.readouterr().out == "0\n"
+
+        assert toil.run(r""" i := 0; while i < 3 do if i == 1 then break end; print(i); i = i + 1 then i * 2 else i * 3 end """) == 3
+        assert capsys.readouterr().out == "0\n"
+
+        toil.run(r"""
+            i := 0; while i < 2 do
+                j := 0; while j < 3 do
+                    if i == 0 then if j == 1 then break end end;
+                    print(i); print(j);
+                    j = j + 1
+                end;
+                i = i + 1
+            end
+        """)
+        assert capsys.readouterr().out == "0\n0\n1\n0\n1\n1\n1\n2\n"
+
+        toil.run(r"""
+            i := 0; while i < 2 do
+                j := 0; while j < 3 do
+                    if i == 1 then if j == 1 then break end end;
+                    print(i); print(j);
+                    j = j + 1
+                else break end;
+                i = i + 1
+            end
+        """)
+        assert capsys.readouterr().out == "0\n0\n0\n1\n0\n2\n1\n0\n"
+
+        toil.run(r"""
+            i := 0; while i < 3 do
+                scope
+                    if i == 1 then break end;
+                    print(i)
+                end;
+                i = i + 1
+            end
+        """)
+        assert capsys.readouterr().out == "0\n"
+
+        with pytest.raises(AssertionError, match="Break outside of loop"):
+            toil.run(r""" break """)
+
 if __name__ == "__main__":
     pytest.main([__file__])
