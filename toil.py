@@ -57,7 +57,7 @@ class Scanner:
                 case "-": self._two_char_operator(">")
                 case "!": self._two_char_operator("!=")
                 case c if c in "=<>:": self._two_char_operator("=")
-                case c if c in "+*/%()[]{}.,;":
+                case c if c in "+*/%()[]{}|.,;":
                     self._tokens.append(Ident(c))
                     self._advance()
                 case invalid:
@@ -170,7 +170,8 @@ class Parser:
         return self._binary_left({
             Ident("=="): Ident("equal"), Ident("!="): Ident("not_equal"),
             Ident("<"): Ident("less"), Ident(">"): Ident("greater"),
-            Ident("<="): Ident("less_equal"), Ident(">="): Ident("greater_equal")
+            Ident("<="): Ident("less_equal"), Ident(">="): Ident("greater_equal"),
+            Ident("|"): Ident("|")
         }, self._add_sub)
 
     def _add_sub(self):
@@ -388,7 +389,7 @@ class Environment:
                 return toil_type(value) == "list" and self._bind_list(pattern, value)
             case dict():
                 return toil_type(value) == "dict" and self._bind_dict(pattern, value)
-            case (Ident("or"), [left_pat, right_pat]):
+            case (Ident("|"), [left_pat, right_pat]):
                 return self.bind(left_pat, value) or \
                        self.bind(right_pat, value)
             case (Ident("Ident"), [name_pat]):
@@ -1305,4 +1306,11 @@ if __name__ == "__main__":
     toil.run(r""" print(2, 3, 4) """) # -> 2 3 4
 
     print(toil.run(r""" myadd := add; myadd(2, 3) """)) # -> 5
+
+    # Or pattern
+
+    print(toil.walk(r""" match 2 case int(a) | str(a) then [a] end """)) # -> [2]
+    print(toil.walk(r""" match "aaa" case int(a) | str(a) then [a] end """)) # -> ['aaa']
+    print(toil.walk(r""" match [2] case int(a) | str(a) then [a] end """)) # -> None
+    print(toil.walk(r""" match [2] case int(a) | str(a) | list(a) then [a] end """)) # -> [[2]]
 

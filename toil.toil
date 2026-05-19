@@ -35,7 +35,7 @@ defclass Scanner(src) do
             elif c.is_ident_first() then self._ident()
             elif c == '-' then self._two_char_operator('>')
             elif c.in('=!<>:') then self._two_char_operator('=')
-            elif c.in('+*/%()[]{}.,;') then
+            elif c.in('+*/%()[]{}|.,;') then
                 self._tokens.push(Ident(c)); self._advance()
             else raise('Invalid character @ tokenize(): {}'.format(c))
             end
@@ -163,7 +163,8 @@ defclass Parser(tokens) do
         self._binary_left({
             '==': Ident('equal'), '!=': Ident('not_equal'),
             '<': Ident('less'), '>': Ident('greater'),
-            '<=': Ident('less_equal'), '>=': Ident('greater_equal')
+            '<=': Ident('less_equal'), '>=': Ident('greater_equal'),
+            '|': Ident('|')
         }, self._add_sub)
     end;
 
@@ -212,7 +213,7 @@ defclass Parser(tokens) do
     defmethod _primary do
         match self._current_token()
             case None then self._current_and_advance()
-            case bool(_) or int(_) or str(_) then self._current_and_advance()
+            case bool(_) | int(_) | str(_) then self._current_and_advance()
             case Ident('(') then self._group()
             case Ident('[') then self._list()
             case Ident('{') then self._dict()
@@ -558,7 +559,7 @@ defclass Environment(parent) do
             case Ident(name) then self.define(name, value); True
             case list(_) then value.type() == 'list' and self._bind_list(pattern, value)
             case dict(_) then value.type() == 'dict' and self._bind_dict(pattern, value)
-            case tuple(Ident('or'), [left_pat, right_pat]) then
+            case tuple(Ident('|'), [left_pat, right_pat]) then
                 self.bind(left_pat, value) or self.bind(right_pat, value)
             case tuple(Ident('Ident'), [name_pat]) then
                 value.type() == 'Ident' and self.bind(name_pat, to_str(value))
@@ -631,7 +632,7 @@ defclass Evaluator do
         # print(expr);
         match expr
             case None then expr
-            case bool(_) or int(_) or str(_) then expr
+            case bool(_) | int(_) | str(_) then expr
             case list(_) then expr.map(e -> self.eval(e, env))
             case dict(_) then
                 expr.items().map([[k, v]] -> [k, self.eval(v, env)]).to_dict()
@@ -692,7 +693,7 @@ defclass Evaluator do
         match pat
             case Ident(name) then
                 env.assign(name, val)
-            case tuple(Ident('index'), [coll_expr, index_expr]) or
+            case tuple(Ident('index'), [coll_expr, index_expr]) |
                     tuple(Ident('dot'), [coll_expr, index_expr]) then
                 coll_val := self.eval(coll_expr, env);
                 index_val := self.eval(index_expr, env);
@@ -769,8 +770,8 @@ defclass Evaluator do
             self.eval(body_expr, env)
         except e then
             match e
-                case ['ReturnException', _] or
-                        ['ContinueException'] or
+                case ['ReturnException', _] |
+                        ['ContinueException'] |
                         ['BreakException'] then raise(e)
                 case _ then None
             end;

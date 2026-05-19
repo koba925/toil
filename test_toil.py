@@ -154,11 +154,11 @@ class TestToil:
             toil.walk(r""" str(a) := [] """)
 
     def test_destructure_or(self):
-        assert toil.walk(r""" int(a) or str(a) := 2; a """) == 2
-        assert toil.walk(r""" int(a) or str(a) := "aaa"; a """) == "aaa"
-        assert toil.walk(r""" int(a) or str(a) or list(a):= [2]; a """) == [2]
+        assert toil.walk(r""" int(a) | str(a) := 2; a """) == 2
+        assert toil.walk(r""" int(a) | str(a) := "aaa"; a """) == "aaa"
+        assert toil.walk(r""" int(a) | str(a) | list(a):= [2]; a """) == [2]
         with pytest.raises(Exception, match="Pattern mismatch"):
-            toil.walk(r""" int(a) or str(a) := [2] """)
+            toil.walk(r""" int(a) | str(a) := [2] """)
 
     def test_destructure_combination(self):
         assert toil.walk(r""" [{a: b}, c] := [{a: 2, b: 3}, 4]; [b, c] """) == [2, 4]
@@ -705,10 +705,10 @@ class TestToil:
         assert toil.walk(r""" match "aaa" case str(a) then [a] end """) == ['aaa']
         assert toil.walk(r""" match [] case str(a) then [a] end """) is None
 
-        assert toil.walk(r""" match 2 case int(a) or str(a) then [a] end """) == [2]
-        assert toil.walk(r""" match "aaa" case int(a) or str(a) then [a] end """) == ['aaa']
-        assert toil.walk(r""" match [2] case int(a) or str(a) then [a] end """) is None
-        assert toil.walk(r""" match [2] case int(a) or str(a) or list(a) then [a] end """) == [[2]]
+        assert toil.walk(r""" match 2 case int(a) | str(a) then [a] end """) == [2]
+        assert toil.walk(r""" match "aaa" case int(a) | str(a) then [a] end """) == ['aaa']
+        assert toil.walk(r""" match [2] case int(a) | str(a) then [a] end """) is None
+        assert toil.walk(r""" match [2] case int(a) | str(a) | list(a) then [a] end """) == [[2]]
 
     def test_match_combination(self):
         assert toil.walk(r""" match [{a: 2, b: 3}, 4] case  [{a: b}, c] then [b, c] end """) == [2, 4]

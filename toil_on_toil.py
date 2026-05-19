@@ -25,4 +25,7 @@ if __name__ == "__main__":
 
     # Example
 
-    tot.walk(r""" print("hello, world") """)
+    print(tot.walk(r""" match 2 case int(a) | str(a) then [a] end """)) # -> [2]
+    print(tot.walk(r""" match "aaa" case int(a) | str(a) then [a] end """)) # -> ['aaa']
+    print(tot.walk(r""" match [2] case int(a) | str(a) then [a] end """)) # -> None
+    print(tot.walk(r""" match [2] case int(a) | str(a) | list(a) then [a] end """)) # -> [[2]]
