@@ -735,13 +735,8 @@ class Compiler:
                 self._if(cond_expr, then_expr, else_expr)
             case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
                 self._while(cond_expr, body_expr, then_expr, else_expr)
-            case (Ident('print'), [expr]):
-                self._expression(expr)
-                self._code.append(("print",))
-            case (Ident(op), [left, right]) if op in ("add", "mul", "equal", "less"):
-                self._expression(left)
-                self._expression(right)
-                self._code.append((op,))
+            case (Ident(op), [*args]):
+                self._op(Ident(op), args)
             case _:
                 assert False, f"Unsupported expression @ compile(): {expr}"
 
@@ -812,6 +807,11 @@ class Compiler:
                     return
         assert False, "Break outside of loop @ _break()"
 
+    def _op(self, op, args):
+        for arg in reversed(args): self._expression(arg)
+        self._expression(op)
+        self._code.append(("call", len(args)))
+
     def _set_operand(self, ip, operand):
         inst = self._code[ip]
         self._code[ip] = (inst[0], operand)
@@ -848,17 +848,20 @@ class VM:
                 case ("jump", addr): self._ip = addr
                 case ("jump_if_false", addr):
                     if not self._stack.pop(): self._ip = addr
-                case ("add",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l + r)
-                case ("mul",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l * r)
-                case ("equal",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l == r)
-                case ("less",): r = self._stack.pop(); l = self._stack.pop(); self._stack.append(l < r)
-                case ("print",): val = self._stack.pop(); print(val); self._stack.append(None)
+                case ("call", nargs): self._call(nargs)
                 case _:
                     assert False, f"Invalid instruction @ execute(): {inst}"
         assert len(self._ctrl_stack) == 0, f"Invalid control stack state @ execute(): {self._ctrl_stack}"
         assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
         return self._stack.pop()
 
+    def _call(self, nargs):
+        op = self._stack.pop()
+        args = [self._stack.pop() for _ in range(nargs)]
+        match op:
+            case f if callable(f): self._stack.append(f(args))
+            case unexpected:
+                assert False, f"Invalid call @ _call(): {unexpected}"
 
 class Interpreter:
     def __init__(self) -> None:
@@ -1232,11 +1235,11 @@ if __name__ == "__main__":
         i := 0; while i < 2 do
             j := 0; while j < 3 do
                 j = j + 1; if j == 2 then continue end;
-                print(i); print(j)
+                print(i, j)
             end;
             i = i + 1
         end
-    """) # -> 0\n1\n0n3\n1\n1\n1\n3\n
+    """) # -> 0 1\n0 3\n1 1\n1 3
 
     toil.run(r"""
         i := 0; while i < 3 do
@@ -1261,23 +1264,23 @@ if __name__ == "__main__":
         i := 0; while i < 2 do
             j := 0; while j < 3 do
                 if i == 0 then if j == 1 then break end end;
-                print(i); print(j);
+                print(i, j);
                 j = j + 1
             end;
             i = i + 1
         end
-    """) # ->  0\n0\n1\n0\n1\n1\n1\n2
+    """) # ->  0 0\n1 0\n1 1\n1 2
 
     toil.run(r"""
         i := 0; while i < 2 do
             j := 0; while j < 3 do
                 if i == 1 then if j == 1 then break end end;
-                print(i); print(j);
+                print(i, j);
                 j = j + 1
             else break end;
             i = i + 1
         end
-    """) # -> 0\n0\n0\n1\n0\n2\n1\n0
+    """) # -> 0 0\n0 1\n0 2\n1 0
 
     toil.run(r"""
         i := 0; while i < 3 do
@@ -1290,3 +1293,16 @@ if __name__ == "__main__":
     """) # -> 0
 
     # toil.run(r""" break """) # -> Break outside of loop
+
+    # Built-in functions
+    print_code(toil.code(r""" add(mul(2, 3), 4) """))
+    print(toil.run(r""" add(mul(2, 3), 4) """)) # -> 10
+
+    print(toil.run(r""" list() """)) # -> []
+    print(toil.run(r""" list(2, 3, 4) """)) # -> []
+
+    toil.run(r""" print() """) # -> (newline)
+    toil.run(r""" print(2, 3, 4) """) # -> 2 3 4
+
+    print(toil.run(r""" myadd := add; myadd(2, 3) """)) # -> 5
+
