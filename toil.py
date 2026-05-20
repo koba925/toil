@@ -716,6 +716,8 @@ class Compiler:
         match expr:
             case None | bool() | int() | str():
                 self._code.append(("const", expr))
+            case list() as elems:
+                self._list(elems)
             case Ident("continue"): self._continue()
             case Ident("break"): self._break()
             case Ident(name): self._code.append(("get", name))
@@ -736,6 +738,11 @@ class Compiler:
                 self._op(Ident(op), args)
             case _:
                 assert False, f"Unsupported expression @ compile(): {expr}"
+
+    def _list(self, elems):
+        for elem in elems: self._expression(elem)
+        self._code.append(("get", "list"))
+        self._code.append(("call", len(elems)))
 
     def _scope(self, body_expr):
         self._control_stack.append(("scope",))
@@ -805,7 +812,7 @@ class Compiler:
         assert False, "Break outside of loop @ _break()"
 
     def _op(self, op, args):
-        for arg in reversed(args): self._expression(arg)
+        for arg in args: self._expression(arg)
         self._expression(op)
         self._code.append(("call", len(args)))
 
@@ -854,7 +861,7 @@ class VM:
 
     def _call(self, nargs):
         op = self._stack.pop()
-        args = [self._stack.pop() for _ in range(nargs)]
+        args = list(reversed([self._stack.pop() for _ in range(nargs)]))
         match op:
             case f if callable(f): self._stack.append(f(args))
             case unexpected:
@@ -1304,11 +1311,16 @@ if __name__ == "__main__":
     print_code(toil.code(r""" add(mul(2, 3), 4) """))
     print(toil.run(r""" add(mul(2, 3), 4) """)) # -> 10
 
-    print(toil.run(r""" list() """)) # -> []
-    print(toil.run(r""" list(2, 3, 4) """)) # -> []
+    print(toil.run(r""" tuple() """)) # -> ()
+    print(toil.run(r""" tuple(2, 3, 4) """)) # -> (2, 3, 4)
 
     toil.run(r""" print() """) # -> (newline)
     toil.run(r""" print(2, 3, 4) """) # -> 2 3 4
 
     print(toil.run(r""" myadd := add; myadd(2, 3) """)) # -> 5
+
+    # List
+    print_code(toil.code(r""" [2, [3, 4]] """))
+    print(toil.run(r""" [2, [3, 4]] """)) # -> [2, [3, 4]]
+
 

@@ -134,8 +134,8 @@ class TestICI:
     def test_builtins(self, capsys):
         assert toil.run(r""" add(mul(2, 3), 4) """) == 10
 
-        assert toil.run(r""" list() """) == []
-        assert toil.run(r""" list(2, 3, 4) """) == [2, 3, 4]
+        assert toil.run(r""" tuple() """) == ()
+        assert toil.run(r""" tuple(2, tuple(3, 4)) """) == (2, (3, 4))
 
         toil.run(r""" print() """)
         assert capsys.readouterr().out == "\n"
@@ -143,6 +143,10 @@ class TestICI:
         assert capsys.readouterr().out == "2 3 4\n"
 
         assert toil.run(r""" myadd := add; myadd(2, 3) """) == 5
+
+    def test_list(self):
+        assert toil.run(r""" [] """) == []
+        assert toil.run(r""" [2, [3, 4]] """) == [2, [3, 4]]
 
 if __name__ == "__main__":
     pytest.main([__file__])
