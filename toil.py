@@ -593,10 +593,6 @@ class Evaluator:
                 return self._if(cond_expr, then_expr, else_expr, env)
             case (Ident("match"), [val_expr, cases]):
                 return self._match(val_expr, cases, env)
-            case (Ident("and"), [left_expr, right_expr]):
-                return self.eval(left_expr, env) and self.eval(right_expr, env)
-            case (Ident("or"), [left_expr, right_expr]):
-                return self.eval(left_expr, env) or self.eval(right_expr, env)
             case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
                 return self._while(cond_expr, body_expr, then_expr, else_expr, env)
             case (Ident("try"), [body_expr, clauses]):
@@ -992,6 +988,15 @@ class Interpreter:
         """)
 
         self.walk(r"""
+            defmacro and(a, b) do
+                g := gensym("it"); quote if !g := !a then !b else !g end end
+            end;
+            defmacro or(a, b) do
+                g := gensym("it"); quote if !g := !a then !g else !b end end
+            end
+        """)
+
+        self.walk(r"""
             defmacro for_(var, coll, body, thn, els) do
                 thn = if thn == [] then None else thn[0] end;
                 els = if els == [] then None else els[0] end;
@@ -1264,7 +1269,7 @@ if __name__ == "__main__":
     toil.run(r"""
         i := 0; while i < 2 do
             j := 0; while j < 3 do
-                if i == 0 then if j == 1 then break end end;
+                if i == 0 and j == 1 then break end;
                 print(i, j);
                 j = j + 1
             end;
@@ -1275,7 +1280,7 @@ if __name__ == "__main__":
     toil.run(r"""
         i := 0; while i < 2 do
             j := 0; while j < 3 do
-                if i == 1 then if j == 1 then break end end;
+                if i == 1 and j == 1 then break end;
                 print(i, j);
                 j = j + 1
             else break end;
@@ -1306,11 +1311,4 @@ if __name__ == "__main__":
     toil.run(r""" print(2, 3, 4) """) # -> 2 3 4
 
     print(toil.run(r""" myadd := add; myadd(2, 3) """)) # -> 5
-
-    # Or pattern
-
-    print(toil.walk(r""" match 2 case int(a) | str(a) then [a] end """)) # -> [2]
-    print(toil.walk(r""" match "aaa" case int(a) | str(a) then [a] end """)) # -> ['aaa']
-    print(toil.walk(r""" match [2] case int(a) | str(a) then [a] end """)) # -> None
-    print(toil.walk(r""" match [2] case int(a) | str(a) | list(a) then [a] end """)) # -> [[2]]
 
