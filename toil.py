@@ -1240,8 +1240,6 @@ if __name__ == "__main__":
     print(toil.run(r""" [a, *b] := [2, 3, 4]; [a, b] """))
     print(toil.run(r""" {a, b} := {a: 2, b: {c: 3, d: 4}}; [a, b] """))
 
-    exit()
-
     # Scope
     print_code(toil.code(r""" a := 2; scope a end """))
     print(toil.run(r""" a := 2; scope a end """)) # ->  2
@@ -1348,9 +1346,17 @@ if __name__ == "__main__":
     print_code(toil.code(r""" [2, [3, 4]] """))
     print(toil.run(r""" [2, [3, 4]] """)) # -> [2, [3, 4]]
 
+    print_code(toil.code(r""" [2, [3, 4]][1] """))
+    print(toil.run(r""" [2, [3, 4]][1] """)) # -> [3, 4]
+    print(toil.run(r""" [2, [3, 4]][1][0] """)) # -> 3
+
     # Dict
     print_code(toil.code(r""" {} """))
     print(toil.run(r""" {} """)) # -> {}
 
     print_code(toil.code(r""" {a: 2, b: {c: 3, d: 4}} """))
     print(toil.run(r""" {a: 2, b: {c: 3, d: 4}} """)) # -> {'a': 2, 'b': {'c': 3, 'd': 4}}
+
+    print_code(toil.code(r""" {a: 2, b: {c: 3, d: 4}}["b"] """))
+    print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}["b"] """)) # -> {'c': 3, 'd': 4}
+    print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}["b"]["c"] """)) # -> 3

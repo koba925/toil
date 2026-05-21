@@ -148,9 +148,15 @@ class TestICI:
         assert toil.run(r""" [] """) == []
         assert toil.run(r""" [2, [3, 4]] """) == [2, [3, 4]]
 
+        assert toil.run(r""" [2, [3, 4]][1] """) == [3, 4]
+        assert toil.run(r""" [2, [3, 4]][1][0] """) == 3
+
     def test_dict(self):
         assert toil.run(r""" {} """) == {}
         assert toil.run(r""" {a: 2, b: {c: 3, d: 4}} """) == {'a': 2, 'b': {'c': 3, 'd': 4}}
+
+        assert toil.run(r""" {a: 2, b: {c: 3, d: 4}}["b"] """) == {'c': 3, 'd': 4}
+        assert toil.run(r""" {a: 2, b: {c: 3, d: 4}}["b"]["c"] """) == 3
 
     def test_destructure_variable_and_literal(self):
         # Variable pattern
