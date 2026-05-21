@@ -848,7 +848,7 @@ class VM:
             match inst:
                 case ("halt",): break
                 case ("const", val): self._stack.append(val)
-                case ("def", Ident(name)): self._env.define(name, self._stack[-1])
+                case ("def", pat): self._def(pat)
                 case ("set", Ident(name)): self._env.assign(name, self._stack[-1])
                 case ("get", name): self._stack.append(self._env.val(name))
                 case ("pop",): self._stack.pop()
@@ -865,6 +865,11 @@ class VM:
         assert len(self._ctrl_stack) == 0, f"Invalid control stack state @ execute(): {self._ctrl_stack}"
         assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
         return self._stack.pop()
+
+    def _def(self, pat):
+        val = self._stack[-1]
+        assert self._env.bind(pat, val), \
+            f"Pattern mismatch @ _def(): {pat}, {val}"
 
     def _call(self, nargs):
         op = self._stack.pop()
@@ -1228,6 +1233,15 @@ if __name__ == "__main__":
     print(toil.run(r""" a """)) # -> 9
     # print(toil.run(r""" b """)) # -> Undefined variable
 
+    # Destructuring
+    print_code(toil.code(r""" [a, b] := [2, 3] """))
+    print(toil.run(r""" [a, b] := [2, 3]; [a, b] """))
+
+    print(toil.run(r""" [a, *b] := [2, 3, 4]; [a, b] """))
+    print(toil.run(r""" {a, b} := {a: 2, b: {c: 3, d: 4}}; [a, b] """))
+
+    exit()
+
     # Scope
     print_code(toil.code(r""" a := 2; scope a end """))
     print(toil.run(r""" a := 2; scope a end """)) # ->  2
@@ -1340,6 +1354,3 @@ if __name__ == "__main__":
 
     print_code(toil.code(r""" {a: 2, b: {c: 3, d: 4}} """))
     print(toil.run(r""" {a: 2, b: {c: 3, d: 4}} """)) # -> {'a': 2, 'b': {'c': 3, 'd': 4}}
-
-
-

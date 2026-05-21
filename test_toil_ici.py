@@ -152,5 +152,115 @@ class TestICI:
         assert toil.run(r""" {} """) == {}
         assert toil.run(r""" {a: 2, b: {c: 3, d: 4}} """) == {'a': 2, 'b': {'c': 3, 'd': 4}}
 
+    def test_destructure_variable_and_literal(self):
+        # Variable pattern
+        assert toil.run(r""" a := 2; a """) == 2
+        assert toil.run(r""" _ := 2; _ """) == 2
+
+        # Literal pattern
+        assert toil.run(r""" a := 2; 2 := a """) == 2
+        assert toil.run(r""" None := None """) is None
+        assert toil.run(r""" True := True """) is True
+        assert toil.run(r""" "hello" := "hello" """) == "hello"
+
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" "hello" := "world" """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" a := 3; 2 := a """)
+
+    def test_destructure_list(self):
+        assert toil.run(r""" [a, b] := [3, 4]; [a, b] """) == [3, 4]
+        assert toil.run(r""" [] := [] """) == []
+        assert toil.run(r""" [_, b, _] := [2, 3, 4]; b """) == 3
+
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" [a, b] := [2] """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" [a, b] := [4, 5, 6] """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" [] := [1] """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" [a] := 2 """)
+
+        # Rest parameters
+        assert toil.run(r""" [a, *b] := [2]; [a, b] """) == [2, []]
+        assert toil.run(r""" [a, *b] := [3, 4]; [a, b] """) == [3, [4]]
+        assert toil.run(r""" [a, *b] := [4, 5, 6]; [a, b] """) == [4, [5, 6]]
+        assert toil.run(r""" [*a] := [4, 5, 6]; a """) == [4, 5, 6]
+
+        assert toil.run(r""" [*a, b] := [2]; [a, b] """) == [[], 2]
+        assert toil.run(r""" [*a, b] := [2, 3]; [a, b] """) == [[2], 3]
+        assert toil.run(r""" [*a, b] := [2, 3, 4]; [a, b] """) == [[2, 3], 4]
+
+        assert toil.run(r""" [a, *b, c] := [3, 4]; [a, b, c] """) == [3, [], 4]
+        assert toil.run(r""" [a, *b, c] := [4, 5, 6]; [a, b, c] """) == [4, [5], 6]
+        assert toil.run(r""" [a, *b, c] := [5, 6, 7, 8]; [a, b, c] """) == [5, [6, 7], 8]
+
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" [a, *b] := [] """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" [*a, b] := [] """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" [a, *b, c] := [2] """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" [a, *b, *c, d] := [5, 6, 7, 8] """)
+
+    def test_destructure_dict(self):
+        assert toil.run(r""" {a} := {a: 2, b: 3}; a """) == 2
+        assert toil.run(r""" {a, b} := {a: 2, b: 3}; [a, b] """) == [2, 3]
+        assert toil.run(r""" {a: c, b: d} := {a: 3, b: 4}; [c, d] """) == [3, 4]
+        assert toil.run(r""" {a} := {"a": 5, b: 6}; a """) == 5
+        assert toil.run(r""" {a: _, b} := {a: 2, b: 3}; b """) == 3
+        assert toil.run(r""" {} := {a: 2, b: 3} """) == {'a': 2, 'b': 3}
+
+        assert toil.run(r""" {a, *rest} := {a: 2}; [a, rest] """) == [2, {}]
+        assert toil.run(r""" {a, *rest} := {a: 2, b: 3}; [a, rest] """) == [2, {'b': 3}]
+        assert toil.run(r""" {a, *rest} := {a: 2, b: 3, c: 4}; [a, rest] """) == [2, {'b': 3, 'c': 4}]
+
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" {a} := {b: 2} """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" {a, b, c} := {a: 2, b: 3} """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" {a, *rest} := {b: 2} """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" {a} := 2 """)
+
+    def test_destructure_ident_and_expr(self):
+        assert toil.run(r""" Ident("aaa") := Ident("aaa") """) == Ident("aaa")
+        assert toil.run(r""" Ident(a) := Ident("aaa"); a """) == "aaa"
+
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" Ident("aaa") := Ident("bbb") """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" Ident(a) := "aaa" """)
+
+        assert toil.run(r""" tuple(Ident("add"), [int(a), int(b)]) := tuple(Ident("add"), [2, 3]); [a, b] """) == [2, 3]
+        assert toil.run(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := tuple(Ident("add"), [Ident("a"), Ident("b")]); [name1, name2] """) == ['a', 'b']
+
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := 2 + 3 """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" tuple(Ident("add"), [Ident(name1), Ident(name2)]) := tuple(Ident("add")) """)
+
+    def test_destructure_type(self):
+        assert toil.run(r""" int(a) := 2; a """) == 2
+        assert toil.run(r""" str(a) := "aaa"; a """) == "aaa"
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" int(a) := "2" """)
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" str(a) := [] """)
+
+    def test_destructure_or(self):
+        assert toil.run(r""" int(a) | str(a) := 2; a """) == 2
+        assert toil.run(r""" int(a) | str(a) := "aaa"; a """) == "aaa"
+        assert toil.run(r""" int(a) | str(a) | list(a):= [2]; a """) == [2]
+        with pytest.raises(Exception, match="Pattern mismatch"):
+            toil.run(r""" int(a) | str(a) := [2] """)
+
+    def test_destructure_combination(self):
+        assert toil.run(r""" [{a: b}, c] := [{a: 2, b: 3}, 4]; [b, c] """) == [2, 4]
+        assert toil.run(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """) == [5, 6]
+
 if __name__ == "__main__":
     pytest.main([__file__])
