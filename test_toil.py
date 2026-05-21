@@ -456,6 +456,9 @@ class TestToil:
             toil.walk(r""" {"a": 1,} """)
 
     def test_dict_functions(self):
+        assert toil.walk(r""" dict() """) == {}
+        assert toil.walk(r""" dict(["a", 1], ["b", 2]) """) == {"a": 1, "b": 2}
+
         assert toil.walk(r""" a := to_dict([["aaa", 2], ["bbb", 3], ["ccc", 4]]) """) == {'aaa': 2, 'bbb': 3, 'ccc': 4}
         assert toil.walk(r""" len(a) """) == 3
         assert toil.walk(r""" in("aaa", a) """) is True

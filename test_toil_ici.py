@@ -148,5 +148,9 @@ class TestICI:
         assert toil.run(r""" [] """) == []
         assert toil.run(r""" [2, [3, 4]] """) == [2, [3, 4]]
 
+    def test_dict(self):
+        assert toil.run(r""" {} """) == {}
+        assert toil.run(r""" {a: 2, b: {c: 3, d: 4}} """) == {'a': 2, 'b': {'c': 3, 'd': 4}}
+
 if __name__ == "__main__":
     pytest.main([__file__])

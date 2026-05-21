@@ -858,6 +858,7 @@ defclass Interpreter do
 
         self._env.define('list', tuple(Ident('hostfunc'), args -> args));
         self._env.define('tuple', tuple(Ident('hostfunc'), args -> apply(tuple, args)));
+        self._env.define('dict', tuple(Ident('hostfunc'), args -> apply(dict, args)));
         self._env.define('Ident', tuple(Ident('hostfunc'), args -> Ident(args[0])));
 
         self._env.define('len', tuple(Ident('hostfunc'), args -> len(args[0])));

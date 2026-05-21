@@ -564,6 +564,9 @@ class TestToT:
             tot.walk(r""" {"a": 1,} """)
 
     def test_dict_functions(self):
+        assert tot.walk(r""" dict() """) == {}
+        assert tot.walk(r""" dict(["a", 1], ["b", 2]) """) == {"a": 1, "b": 2}
+
         assert tot.walk(r""" a := to_dict([["aaa", 2], ["bbb", 3], ["ccc", 4]]) """) == {'aaa': 2, 'bbb': 3, 'ccc': 4}
         assert tot.walk(r""" len(a) """) == 3
         assert tot.walk(r""" in("aaa", a) """) is True

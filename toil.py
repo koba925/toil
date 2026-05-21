@@ -716,8 +716,10 @@ class Compiler:
         match expr:
             case None | bool() | int() | str():
                 self._code.append(("const", expr))
-            case list() as elems:
-                self._list(elems)
+            case list() as lst:
+                self._list(lst)
+            case dict() as dic:
+                self._dict(dic)
             case Ident("continue"): self._continue()
             case Ident("break"): self._break()
             case Ident(name): self._code.append(("get", name))
@@ -739,10 +741,15 @@ class Compiler:
             case _:
                 assert False, f"Unsupported expression @ compile(): {expr}"
 
-    def _list(self, elems):
-        for elem in elems: self._expression(elem)
+    def _list(self, lst):
+        for elem in lst: self._expression(elem)
         self._code.append(("get", "list"))
-        self._code.append(("call", len(elems)))
+        self._code.append(("call", len(lst)))
+
+    def _dict(self, dic):
+        for key, val in dic.items(): self._list([key, val])
+        self._code.append(("get", "dict"))
+        self._code.append(("call", len(dic)))
 
     def _scope(self, body_expr):
         self._control_stack.append(("scope",))
@@ -899,6 +906,7 @@ class Interpreter:
 
         self._env.define("list", lambda args: args)
         self._env.define("tuple", lambda args: tuple(args))
+        self._env.define("dict", lambda args: dict(args))
         self._env.define("Ident", lambda args: Ident(args[0]))
 
         self._env.define("len", lambda args: len(args[0]))
@@ -1320,7 +1328,18 @@ if __name__ == "__main__":
     print(toil.run(r""" myadd := add; myadd(2, 3) """)) # -> 5
 
     # List
+    print_code(toil.code(r""" [] """))
+    print(toil.run(r""" [] """)) # -> []
+
     print_code(toil.code(r""" [2, [3, 4]] """))
     print(toil.run(r""" [2, [3, 4]] """)) # -> [2, [3, 4]]
+
+    # Dict
+    print_code(toil.code(r""" {} """))
+    print(toil.run(r""" {} """)) # -> {}
+
+    print_code(toil.code(r""" {a: 2, b: {c: 3, d: 4}} """))
+    print(toil.run(r""" {a: 2, b: {c: 3, d: 4}} """)) # -> {'a': 2, 'b': {'c': 3, 'd': 4}}
+
 
 
