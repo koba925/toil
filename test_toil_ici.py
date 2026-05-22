@@ -158,6 +158,9 @@ class TestICI:
         assert toil.run(r""" {a: 2, b: {c: 3, d: 4}}["b"] """) == {'c': 3, 'd': 4}
         assert toil.run(r""" {a: 2, b: {c: 3, d: 4}}["b"]["c"] """) == 3
 
+        assert toil.run(r""" {a: 2, b: {c: 3, d: 4}}.b """) == {'c': 3, 'd': 4}
+        assert toil.run(r""" {a: 2, b: {c: 3, d: 4}}.b.c """) == 3
+
     def test_destructure_variable_and_literal(self):
         # Variable pattern
         assert toil.run(r""" a := 2; a """) == 2

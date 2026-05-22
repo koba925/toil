@@ -736,6 +736,8 @@ class Compiler:
                 self._if(cond_expr, then_expr, else_expr)
             case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
                 self._while(cond_expr, body_expr, then_expr, else_expr)
+            case (Ident("dot"), [target_expr, attr_name]):
+                self._dot(target_expr, attr_name)
             case (Ident(op), [*args]):
                 self._op(Ident(op), args)
             case _:
@@ -818,6 +820,10 @@ class Compiler:
                     return
         assert False, "Break outside of loop @ _break()"
 
+    def _dot(self, target_expr, attr_name):
+        self._expression(target_expr)
+        self._code.append(("dot", attr_name))
+
     def _op(self, op, args):
         for arg in args: self._expression(arg)
         self._expression(op)
@@ -848,10 +854,10 @@ class VM:
             match inst:
                 case ("halt",): break
                 case ("const", val): self._stack.append(val)
+                case ("pop",): self._stack.pop()
                 case ("def", pat): self._def(pat)
                 case ("set", Ident(name)): self._env.assign(name, self._stack[-1])
                 case ("get", name): self._stack.append(self._env.val(name))
-                case ("pop",): self._stack.pop()
                 case ("push_env",):
                     self._ctrl_stack.append(self._env)
                     self._env = Environment(self._env)
@@ -859,6 +865,7 @@ class VM:
                 case ("jump", addr): self._ip = addr
                 case ("jump_if_false", addr):
                     if not self._stack.pop(): self._ip = addr
+                case ("dot", attr_name): self._dot(attr_name)
                 case ("call", nargs): self._call(nargs)
                 case _:
                     assert False, f"Invalid instruction @ execute(): {inst}"
@@ -870,6 +877,10 @@ class VM:
         val = self._stack[-1]
         assert self._env.bind(pat, val), \
             f"Pattern mismatch @ _def(): {pat}, {val}"
+
+    def _dot(self, attr_name):
+        target_val = self._stack.pop()
+        self._stack.append(target_val[attr_name])
 
     def _call(self, nargs):
         op = self._stack.pop()
@@ -1360,3 +1371,7 @@ if __name__ == "__main__":
     print_code(toil.code(r""" {a: 2, b: {c: 3, d: 4}}["b"] """))
     print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}["b"] """)) # -> {'c': 3, 'd': 4}
     print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}["b"]["c"] """)) # -> 3
+
+    print_code(toil.code(r""" {a: 2, b: {c: 3, d: 4}}.b """))
+    print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}.b """)) # -> {'c': 3, 'd': 4}
+    print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}.b.c """)) # -> 3
