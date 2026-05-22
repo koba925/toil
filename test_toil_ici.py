@@ -271,5 +271,19 @@ class TestICI:
         assert toil.run(r""" [{a: b}, c] := [{a: 2, b: 3}, 4]; [b, c] """) == [2, 4]
         assert toil.run(r""" {a: [b, c]} := {a: [5, 6]}; [b, c] """) == [5, 6]
 
+    def test_list_assign(self):
+        toil.run(r""" a := [2, [3, 4]] """)
+        assert toil.run(r""" a[0] = 5; a """) == [5, [3, 4]]
+        assert toil.run(r""" a[1][0] = 6; a """) == [5, [6, 4]]
+        assert toil.run(r""" a[-1][1] = 7; a """) == [5, [6, 7]]
+        assert toil.run(r""" l1 := [2, 3]; l2 := [4, 5]; l1[0] = l2[1] = 6; [l1, l2] """) == [[6, 3], [4, 6]]
+
+    def test_dict_assign(self):
+        toil.run(r""" d := {a: 2, b: {c: 3, d: 4}} """)
+        assert toil.run(r""" d["a"] = 5; d """) == {'a': 5, 'b': {'c': 3, 'd': 4}}
+        assert toil.run(r""" d["b"]["c"] = 6; d """) == {'a': 5, 'b': {'c': 6, 'd': 4}}
+        assert toil.run(r""" d.b.c = 7; d """) == {'a': 5, 'b': {'c': 7, 'd': 4}}
+        assert toil.run(r""" d1 := {a: 2}; d2 := {b: 3}; d1.a = d2["b"] = 4; [d1, d2] """) == [{'a': 4}, {'b': 4}]
+
 if __name__ == "__main__":
     pytest.main([__file__])

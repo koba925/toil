@@ -723,12 +723,11 @@ class Compiler:
             case Ident("continue"): self._continue()
             case Ident("break"): self._break()
             case Ident(name): self._code.append(("get", name))
-            case (Ident("define"), [var, expr]):
+            case (Ident("define"), [pat, expr]):
                 self._expression(expr)
-                self._code.append(("def", var))
-            case (Ident("assign"), [var, expr]):
-                self._expression(expr)
-                self._code.append(("set", var))
+                self._code.append(("def", pat))
+            case (Ident("assign"), [left_expr, right_expr]):
+                self._assign(left_expr, right_expr)
             case (Ident("scope"), [body_expr]):
                 self._scope(body_expr)
             case (Ident('seq'), exprs): self._seq(exprs)
@@ -752,6 +751,24 @@ class Compiler:
         for key, val in dic.items(): self._list([key, val])
         self._code.append(("get", "dict"))
         self._code.append(("call", len(dic)))
+
+    def _assign(self, left_expr, right_expr):
+        match left_expr:
+            case Ident(name):
+                self._expression(right_expr)
+                self._code.append(("set", name))
+            case (Ident("index"), [coll_expr, index_expr]):
+                self._expression(coll_expr)
+                self._expression(index_expr)
+                self._expression(right_expr)
+                self._code.append(("set_index",))
+            case (Ident("dot"), [coll_expr, attr_name]):
+                self._expression(coll_expr)
+                self._code.append(("const", attr_name))
+                self._expression(right_expr)
+                self._code.append(("set_index",))
+            case unexpected:
+                assert False, f"Invalid assign target @ compile(): {unexpected}"
 
     def _scope(self, body_expr):
         self._control_stack.append(("scope",))
@@ -856,7 +873,8 @@ class VM:
                 case ("const", val): self._stack.append(val)
                 case ("pop",): self._stack.pop()
                 case ("def", pat): self._def(pat)
-                case ("set", Ident(name)): self._env.assign(name, self._stack[-1])
+                case ("set", name): self._set(name)
+                case ("set_index",): self._set_index()
                 case ("get", name): self._stack.append(self._env.val(name))
                 case ("push_env",):
                     self._ctrl_stack.append(self._env)
@@ -875,8 +893,18 @@ class VM:
 
     def _def(self, pat):
         val = self._stack[-1]
-        assert self._env.bind(pat, val), \
-            f"Pattern mismatch @ _def(): {pat}, {val}"
+        assert self._env.bind(pat, val), f"Pattern mismatch @ _def(): {pat}, {val}"
+
+    def _set(self, name):
+        val = self._stack[-1]
+        self._env.assign(name, val)
+
+    def _set_index(self):
+        val = self._stack.pop()
+        index_val = self._stack.pop()
+        coll_val = self._stack.pop()
+        coll_val[index_val] = val
+        self._stack.append(val)
 
     def _dot(self, attr_name):
         target_val = self._stack.pop()
@@ -1361,6 +1389,14 @@ if __name__ == "__main__":
     print(toil.run(r""" [2, [3, 4]][1] """)) # -> [3, 4]
     print(toil.run(r""" [2, [3, 4]][1][0] """)) # -> 3
 
+    # Assign list element
+    toil.run(r""" a := [2, [3, 4]] """)
+    print_code(toil.code(r""" a[0] = 5 """))
+    print(toil.run(r""" a[0] = 5; a """)) # -> [5, [3, 4]]
+    print(toil.run(r""" a[1][0] = 6; a """)) # -> [5, [6, 4]]
+    print(toil.run(r""" a[-1][1] = 7; a """)) # -> [5, [6, 7]]
+    print(toil.run(r""" l1 := [2, 3]; l2 := [4, 5]; l1[0] = l2[1] = 6; [l1, l2] """)) # -> [[6, 3], [4, 6]]
+
     # Dict
     print_code(toil.code(r""" {} """))
     print(toil.run(r""" {} """)) # -> {}
@@ -1375,3 +1411,12 @@ if __name__ == "__main__":
     print_code(toil.code(r""" {a: 2, b: {c: 3, d: 4}}.b """))
     print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}.b """)) # -> {'c': 3, 'd': 4}
     print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}.b.c """)) # -> 3
+
+    # Assign dict element
+    toil.run(r""" d := {a: 2, b: {c: 3, d: 4}} """)
+    print_code(toil.code(r""" d["a"] = 5 """))
+    print(toil.run(r""" d["a"] = 5; d """)) # -> {'a': 5, 'b': {'c': 3, 'd': 4}}
+    print(toil.run(r""" d["b"]["c"] = 6; d """)) # -> {'a': 5, 'b': {'c': 6, 'd': 4}}
+
+    print(toil.run(r""" d.b.c = 7; d """)) # -> {'a': 5, 'b': {'c': 7, 'd': 4}}
+    print(toil.run(r""" d1 := {a: 2}; d2 := {b: 3}; d1.a = d2["b"] = 4; [d1, d2] """)) # -> [{'a': 4}, {'b': 4}]
