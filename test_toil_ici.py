@@ -393,5 +393,29 @@ class TestICI:
                 end
             """)
 
+        assert toil.run(r"""
+            for a in range(0, 3, 1) do
+                try if a == 1 then break end
+                except _ then 1/0 end
+            then 1/0 else a end
+        """) == 1
+
+        assert toil.run(r"""
+            a := 2; try scope a := 3; raise() end except _ then a end
+        """) == 2
+
+        assert toil.run(r"""
+            a := 2; try scope a = 3; raise() end except _ then a end
+        """) == 3
+
+        assert toil.run(r"""
+            for a in range(0, 3, 1) do
+                try scope
+                    if a == 0 then continue end;
+                    if a == 1 then break end
+                end except _ then 1/0 end
+            then 1/0 else a end
+        """) == 1
+
 if __name__ == "__main__":
     pytest.main([__file__])

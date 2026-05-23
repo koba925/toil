@@ -857,8 +857,10 @@ class Compiler:
     def _try(self, body_expr, clauses):
         handler_jump = self._current_addr()
         self._code.append(("push_try", None))
+        self._control_stack.append(("try",))
         self._expression(body_expr)
         self._code.append(("pop_try",))
+        self._control_stack.pop()
 
         end_jump = self._current_addr()
         self._code.append(("jump", None))
@@ -893,6 +895,8 @@ class Compiler:
             match ctrl:
                 case ("scope",):
                     self._code.append(("pop_env",))
+                case ("try",):
+                    self._code.append(("pop_try",))
                 case ("while", loop_jump, _):
                     self._code.append(("jump", loop_jump))
                     return
@@ -903,6 +907,8 @@ class Compiler:
             match ctrl:
                 case ("scope",):
                     self._code.append(("pop_env",))
+                case ("try",):
+                    self._code.append(("pop_try",))
                 case ("while", _, break_addrs):
                     break_addrs.append(self._current_addr())
                     self._code.append(("jump", None))
@@ -928,11 +934,11 @@ class Compiler:
 class VM:
     def __init__(self, code: Code, env: Environment):
         self._code = code
+        self._env = env
         self._ip = 0
         self._stack = []
         self._ctrl_stack = []
         self._try_stack = []
-        self._env = env
 
     def execute(self) -> Value:
         while True:
@@ -961,7 +967,7 @@ class VM:
                     self._env = Environment(self._env)
                 case ("pop_env",): self._env = self._ctrl_stack.pop()
                 case ("push_try", addr):
-                    self._try_stack.append((addr, len(self._stack)))
+                    self._try_stack.append((addr, len(self._stack), self._env, len(self._ctrl_stack)))
                 case ("pop_try",): self._try_stack.pop()
                 case ("raise",): self._raise()
                 case _:
@@ -1027,8 +1033,10 @@ class VM:
     def _raise(self):
         exc_val = self._stack.pop()
         assert self._try_stack, f"Unhandled exception @ _raise(): {exc_val}"
-        catch_addr, stack_size = self._try_stack.pop()
+        catch_addr, stack_size, catch_env, ctrl_stack_size = self._try_stack.pop()
         del self._stack[stack_size:]
+        self._env = catch_env
+        del self._ctrl_stack[ctrl_stack_size:]
         self._stack.append(exc_val)
         self._ip = catch_addr
 
@@ -1651,3 +1659,27 @@ if __name__ == "__main__":
     print(toil.run(r""" test_try("foo") """)) # -> ['foo', 3]
     print(toil.run(r""" test_try("bar") """)) # -> ['bar', 3]
     # print(toil.run(r""" test_try("baz") """)) # -> Unhandled exception
+
+    print(toil.run(r"""
+        for a in range(0, 3, 1) do
+            try if a == 1 then break end
+            except _ then 1/0 end
+        then 1/0 else a end
+    """)) # -> 1
+
+    print(toil.run(r"""
+        a := 2; try scope a := 3; raise() end except _ then a end
+    """)) # -> 2
+
+    print(toil.run(r"""
+        a := 2; try scope a = 3; raise() end except _ then a end
+    """)) # -> 3
+
+    print(toil.run(r"""
+        for a in range(0, 3, 1) do
+            try scope
+                if a == 0 then continue end;
+                if a == 1 then break end
+            end except _ then 1/0 end
+        then 1/0 else a end
+    """)) # -> 1
