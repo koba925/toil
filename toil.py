@@ -553,6 +553,7 @@ class Expander:
                 args_expanded = [self.expand(expr, env) for expr in args_expr]
                 return (op_expanded, args_expanded)
 
+
 class ToilException(Exception):
     def __init__(self, e: Value = None) -> None: self.e = e
 
@@ -567,8 +568,7 @@ class Evaluator:
     def eval(self, expr: Expr, env: Environment) -> Value:
         # print(expr)
         match expr:
-            case None | bool() | int() | str():
-                return expr
+            case None | bool() | int() | str(): return expr
             case list() as exprs:
                 return [self.eval(expr, env) for expr in exprs]
             case dict() as exprs:
@@ -699,6 +699,7 @@ class Evaluator:
                 assert False, f"Invalid operator @ apply(): {op_val}"
 
 
+
 class Compiler:
     def __init__(self):
         self._code = []
@@ -714,22 +715,20 @@ class Compiler:
 
     def _expression(self, expr):
         match expr:
-            case None | bool() | int() | str():
-                self._code.append(("const", expr))
-            case list() as lst:
-                self._list(lst)
-            case dict() as dic:
-                self._dict(dic)
+            case None | bool() | int() | str(): self._code.append(("const", expr))
+            case list() as lst: self._list(lst)
+            case dict() as dic: self._dict(dic)
             case Ident("continue"): self._continue()
             case Ident("break"): self._break()
             case Ident(name): self._code.append(("get", name))
+            case (Ident("func"), [params, body_expr]): self._func(params, body_expr)
+            case (Ident("return"), args): self._return(args)
             case (Ident("define"), [pat, expr]):
                 self._expression(expr)
                 self._code.append(("def", pat))
             case (Ident("assign"), [left_expr, right_expr]):
                 self._assign(left_expr, right_expr)
-            case (Ident("scope"), [body_expr]):
-                self._scope(body_expr)
+            case (Ident("scope"), [body_expr]): self._scope(body_expr)
             case (Ident('seq'), exprs): self._seq(exprs)
             case (Ident('if'), [cond_expr, then_expr, else_expr]):
                 self._if(cond_expr, then_expr, else_expr)
@@ -737,10 +736,8 @@ class Compiler:
                 self._while(cond_expr, body_expr, then_expr, else_expr)
             case (Ident("dot"), [target_expr, attr_name]):
                 self._dot(target_expr, attr_name)
-            case (Ident(op), [*args]):
-                self._op(Ident(op), args)
-            case _:
-                assert False, f"Unsupported expression @ compile(): {expr}"
+            case (Ident(op), [*args]): self._op(Ident(op), args)
+            case _: assert False, f"Unsupported expression @ compile(): {expr}"
 
     def _list(self, lst):
         for elem in lst: self._expression(elem)
@@ -751,6 +748,15 @@ class Compiler:
         for key, val in dic.items(): self._list([key, val])
         self._code.append(("get", "dict"))
         self._code.append(("call", len(dic)))
+
+    def _func(self, params, body_expr):
+        body_code = Compiler().compile(body_expr)
+        self._code.append(("make_closure", params, body_code))
+
+    def _return(self, args):
+        if args: self._expression(args[0])
+        else: self._code.append(("const", None))
+        self._code.append(("return",))
 
     def _assign(self, left_expr, right_expr):
         match left_expr:
@@ -861,15 +867,13 @@ class VM:
         self._ctrl_stack = []
         self._env = env
 
-    def load(self, code: Code) -> None:
-        self._code = code
-        self._ip = 0
-
-    def execute(self) -> Value:
+    def execute(self, code: Code) -> Value:
+        self._code = code; self._ip = 0
         while True:
             inst = self._code[self._ip]; self._ip += 1
             match inst:
                 case ("halt",): break
+                case ("return",): return self._stack.pop()
                 case ("const", val): self._stack.append(val)
                 case ("pop",): self._stack.pop()
                 case ("def", pat): self._def(pat)
@@ -884,6 +888,8 @@ class VM:
                 case ("jump_if_false", addr):
                     if not self._stack.pop(): self._ip = addr
                 case ("dot", attr_name): self._dot(attr_name)
+                case ("make_closure", params, body_code):
+                    self._stack.append((Ident("vm_closure"), [params, body_code, self._env]))
                 case ("call", nargs): self._call(nargs)
                 case _:
                     assert False, f"Invalid instruction @ execute(): {inst}"
@@ -915,6 +921,12 @@ class VM:
         args = list(reversed([self._stack.pop() for _ in range(nargs)]))
         match op:
             case f if callable(f): self._stack.append(f(args))
+            case (Ident("vm_closure"), [params, body_code, closure_env]):
+                new_env = Environment(closure_env)
+                if new_env.bind(params, args):
+                    self._stack.append(VM(new_env).execute(body_code))
+                else:
+                    assert False, f"Pattern mismatch @ _call(): {params}, {args}"
             case unexpected:
                 assert False, f"Invalid call @ _call(): {unexpected}"
 
@@ -1189,8 +1201,7 @@ class Interpreter:
         try:
             return Evaluator().eval(ast, self._env)
         except ToilException as e: assert False, f"ToilException @ evaluate(): {e.e}"
-        except ReturnException as e:
-            assert False, f"Return from top level @ evaluate(): {e.val}"
+        except ReturnException as e: return e.val
         except ContinueException: assert False, "Continue at top level @ evaluate()"
         except BreakException: assert False, f"Break at top level @ evaluate()"
 
@@ -1204,9 +1215,7 @@ class Interpreter:
         return self.compile(self.ast(src))
 
     def execute(self, code: Code) -> Value:
-        vm = VM(self._env)
-        vm.load(code)
-        return vm.execute()
+        return VM(self._env).execute(code)
 
     def run(self, src: Source) -> Value:
         return self.execute(self.code(src))
@@ -1420,3 +1429,41 @@ if __name__ == "__main__":
 
     print(toil.run(r""" d.b.c = 7; d """)) # -> {'a': 5, 'b': {'c': 7, 'd': 4}}
     print(toil.run(r""" d1 := {a: 2}; d2 := {b: 3}; d1.a = d2["b"] = 4; [d1, d2] """)) # -> [{'a': 4}, {'b': 4}]
+
+    # User defined function
+    print_code(toil.code(r""" myadd := func a, b do a + b end """))
+    print(toil.run(r""" myadd := [a, b] -> a + b; myadd(2, 3) """)) # -> 5
+
+    print(toil.run(r""" f := func do 2 end; f() """)) # -> 2
+    print(toil.run(r""" f := func a, *b do [a, b] end; f(2, 3, 4) """)) # -> [2, [3, 4]]
+
+    print_code(toil.code(r""" f := func do return(2); 3 end; f() """))
+    print(toil.run(r""" f := func do return(2); 3 end; f() """)) # -> 2
+
+    print(toil.run(r""" def twice(f, x) do f(f(x)) end; twice(a -> a * 2, 3) """)) # -> 12
+
+    # Closure (state capture)
+    toil.run(r"""
+        def make_counter do
+            count := 0;
+            func do count = count + 1 end
+        end;
+
+        c1 := make_counter();
+        c2 := make_counter()
+    """)
+    print(toil.run(r"""c1()""")) # -> 1
+    print(toil.run(r"""c1()""")) # -> 2
+    print(toil.run(r"""c2()""")) # -> 1
+    print(toil.run(r"""c2()""")) # -> 2
+
+    # Recursive Fibonacci
+    print(toil.run(r"""
+        def fib(n) do
+            if n == 0 then return(0) end;
+            if n == 1 then return(1) end;
+            fib(n - 1) + fib(n - 2)
+        end;
+        fib(6)
+    """)) # -> 8
+

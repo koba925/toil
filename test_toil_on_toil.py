@@ -677,8 +677,7 @@ class TestToT:
 
         assert tot.walk(r""" func do return() end () """) is None
 
-        with pytest.raises(Exception):
-            tot.walk(r""" return() """)
+        assert tot.walk(r""" return(2) """) == 2
 
         assert tot.walk(r"""
             def find_even(nums) do

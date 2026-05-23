@@ -963,14 +963,10 @@ defclass Interpreter do
     defmethod parse(tokens) do Parser(tokens).parse() end;
     defmethod ast(src) do Parser(self.scan(src)).parse() end;
     defmethod eval(ast) do
-        try
-            Evaluator().eval(ast, self._env)
-        except ['ReturnException', val] then
-            raise('Return from top level @ walk(): {}'.format(val))
-        except ['ContinueException'] then
-            raise('Continue at top level @ walk()')
-        except ['BreakException'] then
-            raise('Break at top level @ walk()')
+        try Evaluator().eval(ast, self._env)
+        except ['ReturnException', val] then val
+        except ['ContinueException'] then raise('Continue at top level @ walk()')
+        except ['BreakException'] then raise('Break at top level @ walk()')
         end
     end;
     defmethod walk(src) do self.eval(self.ast(src)) end

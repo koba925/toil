@@ -285,5 +285,38 @@ class TestICI:
         assert toil.run(r""" d.b.c = 7; d """) == {'a': 5, 'b': {'c': 7, 'd': 4}}
         assert toil.run(r""" d1 := {a: 2}; d2 := {b: 3}; d1.a = d2["b"] = 4; [d1, d2] """) == [{'a': 4}, {'b': 4}]
 
+    def test_func(self):
+        assert toil.run(r""" myadd := [a, b] -> a + b; myadd(2, 3) """) == 5
+        assert toil.run(r""" f := func do 2 end; f() """) == 2
+        assert toil.run(r""" f := func a, *b do [a, b] end; f(2, 3, 4) """) == [2, [3, 4]]
+        assert toil.run(r""" def twice(f, x) do f(f(x)) end; twice(a -> a * 2, 3) """) == 12
+
+    def test_return(self):
+        assert toil.run(r""" f := func do return(2); 3 end; f() """) == 2
+
+    def test_closure(self):
+        toil.run(r"""
+            def make_counter do
+                count := 0;
+                func do count = count + 1 end
+            end;
+            c1 := make_counter();
+            c2 := make_counter()
+        """)
+        assert toil.run(r"""c1()""") == 1
+        assert toil.run(r"""c1()""") == 2
+        assert toil.run(r"""c2()""") == 1
+        assert toil.run(r"""c2()""") == 2
+
+    def test_recursion_fib(self):
+        assert toil.run(r"""
+            def fib(n) do
+                if n == 0 then return(0) end;
+                if n == 1 then return(1) end;
+                fib(n - 1) + fib(n - 2)
+            end;
+            fib(6)
+        """) == 8
+
 if __name__ == "__main__":
     pytest.main([__file__])
