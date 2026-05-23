@@ -741,6 +741,10 @@ class Compiler:
                 self._while(cond_expr, body_expr, then_expr, else_expr)
             case (Ident("match"), [val_expr, cases]):
                 self._match(val_expr, cases)
+            case (Ident("try"), [body_expr, clauses]):
+                self._try(body_expr, clauses)
+            case (Ident("raise"), args):
+                self._raise(args)
             case (Ident("dot"), [target_expr, attr_name]):
                 self._dot(target_expr, attr_name)
             case (op_expr, args_expr) if isinstance(expr, tuple):
@@ -850,6 +854,40 @@ class Compiler:
         for jmp in end_jumps:
             self._set_operand(jmp, self._current_addr())
 
+    def _try(self, body_expr, clauses):
+        handler_jump = self._current_addr()
+        self._code.append(("push_try", None))
+        self._expression(body_expr)
+        self._code.append(("pop_try",))
+
+        end_jump = self._current_addr()
+        self._code.append(("jump", None))
+
+        self._set_operand(handler_jump, self._current_addr())
+        clause_end_jumps = []
+        for pat, expr in clauses:
+            self._code.append(("match", pat))
+            next_clause_jump = self._current_addr()
+            self._code.append(("jump_if_false", None))
+
+            self._code.append(("pop",))
+            self._expression(expr)
+            clause_end_jumps.append(self._current_addr())
+            self._code.append(("jump", None))
+
+            self._set_operand(next_clause_jump, self._current_addr())
+
+        self._code.append(("raise",))
+
+        for jmp in clause_end_jumps:
+            self._set_operand(jmp, self._current_addr())
+        self._set_operand(end_jump, self._current_addr())
+
+    def _raise(self, args):
+        if args: self._expression(args[0])
+        else: self._code.append(("const", None))
+        self._code.append(("raise",))
+
     def _continue(self):
         for ctrl in reversed(self._control_stack):
             match ctrl:
@@ -893,6 +931,7 @@ class VM:
         self._ip = 0
         self._stack = []
         self._ctrl_stack = []
+        self._try_stack = []
         self._env = env
 
     def execute(self) -> Value:
@@ -907,10 +946,6 @@ class VM:
                 case ("set", name): self._set(name)
                 case ("set_index",): self._set_index()
                 case ("get", name): self._stack.append(self._env.val(name))
-                case ("push_env",):
-                    self._ctrl_stack.append(self._env)
-                    self._env = Environment(self._env)
-                case ("pop_env",): self._env = self._ctrl_stack.pop()
                 case ("jump", addr): self._ip = addr
                 case ("jump_if_false", addr):
                     if not self._stack.pop(): self._ip = addr
@@ -921,6 +956,14 @@ class VM:
                 case ("make_closure", params, body_code):
                     self._stack.append((Ident("vm_closure"), [params, body_code, self._env]))
                 case ("call", nargs): self._call(nargs)
+                case ("push_env",):
+                    self._ctrl_stack.append(self._env)
+                    self._env = Environment(self._env)
+                case ("pop_env",): self._env = self._ctrl_stack.pop()
+                case ("push_try", addr):
+                    self._try_stack.append((addr, len(self._stack)))
+                case ("pop_try",): self._try_stack.pop()
+                case ("raise",): self._raise()
                 case _:
                     assert False, f"Invalid instruction @ execute(): {inst}"
         assert len(self._ctrl_stack) == 0, f"Invalid control stack state @ execute(): {self._ctrl_stack}"
@@ -980,6 +1023,14 @@ class VM:
                     assert False, f"Pattern mismatch @ _call(): {params}, {args}"
             case unexpected:
                 assert False, f"Invalid call @ _call(): {unexpected}"
+
+    def _raise(self):
+        exc_val = self._stack.pop()
+        assert self._try_stack, f"Unhandled exception @ _raise(): {exc_val}"
+        catch_addr, stack_size = self._try_stack.pop()
+        del self._stack[stack_size:]
+        self._stack.append(exc_val)
+        self._ip = catch_addr
 
 class Interpreter:
     def __init__(self) -> None:
@@ -1581,3 +1632,22 @@ if __name__ == "__main__":
 
     print(toil.run(r""" match 2 end """)) # -> None
 
+    # Try-Except
+    print_code(toil.code(r""" try 2; 3 except e then e end """))
+    print(toil.run(r""" try 2; 3 except e then e end """)) # -> 3
+
+    print_code(toil.code(r""" try 2; raise(2 + 3); 3 except e then e end """))
+    print(toil.run(r""" try 2; raise(2 + 3); 3 except e then e end """)) # -> 5
+
+    toil.run(r"""
+        def test_try(x) do
+            try
+                raise([x, 3])
+            except ["foo", val] then ["foo", val]
+            except ["bar", val] then ["bar", val]
+            end
+        end
+    """)
+    print(toil.run(r""" test_try("foo") """)) # -> ['foo', 3]
+    print(toil.run(r""" test_try("bar") """)) # -> ['bar', 3]
+    # print(toil.run(r""" test_try("baz") """)) # -> Unhandled exception

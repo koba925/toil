@@ -372,5 +372,26 @@ class TestICI:
 
         assert toil.run(r""" match 2 end """) is None
 
+    def test_try_except(self):
+        assert toil.run(r""" try 2; 3 end """) == 3
+        assert toil.run(r""" try 2; 3 except e then e end """) == 3
+        assert toil.run(r""" try 2; raise(2 + 3); 3 except e then e end """) == 5
+
+        assert toil.run(r"""
+            try
+                raise(["bar", 3])
+            except ["foo", val] then ["foo", val]
+            except ["bar", val] then ["bar", val]
+            end
+        """) == ["bar", 3]
+
+        with pytest.raises(AssertionError, match="Unhandled exception"):
+            toil.run(r"""
+                try
+                    raise(["baz", 3])
+                except ["foo", val] then ["foo", val]
+                end
+            """)
+
 if __name__ == "__main__":
     pytest.main([__file__])
