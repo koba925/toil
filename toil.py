@@ -695,19 +695,24 @@ class Evaluator:
                         return self.eval(body_expr, new_env)
                     except ReturnException as e: return e.val
                 assert False, f"Pattern mismatch @ apply(): {params}, {args_val}"
+            case (Ident("vm_closure"), [params, body_code, closure_env]):
+                new_env = Environment(closure_env)
+                if new_env.bind(params, args_val):
+                    return VM(body_code, new_env).execute()
+                assert False, f"Pattern mismatch @ apply(): {params}, {args_val}"
             case _:
                 assert False, f"Invalid operator @ apply(): {op_val}"
 
 
 
 class Compiler:
-    def __init__(self):
+    def __init__(self, expr: Expr):
+        self._expr = expr
         self._code = []
         self._control_stack = []
 
-    def compile(self,expr: Expr) -> Code:
-        self._code = []
-        self._expression(expr)
+    def compile(self) -> Code:
+        self._expression(self._expr)
         self._code.append(("halt",))
         assert self._control_stack == [], \
             f"Invalid control stack state @ compile(): {self._control_stack}"
@@ -750,7 +755,7 @@ class Compiler:
         self._code.append(("call", len(dic)))
 
     def _func(self, params, body_expr):
-        body_code = Compiler().compile(body_expr)
+        body_code = Compiler(body_expr).compile()
         self._code.append(("make_closure", params, body_code))
 
     def _return(self, args):
@@ -860,15 +865,14 @@ class Compiler:
         return len(self._code)
 
 class VM:
-    def __init__(self, env: Environment):
-        self._code = []
+    def __init__(self, code: Code, env: Environment):
+        self._code = code
         self._ip = 0
         self._stack = []
         self._ctrl_stack = []
         self._env = env
 
-    def execute(self, code: Code) -> Value:
-        self._code = code; self._ip = 0
+    def execute(self) -> Value:
         while True:
             inst = self._code[self._ip]; self._ip += 1
             match inst:
@@ -924,7 +928,16 @@ class VM:
             case (Ident("vm_closure"), [params, body_code, closure_env]):
                 new_env = Environment(closure_env)
                 if new_env.bind(params, args):
-                    self._stack.append(VM(new_env).execute(body_code))
+                    self._stack.append(VM(body_code, new_env).execute())
+                else:
+                    assert False, f"Pattern mismatch @ _call(): {params}, {args}"
+            case (Ident("closure"), [params, body_expr, closure_env]):
+                new_env = Environment(closure_env)
+                if new_env.bind(params, args):
+                    try:
+                        self._stack.append(Evaluator().eval(body_expr, new_env))
+                    except ReturnException as e:
+                        self._stack.append(e.val)
                 else:
                     assert False, f"Pattern mismatch @ _call(): {params}, {args}"
             case unexpected:
@@ -990,13 +1003,33 @@ class Interpreter:
         self._env.define("print", lambda args: print(*args))
 
         self._env.define("read", lambda args: open(args[0], "r").read())
-        self._env.define("load", lambda args: self._load(args[0]))
+
+        def _load(path):
+            with open(path, "r") as f: src = f.read()
+            return Evaluator().eval(self.ast(src), Environment(self._env))
+        self._env.define("load", lambda args: _load(args[0]))
 
         self._env.define("eval", lambda args: Evaluator().eval(self.ast(args[0]), self._env))
         self._env.define("eval_expr", lambda args: Evaluator().eval(args[0], self._env))
         self._env.define("apply", lambda args: Evaluator().apply(args[0], args[1]))
 
-        self._env.define("gensym", lambda args: self._gensym(args))
+        def _compile(args):
+            func = args[0]
+            match func:
+                case (Ident("closure"), [params, body_expr, closure_env]):
+                    body_code = self.compile(body_expr)
+                    return (Ident("vm_closure"), [params, body_code, closure_env])
+                case (Ident("vm_closure"), _):
+                    return func
+                case _:
+                    assert False, f"Expected a closure @ compile(): {func}"
+        self._env.define("compile", _compile)
+
+        def _gensym(args):
+            self._gensym_counter += 1
+            name = args[0] if args else "gensym"
+            return Ident(f"__{name}_{self._gensym_counter}")
+        self._env.define("gensym", lambda args: _gensym(args))
 
         self._env = Environment(self._env)
 
@@ -1176,15 +1209,6 @@ class Interpreter:
         self._env = Environment(self._env)
         return self
 
-    def _gensym(self, args):
-        self._gensym_counter += 1
-        name = args[0] if args else "gensym"
-        return Ident(f"__{name}_{self._gensym_counter}")
-
-    def _load(self, path):
-        with open(path, "r") as f: src = f.read()
-        return Evaluator().eval(self.ast(src), Environment(self._env))
-
     def scan(self, src: Source) -> list[Token]:
         return Scanner(src).tokenize()
 
@@ -1209,13 +1233,13 @@ class Interpreter:
         return self.eval(self.ast(src))
 
     def compile(self, ast: Expr) -> Code:
-        return Compiler().compile(ast)
+        return Compiler(ast).compile()
 
     def code(self, src: Source) -> Code:
         return self.compile(self.ast(src))
 
     def execute(self, code: Code) -> Value:
-        return VM(self._env).execute(code)
+        return VM(code, self._env).execute()
 
     def run(self, src: Source) -> Value:
         return self.execute(self.code(src))
@@ -1467,3 +1491,20 @@ if __name__ == "__main__":
         fib(6)
     """)) # -> 8
 
+    # Mutual call
+    toil.walk(r""" def even(n) do if n == 0 then True else odd(n - 1) end end """)
+    toil.run(r""" def odd(n) do if n == 0 then False else even(n - 1) end end """)
+    print(toil.walk(r"""even(2)""")) # -> True
+    print(toil.walk(r"""even(3)""")) # -> False
+    print(toil.run(r"""odd(2)""")) # -> False
+    print(toil.run(r"""odd(3)""")) # -> True
+
+    # Run-time compile
+    toil.walk(r""" add2 := a -> a + 2 """)
+    print(toil.run(r""" add2 """)) # -> (closure, [[a], (add, [a, 2]), [...]])
+    toil.walk(r""" add2 := compile(add2) """)
+    print(toil.run(r""" add2 """)) # -> (vm_closure, [[a], [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
+    print(toil.run(r""" add2(3) """)) # -> 5
+    toil.walk(r""" add2 := compile(add2) """)
+    print(toil.run(r""" add2 """)) # -> (vm_closure, [[a], [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
+    print(toil.run(r""" add2(3) """)) # -> 5

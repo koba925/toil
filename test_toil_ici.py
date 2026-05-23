@@ -318,5 +318,18 @@ class TestICI:
             fib(6)
         """) == 8
 
+    def test_runtime_compile(self):
+        toil.walk(r""" add2 := a -> a + 2 """)
+        assert toil.run(r""" add2 """)[0] == Ident("closure")
+
+        toil.walk(r""" add2 := compile(add2) """)
+        compiled_func = toil.run(r""" add2 """)
+        assert compiled_func[0] == Ident("vm_closure")
+        assert toil.run(r""" add2(3) """) == 5
+
+        toil.walk(r""" add2 := compile(add2) """)
+        assert toil.run(r""" add2 """)[0] == Ident("vm_closure")
+        assert toil.run(r""" add2(3) """) == 5
+
 if __name__ == "__main__":
     pytest.main([__file__])

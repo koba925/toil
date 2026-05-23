@@ -1329,6 +1329,15 @@ class TestExamples:
         assert toil.walk(r"""odd(2)""") is False
         assert toil.walk(r"""odd(3)""") is True
 
+    def test_inter_interpreter_mutual_recursion(self):
+        toil.walk(r""" def even(n) do if n == 0 then True else odd(n - 1) end end """)
+        toil.run(r""" def odd(n) do if n == 0 then False else even(n - 1) end end """)
+
+        assert toil.walk(r"""even(2)""") is True
+        assert toil.walk(r"""even(3)""") is False
+        assert toil.run(r"""odd(2)""") is False
+        assert toil.run(r"""odd(3)""") is True
+
     def test_closure_counter(self):
         toil.walk(r"""
             def make_counter do
