@@ -161,6 +161,32 @@ class TestICI:
         assert toil.run(r""" {a: 2, b: {c: 3, d: 4}}.b """) == {'c': 3, 'd': 4}
         assert toil.run(r""" {a: 2, b: {c: 3, d: 4}}.b.c """) == 3
 
+    def test_ufcs(self):
+        assert toil.run(r""" 2.add(3) """) == 5
+        assert toil.run(r""" [2, 3, 4].len() """) == 3
+        assert toil.run(r""" [2, 3, 4].len().add(5) """) == 8
+
+        toil.run(r""" def myadd(a, b) do a + b end """)
+        assert toil.run(r""" 2.myadd(3) """) == 5
+
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            toil.run(r""" 2.not_found() """)
+        with pytest.raises(AssertionError, match="Invalid operator"):
+            toil.run(r""" foo := 2; 3.foo() """)
+
+    def test_method_notation(self):
+        toil.run(r""" obj := {
+            set: func self, val do self.val = val end,
+            add: func self, a do self.val + a end,
+            val: None
+        } """)
+        toil.run(r""" obj.set(2) """)
+        assert toil.run(r""" obj.val """) == 2
+        assert toil.run(r""" obj.add(3) """) == 5
+
+        assert toil.run(r""" {a: 2, b: 3}.keys() """) == ['a', 'b']
+        assert toil.run(r""" { len: func self do "local" end }.len() """) == "local"
+
     def test_destructure_variable_and_literal(self):
         # Variable pattern
         assert toil.run(r""" a := 2; a """) == 2

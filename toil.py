@@ -672,7 +672,7 @@ class Evaluator:
             case dict() if attr_name in target_val:
                 func_val = target_val[attr_name]
                 match func_val:
-                    case (Ident("closure"), [[Ident("self"), *_], _, _]):
+                    case (Ident("closure") | Ident("vm_closure"), [[Ident("self"), *_], *_]):
                         return lambda args: self.apply(func_val, [target_val] + args)
                 return func_val
 
@@ -741,7 +741,8 @@ class Compiler:
                 self._while(cond_expr, body_expr, then_expr, else_expr)
             case (Ident("dot"), [target_expr, attr_name]):
                 self._dot(target_expr, attr_name)
-            case (Ident(op), [*args]): self._op(Ident(op), args)
+            case (op_expr, args_expr) if isinstance(expr, tuple):
+                self._op(op_expr, args_expr)
             case _: assert False, f"Unsupported expression @ compile(): {expr}"
 
     def _list(self, lst):
@@ -918,7 +919,19 @@ class VM:
 
     def _dot(self, attr_name):
         target_val = self._stack.pop()
-        self._stack.append(target_val[attr_name])
+        match target_val:
+            case dict() if attr_name in target_val:
+                func_val = target_val[attr_name]
+                match func_val:
+                    case (Ident("closure") | Ident("vm_closure"), [[Ident("self"), *_], *_]):
+                        self._stack.append(
+                            lambda args: Evaluator().apply(func_val, [target_val] + args))
+                        return
+                self._stack.append(func_val)
+                return
+
+        func_val = self._env.val(attr_name)
+        self._stack.append(lambda args: Evaluator().apply(func_val, [target_val] + args))
 
     def _call(self, nargs):
         op = self._stack.pop()
@@ -1508,3 +1521,21 @@ if __name__ == "__main__":
     toil.walk(r""" add2 := compile(add2) """)
     print(toil.run(r""" add2 """)) # -> (vm_closure, [[a], [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
     print(toil.run(r""" add2(3) """)) # -> 5
+
+    # UFCS
+    print_code(toil.code(r""" 2.add(3) """))
+    print(toil.run(r""" 2.add(3) """)) # -> 5
+    print(toil.run(r""" [2, 3, 4].len().add(5) """)) # -> 8
+
+    # Method notation
+    toil.run(r"""
+        obj := {
+            set: func self, val do self.val = val end,
+            add: func self, a do self.val + a end,
+            val: None
+        }
+    """)
+    toil.run(r""" obj.set(2) """)
+    print(toil.run(r""" obj.val """)) # -> 2
+    print(toil.run(r""" obj.add(3) """)) # -> 5
+    print(toil.run(r""" {a: 2, b: 3}.keys() """)) # -> ['a', 'b']
