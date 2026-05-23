@@ -739,6 +739,8 @@ class Compiler:
                 self._if(cond_expr, then_expr, else_expr)
             case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
                 self._while(cond_expr, body_expr, then_expr, else_expr)
+            case (Ident("match"), [val_expr, cases]):
+                self._match(val_expr, cases)
             case (Ident("dot"), [target_expr, attr_name]):
                 self._dot(target_expr, attr_name)
             case (op_expr, args_expr) if isinstance(expr, tuple):
@@ -828,6 +830,26 @@ class Compiler:
         self._expression(else_expr[0] if else_expr else None)
         self._set_operand(then_jump, self._current_addr())
 
+    def _match(self, val_expr, cases):
+        self._expression(val_expr)
+        end_jumps = []
+        for pat, body_expr in cases:
+            self._code.append(("match", pat))
+            next_case_jump = self._current_addr()
+            self._code.append(("jump_if_false", None))
+
+            self._code.append(("pop",))
+            self._expression(body_expr)
+            end_jumps.append(self._current_addr())
+            self._code.append(("jump", None))
+
+            self._set_operand(next_case_jump, self._current_addr())
+
+        self._code.append(("pop",))
+        self._code.append(("const", None))
+        for jmp in end_jumps:
+            self._set_operand(jmp, self._current_addr())
+
     def _continue(self):
         for ctrl in reversed(self._control_stack):
             match ctrl:
@@ -892,6 +914,9 @@ class VM:
                 case ("jump", addr): self._ip = addr
                 case ("jump_if_false", addr):
                     if not self._stack.pop(): self._ip = addr
+                case ("match", pat):
+                    val = self._stack[-1]
+                    self._stack.append(self._env.bind(pat, val))
                 case ("dot", attr_name): self._dot(attr_name)
                 case ("make_closure", params, body_code):
                     self._stack.append((Ident("vm_closure"), [params, body_code, self._env]))
@@ -1539,3 +1564,20 @@ if __name__ == "__main__":
     print(toil.run(r""" obj.val """)) # -> 2
     print(toil.run(r""" obj.add(3) """)) # -> 5
     print(toil.run(r""" {a: 2, b: 3}.keys() """)) # -> ['a', 'b']
+
+    # Match
+    print_code(toil.code(r""" match x case int(a) then 1 case str(a) then 2 end """))
+    toil.run(r"""
+        def test_match(x) do
+            match x
+                case int(a) then "int: " + to_str(a)
+                case str(a) then "str: " + a
+            end
+        end
+    """)
+    print(toil.run(r""" test_match(2) """)) # -> int: 2
+    print(toil.run(r""" test_match("hello") """)) # -> str: hello
+    print(toil.run(r""" test_match([]) """)) # -> None
+
+    print(toil.run(r""" match 2 end """)) # -> None
+

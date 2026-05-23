@@ -357,5 +357,20 @@ class TestICI:
         assert toil.run(r""" add2 """)[0] == Ident("vm_closure")
         assert toil.run(r""" add2(3) """) == 5
 
+    def test_match(self):
+        toil.run(r"""
+            def test_match(x) do
+                match x
+                    case int(a) then "int: " + to_str(a)
+                    case str(a) then "str: " + a
+                end
+            end
+        """)
+        assert toil.run(r""" test_match(2) """) == "int: 2"
+        assert toil.run(r""" test_match("hello") """) == "str: hello"
+        assert toil.run(r""" test_match([]) """) is None
+
+        assert toil.run(r""" match 2 end """) is None
+
 if __name__ == "__main__":
     pytest.main([__file__])
