@@ -1115,10 +1115,13 @@ class Interpreter:
 
         self._env.define("read", lambda args: open(args[0], "r").read())
 
-        def _load(path):
+        def _load(path, ici=False):
             with open(path, "r") as f: src = f.read()
-            return Evaluator().eval(self.ast(src), Environment(self._env))
-        self._env.define("load", lambda args: _load(args[0]))
+            if ici:
+                return VM(self.code(src), Environment(self._env)).execute()
+            else:
+                return Evaluator().eval(self.ast(src), Environment(self._env))
+        self._env.define("load", lambda args: _load(args[0], args[1] if len(args) > 1 else False))
 
         self._env.define("eval", lambda args: Evaluator().eval(self.ast(args[0]), self._env))
         self._env.define("eval_expr", lambda args: Evaluator().eval(args[0], self._env))

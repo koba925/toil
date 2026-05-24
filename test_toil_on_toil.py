@@ -3,121 +3,174 @@ from toil import Interpreter, Ident
 from toil_on_toil import ToTWrapper
 
 
-toil = Interpreter().init_env().stdlib()
-toil.walk(r"""
+toil_walk = Interpreter().init_env().stdlib()
+toil_walk.walk(r"""
     {
         Interpreter, Environment,
         isalpha, isdigit, isalnum, isspace, is_ident_first, is_ident_rest, is_ident
     } := load('toil.toil');
-    tot := Interpreter().init_env().stdlib()
+    tot_base := Interpreter().init_env().stdlib()
 """)
 
-tot = ToTWrapper(toil)
-
+toil_run = Interpreter().init_env().stdlib()
+toil_run.run(r"""
+    {
+        Interpreter, Environment,
+        isalpha, isdigit, isalnum, isspace, is_ident_first, is_ident_rest, is_ident
+    } := load('toil.toil', True);
+    tot_base := Interpreter().init_env().stdlib()
+""")
 
 class TestFunctions:
+    @pytest.fixture(autouse=True, params=["run", "walk"])
+    def setup_go(self, request):
+        self.go = toil_run.run if request.param == "run" else toil_walk.walk
+
     def test_isalpha(self):
-        assert toil.walk(r""" isalpha("a") """) is True
-        assert toil.walk(r""" isalpha("z") """) is True
-        assert toil.walk(r""" isalpha("A") """) is True
-        assert toil.walk(r""" isalpha("Z") """) is True
-        assert toil.walk(r""" isalpha("0") """) is False
-        assert toil.walk(r""" isalpha("9") """) is False
-        assert toil.walk(r""" isalpha("_") """) is False
-        assert toil.walk(r""" isalpha("$") """) is False
-        assert toil.walk(r""" isalpha(" ") """) is False
-        assert toil.walk(""" isalpha("\n") """) is False
-        assert toil.walk(r""" isalpha("\n") """) is False
+        assert self.go(r""" isalpha("a") """) is True
+        assert self.go(r""" isalpha("z") """) is True
+        assert self.go(r""" isalpha("A") """) is True
+        assert self.go(r""" isalpha("Z") """) is True
+        assert self.go(r""" isalpha("0") """) is False
+        assert self.go(r""" isalpha("9") """) is False
+        assert self.go(r""" isalpha("_") """) is False
+        assert self.go(r""" isalpha("$") """) is False
+        assert self.go(r""" isalpha(" ") """) is False
+        assert self.go(""" isalpha("\n") """) is False
+        assert self.go(r""" isalpha("\n") """) is False
 
     def test_isdigit(self):
-        assert toil.walk(r""" isdigit("a") """) is False
-        assert toil.walk(r""" isdigit("z") """) is False
-        assert toil.walk(r""" isdigit("A") """) is False
-        assert toil.walk(r""" isdigit("Z") """) is False
-        assert toil.walk(r""" isdigit("0") """) is True
-        assert toil.walk(r""" isdigit("9") """) is True
-        assert toil.walk(r""" isdigit("_") """) is False
-        assert toil.walk(r""" isdigit("$") """) is False
-        assert toil.walk(r""" isdigit(" ") """) is False
-        assert toil.walk(""" isdigit("\n") """) is False
-        assert toil.walk(r""" isdigit("\n") """) is False
+        assert self.go(r""" isdigit("a") """) is False
+        assert self.go(r""" isdigit("z") """) is False
+        assert self.go(r""" isdigit("A") """) is False
+        assert self.go(r""" isdigit("Z") """) is False
+        assert self.go(r""" isdigit("0") """) is True
+        assert self.go(r""" isdigit("9") """) is True
+        assert self.go(r""" isdigit("_") """) is False
+        assert self.go(r""" isdigit("$") """) is False
+        assert self.go(r""" isdigit(" ") """) is False
+        assert self.go(""" isdigit("\n") """) is False
+        assert self.go(r""" isdigit("\n") """) is False
 
     def test_isalnum(self):
-        assert toil.walk(r""" isalnum("a") """) is True
-        assert toil.walk(r""" isalnum("z") """) is True
-        assert toil.walk(r""" isalnum("A") """) is True
-        assert toil.walk(r""" isalnum("Z") """) is True
-        assert toil.walk(r""" isalnum("0") """) is True
-        assert toil.walk(r""" isalnum("9") """) is True
-        assert toil.walk(r""" isalnum("_") """) is False
-        assert toil.walk(r""" isalnum("$") """) is False
-        assert toil.walk(r""" isalnum(" ") """) is False
-        assert toil.walk(""" isalnum("\n") """) is False
-        assert toil.walk(r""" isalnum("\n") """) is False
+        assert self.go(r""" isalnum("a") """) is True
+        assert self.go(r""" isalnum("z") """) is True
+        assert self.go(r""" isalnum("A") """) is True
+        assert self.go(r""" isalnum("Z") """) is True
+        assert self.go(r""" isalnum("0") """) is True
+        assert self.go(r""" isalnum("9") """) is True
+        assert self.go(r""" isalnum("_") """) is False
+        assert self.go(r""" isalnum("$") """) is False
+        assert self.go(r""" isalnum(" ") """) is False
+        assert self.go(""" isalnum("\n") """) is False
+        assert self.go(r""" isalnum("\n") """) is False
 
     def test_isspace(self):
-        assert toil.walk(r""" isspace("a") """) is False
-        assert toil.walk(r""" isspace("z") """) is False
-        assert toil.walk(r""" isspace("A") """) is False
-        assert toil.walk(r""" isspace("Z") """) is False
-        assert toil.walk(r""" isspace("0") """) is False
-        assert toil.walk(r""" isspace("9") """) is False
-        assert toil.walk(r""" isspace("_") """) is False
-        assert toil.walk(r""" isspace("$") """) is False
-        assert toil.walk(r""" isspace(" ") """) is True
-        assert toil.walk(""" isspace("\n") """) is True
-        assert toil.walk(r""" isspace("\n") """) is True
+        assert self.go(r""" isspace("a") """) is False
+        assert self.go(r""" isspace("z") """) is False
+        assert self.go(r""" isspace("A") """) is False
+        assert self.go(r""" isspace("Z") """) is False
+        assert self.go(r""" isspace("0") """) is False
+        assert self.go(r""" isspace("9") """) is False
+        assert self.go(r""" isspace("_") """) is False
+        assert self.go(r""" isspace("$") """) is False
+        assert self.go(r""" isspace(" ") """) is True
+        assert self.go(""" isspace("\n") """) is True
+        assert self.go(r""" isspace("\n") """) is True
 
     def test_is_ident_first(self):
-        assert toil.walk(r""" is_ident_first("a") """) is True
-        assert toil.walk(r""" is_ident_first("z") """) is True
-        assert toil.walk(r""" is_ident_first("A") """) is True
-        assert toil.walk(r""" is_ident_first("Z") """) is True
-        assert toil.walk(r""" is_ident_first("0") """) is False
-        assert toil.walk(r""" is_ident_first("9") """) is False
-        assert toil.walk(r""" is_ident_first("_") """) is True
-        assert toil.walk(r""" is_ident_first("$") """) is False
-        assert toil.walk(r""" is_ident_first(" ") """) is False
-        assert toil.walk(""" is_ident_first("\n") """) is False
-        assert toil.walk(r""" is_ident_first("\n") """) is False
+        assert self.go(r""" is_ident_first("a") """) is True
+        assert self.go(r""" is_ident_first("z") """) is True
+        assert self.go(r""" is_ident_first("A") """) is True
+        assert self.go(r""" is_ident_first("Z") """) is True
+        assert self.go(r""" is_ident_first("0") """) is False
+        assert self.go(r""" is_ident_first("9") """) is False
+        assert self.go(r""" is_ident_first("_") """) is True
+        assert self.go(r""" is_ident_first("$") """) is False
+        assert self.go(r""" is_ident_first(" ") """) is False
+        assert self.go(""" is_ident_first("\n") """) is False
+        assert self.go(r""" is_ident_first("\n") """) is False
 
     def test_is_ident_rest(self):
-        assert toil.walk(r""" is_ident_rest("a") """) is True
-        assert toil.walk(r""" is_ident_rest("z") """) is True
-        assert toil.walk(r""" is_ident_rest("A") """) is True
-        assert toil.walk(r""" is_ident_rest("Z") """) is True
-        assert toil.walk(r""" is_ident_rest("0") """) is True
-        assert toil.walk(r""" is_ident_rest("9") """) is True
-        assert toil.walk(r""" is_ident_rest("_") """) is True
-        assert toil.walk(r""" is_ident_rest("$") """) is False
-        assert toil.walk(r""" is_ident_rest(" ") """) is False
-        assert toil.walk(""" is_ident_rest("\n") """) is False
-        assert toil.walk(r""" is_ident_rest("\n") """) is False
+        assert self.go(r""" is_ident_rest("a") """) is True
+        assert self.go(r""" is_ident_rest("z") """) is True
+        assert self.go(r""" is_ident_rest("A") """) is True
+        assert self.go(r""" is_ident_rest("Z") """) is True
+        assert self.go(r""" is_ident_rest("0") """) is True
+        assert self.go(r""" is_ident_rest("9") """) is True
+        assert self.go(r""" is_ident_rest("_") """) is True
+        assert self.go(r""" is_ident_rest("$") """) is False
+        assert self.go(r""" is_ident_rest(" ") """) is False
+        assert self.go(""" is_ident_rest("\n") """) is False
+        assert self.go(r""" is_ident_rest("\n") """) is False
 
     def test_is_ident(self):
-        assert toil.walk(r""" is_ident("a") """) is True
-        assert toil.walk(r""" is_ident("_abc") """) is True
-        assert toil.walk(r""" is_ident("0a") """) is False
-        assert toil.walk(r""" is_ident("$a") """) is False
-        assert toil.walk(r""" is_ident(" a") """) is False
+        assert self.go(r""" is_ident("a") """) is True
+        assert self.go(r""" is_ident("_abc") """) is True
+        assert self.go(r""" is_ident("0a") """) is False
+        assert self.go(r""" is_ident("$a") """) is False
+        assert self.go(r""" is_ident(" a") """) is False
 
     def test_in(self):
-        assert toil.walk(r""" in(2, [1, 2, 3]) """) is True
-        assert toil.walk(r""" in(4, [1, 2, 3]) """) is False
-        assert toil.walk(r""" 2.in([1, 2, 3]) """) is True
-        assert toil.walk(r""" 4.in([1, 2, 3]) """) is False
-        assert toil.walk(r""" 'a'.in({'a': 2, 'b': 3}) """) is True
-        assert toil.walk(r""" 'c'.in({'a': 2, 'b': 3}) """) is False
+        assert self.go(r""" in(2, [1, 2, 3]) """) is True
+        assert self.go(r""" in(4, [1, 2, 3]) """) is False
+        assert self.go(r""" 2.in([1, 2, 3]) """) is True
+        assert self.go(r""" 4.in([1, 2, 3]) """) is False
+        assert self.go(r""" 'a'.in({'a': 2, 'b': 3}) """) is True
+        assert self.go(r""" 'c'.in({'a': 2, 'b': 3}) """) is False
 
-# Reset environments between each test methods without total initialization
-toil.walk(r""" tot_base := tot """)
+class TestString:
+    # ToTWrapper cannot be used for these tests
+    def test_raw_string_walk(self):
+        assert toil_walk.walk(r""" tot.walk(" 'hello, world' ") """) == "hello, world"
+        assert toil_walk.walk(r""" tot.walk(" '' ") """) == ""
+        assert toil_walk.walk(r""" tot.walk(" 'if ; #\"\\n' ") """) == r"""if ; #"\n"""
+        assert toil_walk.walk(" tot.walk(\" 'a\nb' \") ") == "a\nb"
 
-@pytest.fixture(autouse=True)
-def setup_tot():
-    toil.walk(r""" tot := Interpreter(); tot._env = Environment(tot_base._env) """)
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            toil_walk.walk(r""" tot.walk(" ' ") """)
+
+    def test_string_walk(self):
+        assert toil_walk.walk(r""" tot.walk(' "hello, world" ') """) == "hello, world"
+        assert toil_walk.walk(r""" tot.walk(' "" ') """) == ""
+        assert toil_walk.walk(r""" tot.walk(' "if ; #\"\\\n" ') """) == 'if ; #"\\\n'
+        assert toil_walk.walk(" tot.walk(' \"a\nb\" ') ") == "a\nb"
+
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            toil_walk.walk(r""" tot.walk(' " ') """)
+
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            toil_walk.walk(r""" tot.walk(' "\" ') """)
+
+    def test_raw_string_run(self):
+        assert toil_run.run(r""" tot.walk(" 'hello, world' ") """) == "hello, world"
+        assert toil_run.run(r""" tot.walk(" '' ") """) == ""
+        assert toil_run.run(r""" tot.walk(" 'if ; #\"\\n' ") """) == r"""if ; #"\n"""
+        assert toil_run.run(" tot.walk(\" 'a\nb' \") ") == "a\nb"
+
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            toil_run.run(r""" tot.walk(" ' ") """)
+
+    def test_string_run(self):
+        assert toil_run.run(r""" tot.walk(' "hello, world" ') """) == "hello, world"
+        assert toil_run.run(r""" tot.walk(' "" ') """) == ""
+        assert toil_run.run(r""" tot.walk(' "if ; #\"\\\n" ') """) == 'if ; #"\\\n'
+        assert toil_run.run(" tot.walk(' \"a\nb\" ') ") == "a\nb"
+
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            toil_run.run(r""" tot.walk(' " ') """)
+
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            toil_run.run(r""" tot.walk(' "\" ') """)
+
+@pytest.fixture(autouse=True, params=["run", "walk"])
+def setup_tot(request):
+    global tot
+    go = toil_run.run if request.param == "run" else toil_walk.walk
+    go(r""" tot := Interpreter(); tot._env = Environment(tot_base._env) """)
+    tot = ToTWrapper(go)
 
 class TestToT:
-
     # Ensure test independence
     def test_env_isolation_step1(self):
         assert tot.walk(r""" a := 2 """) == 2
@@ -479,27 +532,6 @@ class TestToT:
         assert tot.walk(r"""23""") == 23
         assert tot.walk(r"""0""") == 0
         assert tot.walk(r"""023""") == 23
-
-    def test_raw_string(self):
-        assert toil.walk(r""" tot.walk(" 'hello, world' ") """) == "hello, world"
-        assert toil.walk(r""" tot.walk(" '' ") """) == ""
-        assert toil.walk(r""" tot.walk(" 'if ; #\"\\n' ") """) == r"""if ; #"\n"""
-        assert toil.walk(" tot.walk(\" 'a\nb' \") ") == "a\nb"
-
-        with pytest.raises(AssertionError, match="Unterminated string"):
-            toil.walk(r""" tot.walk(" ' ") """)
-
-    def test_string(self):
-        assert toil.walk(r""" tot.walk(' "hello, world" ') """) == "hello, world"
-        assert toil.walk(r""" tot.walk(' "" ') """) == ""
-        assert toil.walk(r""" tot.walk(' "if ; #\"\\\n" ') """) == 'if ; #"\\\n'
-        assert toil.walk(" tot.walk(' \"a\nb\" ') ") == "a\nb"
-
-        with pytest.raises(AssertionError, match="Unterminated string"):
-            toil.walk(r""" tot.walk(' " ') """)
-
-        with pytest.raises(AssertionError, match="Unterminated string"):
-            toil.walk(r""" tot.walk(' "\" ') """)
 
     def test_string_functions(self):
         assert tot.walk(r""" join(["ab", "cd", "ef"], ",") """) == "ab,cd,ef"
