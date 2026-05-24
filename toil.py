@@ -672,7 +672,7 @@ class Evaluator:
             case dict() if attr_name in target_val:
                 func_val = target_val[attr_name]
                 match func_val:
-                    case (Ident("closure") | Ident("vm_closure"), [[Ident("self"), *_], *_]):
+                    case (Ident("closure") | Ident("cclosure"), [[Ident("self"), *_], *_]):
                         return lambda args: self.apply(func_val, [target_val] + args)
                 return func_val
 
@@ -695,7 +695,7 @@ class Evaluator:
                         return self.eval(body_expr, new_env)
                     except ReturnException as e: return e.val
                 assert False, f"Pattern mismatch @ apply(): {params}, {args_val}"
-            case (Ident("vm_closure"), [params, body_code, closure_env]):
+            case (Ident("cclosure"), [params, body_code, closure_env]):
                 new_env = Environment(closure_env)
                 if new_env.bind(params, args_val):
                     return VM(body_code, new_env).execute()
@@ -942,36 +942,40 @@ class VM:
 
     def execute(self) -> Value:
         while True:
-            inst = self._code[self._ip]; self._ip += 1
-            match inst:
-                case ("halt",): break
-                case ("return",): return self._stack.pop()
-                case ("const", val): self._stack.append(val)
-                case ("pop",): self._stack.pop()
-                case ("def", pat): self._def(pat)
-                case ("set", name): self._set(name)
-                case ("set_index",): self._set_index()
-                case ("get", name): self._stack.append(self._env.val(name))
-                case ("jump", addr): self._ip = addr
-                case ("jump_if_false", addr):
-                    if not self._stack.pop(): self._ip = addr
-                case ("match", pat):
-                    val = self._stack[-1]
-                    self._stack.append(self._env.bind(pat, val))
-                case ("dot", attr_name): self._dot(attr_name)
-                case ("make_closure", params, body_code):
-                    self._stack.append((Ident("vm_closure"), [params, body_code, self._env]))
-                case ("call", nargs): self._call(nargs)
-                case ("push_env",):
-                    self._ctrl_stack.append(self._env)
-                    self._env = Environment(self._env)
-                case ("pop_env",): self._env = self._ctrl_stack.pop()
-                case ("push_try", addr):
-                    self._try_stack.append((addr, len(self._stack), self._env, len(self._ctrl_stack)))
-                case ("pop_try",): self._try_stack.pop()
-                case ("raise",): self._raise()
-                case _:
-                    assert False, f"Invalid instruction @ execute(): {inst}"
+            try:
+                inst = self._code[self._ip]; self._ip += 1
+                match inst:
+                    case ("halt",): break
+                    case ("return",): return self._stack.pop()
+                    case ("const", val): self._stack.append(val)
+                    case ("pop",): self._stack.pop()
+                    case ("def", pat): self._def(pat)
+                    case ("set", name): self._set(name)
+                    case ("set_index",): self._set_index()
+                    case ("get", name): self._stack.append(self._env.val(name))
+                    case ("jump", addr): self._ip = addr
+                    case ("jump_if_false", addr):
+                        if not self._stack.pop(): self._ip = addr
+                    case ("match", pat):
+                        val = self._stack[-1]
+                        self._stack.append(self._env.bind(pat, val))
+                    case ("dot", attr_name): self._dot(attr_name)
+                    case ("make_closure", params, body_code):
+                        self._stack.append((Ident("cclosure"), [params, body_code, self._env]))
+                    case ("call", nargs): self._call(nargs)
+                    case ("push_env",):
+                        self._ctrl_stack.append(self._env)
+                        self._env = Environment(self._env)
+                    case ("pop_env",): self._env = self._ctrl_stack.pop()
+                    case ("push_try", addr):
+                        self._try_stack.append((addr, len(self._stack), self._env, len(self._ctrl_stack)))
+                    case ("pop_try",): self._try_stack.pop()
+                    case ("raise",): self._raise()
+                    case _:
+                        assert False, f"Invalid instruction @ execute(): {inst}"
+            except ToilException as e:
+                self._stack.append(e.e)
+                self._raise()
         assert len(self._ctrl_stack) == 0, f"Invalid control stack state @ execute(): {self._ctrl_stack}"
         assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
         return self._stack.pop()
@@ -993,26 +997,36 @@ class VM:
 
     def _dot(self, attr_name):
         target_val = self._stack.pop()
+
+        def apply_method(func_val, target_val, args):
+            match func_val:
+                case (Ident("cclosure"), [params, body_code, closure_env]):
+                    new_env = Environment(closure_env)
+                    if new_env.bind(params, [target_val] + args):
+                        return VM(body_code, new_env).execute()
+                    assert False, f"Pattern mismatch @ _dot(): {params}, {[target_val] + args}"
+                case _:
+                    return Evaluator().apply(func_val, [target_val] + args)
+
         match target_val:
             case dict() if attr_name in target_val:
                 func_val = target_val[attr_name]
                 match func_val:
-                    case (Ident("closure") | Ident("vm_closure"), [[Ident("self"), *_], *_]):
-                        self._stack.append(
-                            lambda args: Evaluator().apply(func_val, [target_val] + args))
+                    case (Ident("closure") | Ident("cclosure"), [[Ident("self"), *_], *_]):
+                        self._stack.append(lambda args: apply_method(func_val, target_val, args))
                         return
                 self._stack.append(func_val)
                 return
 
         func_val = self._env.val(attr_name)
-        self._stack.append(lambda args: Evaluator().apply(func_val, [target_val] + args))
+        self._stack.append(lambda args: apply_method(func_val, target_val, args))
 
     def _call(self, nargs):
         op = self._stack.pop()
         args = list(reversed([self._stack.pop() for _ in range(nargs)]))
         match op:
             case f if callable(f): self._stack.append(f(args))
-            case (Ident("vm_closure"), [params, body_code, closure_env]):
+            case (Ident("cclosure"), [params, body_code, closure_env]):
                 new_env = Environment(closure_env)
                 if new_env.bind(params, args):
                     self._stack.append(VM(body_code, new_env).execute())
@@ -1032,7 +1046,7 @@ class VM:
 
     def _raise(self):
         exc_val = self._stack.pop()
-        assert self._try_stack, f"Unhandled exception @ _raise(): {exc_val}"
+        if not self._try_stack: raise ToilException(exc_val)
         catch_addr, stack_size, catch_env, ctrl_stack_size = self._try_stack.pop()
         del self._stack[stack_size:]
         self._env = catch_env
@@ -1115,8 +1129,8 @@ class Interpreter:
             match func:
                 case (Ident("closure"), [params, body_expr, closure_env]):
                     body_code = self.compile(body_expr)
-                    return (Ident("vm_closure"), [params, body_code, closure_env])
-                case (Ident("vm_closure"), _):
+                    return (Ident("cclosure"), [params, body_code, closure_env])
+                case (Ident("cclosure"), _):
                     return func
                 case _:
                     assert False, f"Expected a closure @ compile(): {func}"
@@ -1336,7 +1350,9 @@ class Interpreter:
         return self.compile(self.ast(src))
 
     def execute(self, code: Code) -> Value:
-        return VM(code, self._env).execute()
+        try:
+            return VM(code, self._env).execute()
+        except ToilException as e: assert False, f"ToilException @ execute(): {e.e}"
 
     def run(self, src: Source) -> Value:
         return self.execute(self.code(src))
@@ -1600,10 +1616,10 @@ if __name__ == "__main__":
     toil.walk(r""" add2 := a -> a + 2 """)
     print(toil.run(r""" add2 """)) # -> (closure, [[a], (add, [a, 2]), [...]])
     toil.walk(r""" add2 := compile(add2) """)
-    print(toil.run(r""" add2 """)) # -> (vm_closure, [[a], [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
+    print(toil.run(r""" add2 """)) # -> (cclosure, [[a], [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
     print(toil.run(r""" add2(3) """)) # -> 5
     toil.walk(r""" add2 := compile(add2) """)
-    print(toil.run(r""" add2 """)) # -> (vm_closure, [[a], [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
+    print(toil.run(r""" add2 """)) # -> (cclosure, [[a], [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
     print(toil.run(r""" add2(3) """)) # -> 5
 
     # UFCS
@@ -1683,3 +1699,14 @@ if __name__ == "__main__":
             end except _ then 1/0 end
         then 1/0 else a end
     """)) # -> 1
+
+    print(toil.run(r"""
+        def f() do raise(2) end;
+        try f() except e then e end
+    """)) # -> 2
+
+    toil.walk(r""" def f() do raise(2) end """)
+    print(toil.run(r""" try f() except e then e end """)) # -> 2
+
+    toil.run(r""" def f() do raise(2) end """)
+    print(toil.walk(r""" try f() except e then e end """)) # -> 2

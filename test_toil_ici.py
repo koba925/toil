@@ -350,11 +350,11 @@ class TestICI:
 
         toil.walk(r""" add2 := compile(add2) """)
         compiled_func = toil.run(r""" add2 """)
-        assert compiled_func[0] == Ident("vm_closure")
+        assert compiled_func[0] == Ident("cclosure")
         assert toil.run(r""" add2(3) """) == 5
 
         toil.walk(r""" add2 := compile(add2) """)
-        assert toil.run(r""" add2 """)[0] == Ident("vm_closure")
+        assert toil.run(r""" add2 """)[0] == Ident("cclosure")
         assert toil.run(r""" add2(3) """) == 5
 
     def test_match(self):
@@ -372,7 +372,7 @@ class TestICI:
 
         assert toil.run(r""" match 2 end """) is None
 
-    def test_try_except(self):
+    def test_try_basic(self):
         assert toil.run(r""" try 2; 3 end """) == 3
         assert toil.run(r""" try 2; 3 except e then e end """) == 3
         assert toil.run(r""" try 2; raise(2 + 3); 3 except e then e end """) == 5
@@ -385,7 +385,7 @@ class TestICI:
             end
         """) == ["bar", 3]
 
-        with pytest.raises(AssertionError, match="Unhandled exception"):
+        with pytest.raises(AssertionError, match="ToilException"):
             toil.run(r"""
                 try
                     raise(["baz", 3])
@@ -393,6 +393,30 @@ class TestICI:
                 end
             """)
 
+    def test_try_nested(self):
+        assert toil.walk(r"""
+            try
+                try
+                    raise(2)
+                except e then
+                    raise(e + 1)
+                end
+            except e then
+                e
+            end
+        """) == 3
+
+        assert toil.walk(r"""
+            try
+                try
+                    raise("outer")
+                except "inner" then "caught inner"
+                end
+            except "outer" then "caught outer"
+            end
+        """) == "caught outer"
+
+    def test_try_rewind(self):
         assert toil.run(r"""
             for a in range(0, 3, 1) do
                 try if a == 1 then break end
@@ -416,6 +440,12 @@ class TestICI:
                 end except _ then 1/0 end
             then 1/0 else a end
         """) == 1
+
+    def test_raise_from_functions(self):
+        assert toil.run(r"""
+            def f() do raise(2) end;
+            try f() except e then e end
+        """) == 2
 
 if __name__ == "__main__":
     pytest.main([__file__])
