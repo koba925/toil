@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 import sys; sys.setrecursionlimit(200000)
 import time
-from toil import Interpreter
+from toil_final import Interpreter
 
 t0 = time.time()
 

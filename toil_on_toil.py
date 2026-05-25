@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 
-from toil import Interpreter
+from toil_final import Interpreter
 
 class ToTWrapper:
     def __init__(self, go):

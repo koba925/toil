@@ -1,5 +1,5 @@
 import pytest
-from toil import Interpreter, Ident
+from toil_final import Interpreter, Ident
 
 toil = Interpreter()
 
