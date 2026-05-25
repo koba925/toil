@@ -19,9 +19,11 @@ if __name__ == "__main__":
 
     toil = Interpreter().init_env().stdlib()
     go = toil.run if len(sys.argv) > 1 and sys.argv[1] == "--run" else toil.walk
+    jit = len(sys.argv) > 1 and sys.argv[1] == "--jit"
 
-    go(r"""
-        {Interpreter} := load('toil.toil');
+    go(f"""
+        __jit__ := {jit};
+        {{Interpreter}} := load('toil.toil');
         tot := Interpreter().init_env().stdlib()
     """)
 

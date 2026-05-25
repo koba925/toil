@@ -578,7 +578,7 @@ class Evaluator:
             case Ident(name): return env.val(name)
             case (Ident("quote"), [expr]): return expr
             case (Ident("func"), [params, body_expr]):
-                return (Ident("closure"), [params, body_expr, env])
+                return (Ident("closure"), [params, body_expr, [], env])
             case (Ident("return"), args):
                 raise ReturnException(self.eval(args[0], env) if args else None)
             case (Ident("define"), [pat, expr]):
@@ -672,7 +672,7 @@ class Evaluator:
             case dict() if attr_name in target_val:
                 func_val = target_val[attr_name]
                 match func_val:
-                    case (Ident("closure") | Ident("cclosure"), [[Ident("self"), *_], *_]):
+                    case (Ident("closure"), [[Ident("self"), *_], *_]):
                         return lambda args: self.apply(func_val, [target_val] + args)
                 return func_val
 
@@ -688,17 +688,19 @@ class Evaluator:
         match op_val:
             case c if callable(c):
                 return c(args_val)
-            case (Ident("closure"), [params, body_expr, closure_env]):
+            case (Ident("closure"), [params, body_expr, body_code, closure_env]):
                 new_env = Environment(closure_env)
                 if new_env.bind(params, args_val):
-                    try:
-                        return self.eval(body_expr, new_env)
-                    except ReturnException as e: return e.val
-                assert False, f"Pattern mismatch @ apply(): {params}, {args_val}"
-            case (Ident("cclosure"), [params, body_code, closure_env]):
-                new_env = Environment(closure_env)
-                if new_env.bind(params, args_val):
-                    return VM(body_code, new_env).execute()
+                    jit_vars = closure_env.lookup("__jit__")
+                    if body_code:
+                        return VM(body_code, new_env).execute()
+                    elif jit_vars and jit_vars["__jit__"]:
+                        op_val[1][2] = Compiler(body_expr).compile()
+                        return VM(op_val[1][2], new_env).execute()
+                    else:
+                        try:
+                            return self.eval(body_expr, new_env)
+                        except ReturnException as e: return e.val
                 assert False, f"Pattern mismatch @ apply(): {params}, {args_val}"
             case _:
                 assert False, f"Invalid operator @ apply(): {op_val}"
@@ -961,7 +963,7 @@ class VM:
                         self._stack.append(self._env.bind(pat, val))
                     case ("dot", attr_name): self._dot(attr_name)
                     case ("make_closure", params, body_code):
-                        self._stack.append((Ident("cclosure"), [params, body_code, self._env]))
+                        self._stack.append((Ident("closure"), [params, None, body_code, self._env]))
                     case ("call", nargs): self._call(nargs)
                     case ("push_env",):
                         self._ctrl_stack.append(self._env)
@@ -1000,7 +1002,7 @@ class VM:
 
         def apply_method(func_val, target_val, args):
             match func_val:
-                case (Ident("cclosure"), [params, body_code, closure_env]):
+                case (Ident("closure"), [params, _, body_code, closure_env]) if body_code:
                     new_env = Environment(closure_env)
                     if new_env.bind(params, [target_val] + args):
                         return VM(body_code, new_env).execute()
@@ -1012,7 +1014,7 @@ class VM:
             case dict() if attr_name in target_val:
                 func_val = target_val[attr_name]
                 match func_val:
-                    case (Ident("closure") | Ident("cclosure"), [[Ident("self"), *_], *_]):
+                    case (Ident("closure"), [[Ident("self"), *_], *_]):
                         self._stack.append(lambda args: apply_method(func_val, target_val, args))
                         return
                 self._stack.append(func_val)
@@ -1026,19 +1028,16 @@ class VM:
         args = list(reversed([self._stack.pop() for _ in range(nargs)]))
         match op:
             case f if callable(f): self._stack.append(f(args))
-            case (Ident("cclosure"), [params, body_code, closure_env]):
+            case (Ident("closure"), [params, body_expr, body_code, closure_env]):
                 new_env = Environment(closure_env)
                 if new_env.bind(params, args):
-                    self._stack.append(VM(body_code, new_env).execute())
-                else:
-                    assert False, f"Pattern mismatch @ _call(): {params}, {args}"
-            case (Ident("closure"), [params, body_expr, closure_env]):
-                new_env = Environment(closure_env)
-                if new_env.bind(params, args):
-                    try:
-                        self._stack.append(Evaluator().eval(body_expr, new_env))
-                    except ReturnException as e:
-                        self._stack.append(e.val)
+                    if body_code:
+                        self._stack.append(VM(body_code, new_env).execute())
+                    else:
+                        try:
+                            self._stack.append(Evaluator().eval(body_expr, new_env))
+                        except ReturnException as e:
+                            self._stack.append(e.val)
                 else:
                     assert False, f"Pattern mismatch @ _call(): {params}, {args}"
             case unexpected:
@@ -1130,10 +1129,9 @@ class Interpreter:
         def _compile(args):
             func = args[0]
             match func:
-                case (Ident("closure"), [params, body_expr, closure_env]):
-                    body_code = self.compile(body_expr)
-                    return (Ident("cclosure"), [params, body_code, closure_env])
-                case (Ident("cclosure"), _):
+                case (Ident("closure"), [params, body_expr, body_code, closure_env]):
+                    if not body_code:
+                        func[1][2] = self.compile(body_expr)
                     return func
                 case _:
                     assert False, f"Expected a closure @ compile(): {func}"
@@ -1607,24 +1605,6 @@ if __name__ == "__main__":
         fib(6)
     """)) # -> 8
 
-    # Mutual call
-    toil.walk(r""" def even(n) do if n == 0 then True else odd(n - 1) end end """)
-    toil.run(r""" def odd(n) do if n == 0 then False else even(n - 1) end end """)
-    print(toil.walk(r"""even(2)""")) # -> True
-    print(toil.walk(r"""even(3)""")) # -> False
-    print(toil.run(r"""odd(2)""")) # -> False
-    print(toil.run(r"""odd(3)""")) # -> True
-
-    # Run-time compile
-    toil.walk(r""" add2 := a -> a + 2 """)
-    print(toil.run(r""" add2 """)) # -> (closure, [[a], (add, [a, 2]), [...]])
-    toil.walk(r""" add2 := compile(add2) """)
-    print(toil.run(r""" add2 """)) # -> (cclosure, [[a], [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
-    print(toil.run(r""" add2(3) """)) # -> 5
-    toil.walk(r""" add2 := compile(add2) """)
-    print(toil.run(r""" add2 """)) # -> (cclosure, [[a], [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
-    print(toil.run(r""" add2(3) """)) # -> 5
-
     # UFCS
     print_code(toil.code(r""" 2.add(3) """))
     print(toil.run(r""" 2.add(3) """)) # -> 5
@@ -1704,6 +1684,28 @@ if __name__ == "__main__":
     """)) # -> 1
 
     print(toil.run(r"""
+        try
+            try
+                raise(2)
+            except e then
+                raise(e + 1)
+            end
+        except e then
+            e
+        end
+    """)) # -> 3
+
+    print(toil.run(r"""
+        try
+            try
+                raise("outer")
+            except "inner" then "caught inner"
+            end
+        except "outer" then "caught outer"
+        end
+    """)) # -> caught outer
+
+    print(toil.run(r"""
         def f() do raise(2) end;
         try f() except e then e end
     """)) # -> 2
@@ -1713,3 +1715,44 @@ if __name__ == "__main__":
 
     toil.run(r""" def f() do raise(2) end """)
     print(toil.walk(r""" try f() except e then e end """)) # -> 2
+
+    # Mutual call
+    toil.walk(r""" def even(n) do if n == 0 then True else odd(n - 1) end end """)
+    toil.run(r""" def odd(n) do if n == 0 then False else even(n - 1) end end """)
+    print(toil.walk(r"""even(2)""")) # -> True
+    print(toil.walk(r"""even(3)""")) # -> False
+    print(toil.run(r"""odd(2)""")) # -> False
+    print(toil.run(r"""odd(3)""")) # -> True
+
+    # Run-time compile
+    toil.walk(r""" add2 := a -> a + 2 """)
+    print(toil.run(r""" add2 """)) # -> (closure, [[a], (add, [a, 2]), [], [...]])
+    print(toil.run(r""" add2(3) """)) # -> 5
+
+    toil.walk(r""" add2 := compile(add2) """)
+    print(toil.run(r""" add2 """)) # -> (closure, [[a], (add, [a, 2]), [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
+    print(toil.run(r""" add2(3) """)) # -> 5
+
+    toil.walk(r""" add2 := compile(add2) """)
+    print(toil.run(r""" add2 """)) # -> (closure, [[a], (add, [a, 2]), [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
+    print(toil.run(r""" add2(3) """)) # -> 5
+
+    toil.run(r""" add2 := a -> a + 2 """)
+    print(toil.run(r""" add2 """)) # -> (closure, [[a], None, [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
+    print(toil.run(r""" add2(3) """)) # -> 5
+
+    # JIT execution
+    print(toil.walk(r"""
+        __jit__ := True;
+        def f(x) do x * 2 end;
+        f(3)
+    """)) # -> 6
+
+    print(toil.walk(r"""
+        __jit__ := True;
+        def fib(n) do
+            if n < 2 then n else fib(n - 1) + fib(n - 2) end
+        end;
+        fib(6)
+    """)) # -> 8
+

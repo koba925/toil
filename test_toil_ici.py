@@ -350,11 +350,10 @@ class TestICI:
 
         toil.walk(r""" add2 := compile(add2) """)
         compiled_func = toil.run(r""" add2 """)
-        assert compiled_func[0] == Ident("cclosure")
+        assert len(compiled_func[1][2]) > 0
         assert toil.run(r""" add2(3) """) == 5
 
         toil.walk(r""" add2 := compile(add2) """)
-        assert toil.run(r""" add2 """)[0] == Ident("cclosure")
         assert toil.run(r""" add2(3) """) == 5
 
     def test_match(self):
@@ -446,6 +445,21 @@ class TestICI:
             def f() do raise(2) end;
             try f() except e then e end
         """) == 2
+
+    def test_jit_execution(self):
+        assert toil.walk(r"""
+            __jit__ := True;
+            def f(x) do x * 2 end;
+            f(3)
+        """) == 6
+
+        assert toil.walk(r"""
+            __jit__ := True;
+            def fib(n) do
+                if n < 2 then n else fib(n - 1) + fib(n - 2) end
+            end;
+            fib(6)
+        """) == 8
 
 if __name__ == "__main__":
     pytest.main([__file__])
