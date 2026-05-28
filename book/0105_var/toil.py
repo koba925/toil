@@ -16,10 +16,13 @@ class Evaluator:
             case None | bool() | int(): return expr
             case str(name): return env.val(name)
             case ("define", [name, expr]):
-                return env.define(name, expr)
+                return env.define(name, self.eval(expr, env))
             case ("seq", exprs): return self._seq(exprs, env)
             case ("if", [cond_expr, then_expr, else_expr]):
                 return self._if(cond_expr, then_expr, else_expr, env)
+            case ("add", [a, b]): return self.eval(a, env) + self.eval(b, env)
+            case ("equal", [a, b]): return self.eval(a, env) == self.eval(b, env)
+            case ("print", [a]): return print(self.eval(a, env))
             case _:
                 assert False, f"Unexpected expression @ eval(): {expr}"
 
@@ -49,11 +52,18 @@ if __name__ == "__main__":
 
     print("Variable:")
 
-    print(toil.eval(("define", ["a", True])))
-    # -> True
+    print(toil.eval(("define", ["a", ("add", [2, 3])])))
+    # -> 5
 
     print(toil.eval("a"))
-    # -> True
+    # -> 5
 
-    print(toil.eval(("if", ["a", 2, 3])))
+    print(toil.eval(("if", [("equal", ["a", 5]), 2, 3])))
     # -> 2
+
+    print(toil.eval(("define", ["a", 6])))
+    # -> 6
+
+    print(toil.eval("a"))
+    # -> 6
+

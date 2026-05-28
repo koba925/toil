@@ -5,6 +5,9 @@ class Evaluator:
             case ("seq", exprs): return self._seq(exprs)
             case ("if", [cond_expr, then_expr, else_expr]):
                 return self._if(cond_expr, then_expr, else_expr)
+            case ("add", [a, b]): return self.eval(a) + self.eval(b)
+            case ("equal", [a, b]): return self.eval(a) == self.eval(b)
+            case ("print", [a]): return print(self.eval(a))
             case _:
                 assert False, f"Unexpected expression @ eval(): {expr}"
 
@@ -27,14 +30,11 @@ if __name__ == "__main__":
 
     print("If:")
 
-    print(e.eval(("if", [True, 2, 3])))
-    # -> 2
-
-    print(e.eval(("if", [False, 2, 3])))
+    print(e.eval(("if", [("equal", [2, 2]), 3, 4])))
     # -> 3
 
-    print(e.eval(("if", [("seq", [False, True]), 2, 3])))
-    # -> 2
+    print(e.eval(("if", [("equal", [2, 3]), 4, 5])))
+    # -> 5
 
     print(e.eval(("if", [True, ("seq", [2, 3]), 4])))
     # -> 3

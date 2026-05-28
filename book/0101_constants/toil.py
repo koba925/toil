@@ -25,5 +25,5 @@ if __name__ == "__main__":
     print(e.eval(2))
     # -> 2
 
-    print(e.eval([]))
+    # print(e.eval([]))
     # -> Unexpected expression
