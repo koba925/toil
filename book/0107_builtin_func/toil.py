@@ -38,9 +38,8 @@ class Evaluator:
             case ("seq", exprs): return self._seq(exprs, env)
             case ("if", [cond_expr, then_expr, else_expr]):
                 return self._if(cond_expr, then_expr, else_expr, env)
-            case ("add", [a, b]): return self.eval(a, env) + self.eval(b, env)
-            case ("equal", [a, b]): return self.eval(a, env) == self.eval(b, env)
-            case ("print", [a]): return print(self.eval(a, env))
+            case (op_expr, args_expr):
+                return self._op(op_expr, args_expr, env)
             case _:
                 assert False, f"Unexpected expression @ eval(): {expr}"
 
@@ -55,10 +54,28 @@ class Evaluator:
         else:
             return self.eval(else_expr, env)
 
+    def _op(self, op_expr, args_expr, env):
+        op_val = self.eval(op_expr, env)
+        args_val = [self.eval(arg, env) for arg in args_expr]
+        return op_val(args_val)
+
 
 class Interpreter:
     def __init__(self):
         self._env = Environment()
+        self._builtins()
+
+    def _builtins(self):
+        self._env.define("add", lambda args: args[0] + args[1])
+        self._env.define("sub", lambda args: args[0] - args[1])
+        self._env.define("mul", lambda args: args[0] * args[1])
+        self._env.define("div", lambda args: args[0] // args[1])
+        self._env.define("mod", lambda args: args[0] % args[1])
+        self._env.define("equal", lambda args: args[0] == args[1])
+        self._env.define("less", lambda args: args[0] < args[1])
+        self._env.define("print", lambda args: print(*args))
+
+        self._env = Environment(self._env)
 
     def eval(self, expr):
         return Evaluator().eval(expr, self._env)
@@ -69,43 +86,50 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Scope and assignment:")
+    print("Built-in functions:")
 
-    toil.eval(("define", ["a", 2]))
-    print(toil.eval(("assign", ["a", 3])))
-    # -> 3
-    print(toil.eval("a"))
-    # -> 3
+    print(toil.eval("add"))
+    # -> <function Interpreter._builtins.<locals>.<lambda> at ....>
 
-    # print(toil.eval(("assign", ["b", 2])))
-    # -> Undefined variable
+    print(toil.eval(("add", [2, 3])))
+    # -> 5
 
-    print(toil.eval(("scope", ["a"])))
-    # -> 3
+    print(toil.eval(("sub", [3, 2])))
+    # -> 1
 
-    toil.eval(("scope", [("seq", [
-        ("define", ["a", 4]),
-        ("print", ["a"])
-    ])]))
-    # -> 4
+    print(toil.eval(("mul", [2, 3])))
+    # -> 6
 
-    print(toil.eval("a"))
-    # -> 3
-
-    toil.eval(("scope", [("seq", [
-        ("assign", ["a", 4]),
-        ("print", ["a"])
-    ])]))
-    # -> 4
-
-    print(toil.eval("a"))
-    # -> 4
-
-    toil.eval(("scope", [("seq", [
-        ("define", ["b", 2]),
-        ("print", ["b"])
-    ])]))
+    print(toil.eval(("div", [6, 3])))
     # -> 2
 
-    # print(toil.eval("b"))
+    print(toil.eval(("mod", [7, 3])))
+    # -> 1
+
+    print(toil.eval(("equal", [2, 2])))
+    # -> True
+
+    print(toil.eval(("equal", [2, 3])))
+    # -> False
+
+    print(toil.eval(("less", [2, 2])))
+    # -> False
+
+    print(toil.eval(("less", [2, 3])))
+    # -> True
+
+    print(toil.eval(("print", [2])))
+    # -> 2\nNone
+
+    print(toil.eval(("print", [2, 3])))
+    # -> 2 3\nNone
+
+    toil.eval(("print", [("equal", [("add", [2, 3]), 5])]))
+    # -> True
+
+    toil.eval(("define", ["myadd", "add"]))
+    print(toil.eval(("myadd", [2, 3])))
+    # -> 5
+
+    # toil.eval(("not_defined", []))
     # -> Undefined variable
