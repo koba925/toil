@@ -1,0 +1,193 @@
+import pytest
+from toil import Interpreter
+
+toil = Interpreter()
+
+class TestEvaluator:
+    def test_constants(self):
+        assert toil.eval(None) is None
+        assert toil.eval(True) is True
+        assert toil.eval(False) is False
+        assert toil.eval(2) == 2
+
+        with pytest.raises(AssertionError, match="Unexpected expression"):
+            toil.eval([])
+
+    def test_sequence(self, capsys):
+        assert toil.eval(("seq", [])) is None
+        assert toil.eval(("seq", [("add", [2, 3])])) == 5
+
+        assert toil.eval(("seq", [print(2), 3])) == 3
+        assert capsys.readouterr().out == "2\n"
+
+        assert toil.eval(("seq", [("print", [2]), ("seq", [("print", [3]), 4])])) == 4
+        assert capsys.readouterr().out == "2\n3\n"
+
+    def test_if(self):
+        assert toil.eval(("if", [("equal", [2, 2]), 3, 4])) == 3
+        assert toil.eval(("if", [("equal", [2, 3]), 4, 5])) == 5
+        assert toil.eval(("if", [True, ("seq", [2, 3]), 4])) == 3
+        assert toil.eval(("if", [False, 2, ("if", [True, 3, 4])])) == 3
+
+    def test_variable(self):
+        assert toil.eval(("define", ["a", ("add", [2, 3])])) == 5
+        assert toil.eval("a") == 5
+        assert toil.eval(("if", [("equal", ["a", 5]), 2, 3])) == 2
+        assert toil.eval(("define", ["a", 6])) == 6
+        assert toil.eval("a") == 6
+
+    def test_scope_and_assign(self, capsys):
+        toil.eval(("define", ["a", 2]))
+        assert toil.eval(("assign", ["a", 3])) == 3
+        assert toil.eval("a") == 3
+
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            toil.eval(("assign", ["b", 2]))
+
+        assert toil.eval(("scope", ["a"])) == 3
+
+        toil.eval(("scope", [("seq", [
+            ("define", ["a", 4]),
+            ("print", ["a"])
+        ])]))
+        assert capsys.readouterr().out == "4\n"
+
+        assert toil.eval("a") == 3
+
+        toil.eval(("scope", [("seq", [
+            ("assign", ["a", 4]),
+            ("print", ["a"])
+        ])]))
+        assert capsys.readouterr().out == "4\n"
+
+        assert toil.eval("a") == 4
+
+        toil.eval(("scope", [("seq", [
+            ("define", ["b", 2]),
+            ("print", ["b"])
+        ])]))
+        assert capsys.readouterr().out == "2\n"
+
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            toil.eval("b")
+
+    def test_builtins(self, capsys):
+        assert toil.eval(("add", [2, 3])) == 5
+        assert toil.eval(("sub", [3, 2])) == 1
+        assert toil.eval(("mul", [2, 3])) == 6
+        assert toil.eval(("div", [6, 3])) == 2
+        assert toil.eval(("mod", [7, 3])) == 1
+
+        assert toil.eval(("equal", [2, 2])) is True
+        assert toil.eval(("equal", [2, 3])) is False
+
+        assert toil.eval(("less", [2, 2])) is False
+        assert toil.eval(("less", [2, 3])) is True
+
+        assert toil.eval(("print", [2])) is None
+        assert capsys.readouterr().out == "2\n"
+
+        assert toil.eval(("print", [2, 3])) is None
+        assert capsys.readouterr().out == "2 3\n"
+
+        assert toil.eval(("print", [("equal", [("add", [2, 3]), 5])])) is None
+        assert capsys.readouterr().out == "True\n"
+
+        assert callable(toil.eval("add"))
+        toil.eval(("define", ["myadd", "add"]))
+        assert toil.eval(("myadd", [2, 3])) == 5
+
+        with pytest.raises(AssertionError, match=r"Undefined variable @ val\(\): not_defined"):
+            toil.eval(("not_defined", []))
+
+    def test_user_functions(self):
+        toil.eval(("define", ["myadd", ("func", [["a", "b"], ("add", ["a", "b"])])]))
+        assert toil.eval(("myadd", [2, 3])) == 5
+
+        assert toil.eval(("myadd", [("myadd", [2, 3]), ("add", [4, 5])])) == 14
+
+        assert toil.eval((
+            ("func", [["a", "b"], ("add", ["a", "b"])]),
+            [2, 3]
+        )) == 5
+
+        assert toil.eval(("seq", [
+            ("define", ["twice", ("func", [["f", "x"], ("f", [("f", ["x"])])])]),
+            ("define", ["double", ("func", [["x"], ("mul", ["x", 2])])]),
+            ("twice", ["double", 3])
+        ])) == 12
+
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            toil.eval(("not_defined", []))
+        with pytest.raises(AssertionError, match="Invalid operator"):
+            toil.eval((2, [3, 4]))
+
+        assert toil.eval(("seq", [
+            ("define", ["a", 2]),
+            ("define", ["f", ("func", [[], "a"])]),
+            ("define", ["g", ("func", [[], ("seq", [
+                ("define", ["a", 3]),
+                ("f", [])
+            ])])]),
+            ("g", [])
+        ])) == 2
+
+        assert toil.eval(("seq", [
+            ("define", ["a", 2]),
+            ("define", ["f", ("func", [[], "a"])]),
+            ("f", [])
+        ])) == 2
+
+        assert toil.eval(("scope", [("seq", [
+            ("define", ["a", 3]),
+            ("f", [])
+        ])])) == 2
+
+    def test_while(self, capsys):
+        assert toil.eval(("seq", [
+            ("define", ["i", 1]),
+            ("while", [
+                ("less", ["i", 4]),
+                ("seq", [
+                    ("print", ["i"]),
+                    ("assign", ["i", ("add", ["i", 1])])
+                ])
+            ])
+        ])) == 4
+        assert capsys.readouterr().out == "1\n2\n3\n"
+
+        assert toil.eval(("seq", [
+            ("define", ["i", 1]), ("define", ["sum", 0]),
+            ("while", [
+                ("less", ["i", 4]),
+                ("seq", [
+                    ("assign", ["sum", ("add", ["sum", "i"])]),
+                    ("assign", ["i", ("add", ["i", 1])])
+                ])
+            ]),
+            "sum"
+        ])) == 6
+
+        assert toil.eval(("while", [False, ("div", [1, 0])])) is None
+
+        assert toil.eval(("seq", [
+            ("define", ["i", 0]),
+            ("while", [
+                ("less", ["i", 2]),
+                ("seq", [
+                    ("define", ["j", 0]),
+                    ("while", [
+                        ("less", ["j", 3]),
+                        ("seq", [
+                            ("print", ["i", "j"]),
+                            ("assign", ["j", ("add", ["j", 1])])
+                        ])
+                    ]),
+                    ("assign", ["i", ("add", ["i", 1])])
+                ])
+            ])
+        ])) == 2
+        assert capsys.readouterr().out == "0 0\n0 1\n0 2\n1 0\n1 1\n1 2\n"
+
+if __name__ == "__main__":
+    pytest.main([__file__])
