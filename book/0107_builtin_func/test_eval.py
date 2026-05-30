@@ -84,7 +84,10 @@ class TestEvaluator:
         assert toil.eval(("less", [2, 2])) is False
         assert toil.eval(("less", [2, 3])) is True
 
-        assert toil.eval(("print", [2])) is None
+        assert toil.eval(("greater", [2, 2])) is False
+        assert toil.eval(("greater", [3, 2])) is True
+
+        assert toil.eval(("seq", [("print", [2]), 3])) == 3
         assert capsys.readouterr().out == "2\n"
 
         assert toil.eval(("print", [2, 3])) is None

@@ -32,7 +32,7 @@ class TestEvaluator:
         assert toil.eval(("seq", [])) is None
         assert toil.eval(("seq", [("add", [2, 3])])) == 5
 
-        assert toil.eval(("seq", [print(2), 3])) == 3
+        assert toil.eval(("seq", [("print", [2]), 3])) == 3
         assert capsys.readouterr().out == "2\n"
 
         assert toil.eval(("seq", [("print", [2]), ("seq", [("print", [3]), 4])])) == 4

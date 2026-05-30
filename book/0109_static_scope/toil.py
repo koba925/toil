@@ -84,6 +84,7 @@ class Interpreter:
         self._env.define("mod", lambda args: args[0] % args[1])
         self._env.define("equal", lambda args: args[0] == args[1])
         self._env.define("less", lambda args: args[0] < args[1])
+        self._env.define("greater", lambda args: args[0] > args[1])
         self._env.define("print", lambda args: print(*args))
 
         self._env = Environment(self._env)
