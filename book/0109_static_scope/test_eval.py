@@ -130,7 +130,7 @@ class TestEvaluator:
                 ("f", [])
             ])])]),
             ("g", [])
-        ])) == 3
+        ])) == 2
 
         assert toil.eval(("seq", [
             ("define", ["a", 2]),
@@ -141,7 +141,7 @@ class TestEvaluator:
         assert toil.eval(("scope", [("seq", [
             ("define", ["a", 3]),
             ("f", [])
-        ])])) == 3
+        ])])) == 2
 
 if __name__ == "__main__":
     pytest.main([__file__])

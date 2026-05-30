@@ -14,6 +14,7 @@ class Evaluator:
         for expr in exprs: val = self.eval(expr)
         return val
 
+
 if __name__ == "__main__":
 
     e = Evaluator()

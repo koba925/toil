@@ -8,6 +8,7 @@ class Evaluator:
             case _:
                 assert False, f"Unexpected expression @ eval(): {expr}"
 
+
 if __name__ == "__main__":
 
     e = Evaluator()
