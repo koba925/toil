@@ -1,0 +1,150 @@
+class Environment:
+    def __init__(self, parent=None):
+        self._parent = parent
+        self._vars = {}
+
+    def define(self, name, val):
+        self._vars[name] = val
+        return val
+
+    def assign(self, name, val):
+        if name in self._vars:
+            self._vars[name] = val
+            return val
+        elif self._parent:
+            return self._parent.assign(name, val)
+        else:
+            assert False, f"Undefined variable @ assign(): {name}"
+
+    def val(self, name):
+        if name in self._vars: return self._vars[name]
+        elif self._parent:
+            return self._parent.val(name)
+        else:
+            assert False, f"Undefined variable @ val(): {name}"
+
+
+class Evaluator:
+    def eval(self, expr, env):
+        match expr:
+            case None | bool() | int(): return expr
+            case ("func", [params, body_expr]):
+                return expr
+            case str(name): return env.val(name)
+            case ("scope", [body_expr]):
+                return self.eval(body_expr, Environment(env))
+            case ("define", [name, expr]):
+                return env.define(name, self.eval(expr, env))
+            case ("assign", [name, expr]):
+                return env.assign(name, self.eval(expr, env))
+            case ("seq", exprs): return self._seq(exprs, env)
+            case ("if", [cond_expr, then_expr, else_expr]):
+                return self._if(cond_expr, then_expr, else_expr, env)
+            case (op_expr, args_expr):
+                return self._op(op_expr, args_expr, env)
+            case _:
+                assert False, f"Unexpected expression @ eval(): {expr}"
+
+    def _seq(self, exprs, env):
+        val = None
+        for expr in exprs: val = self.eval(expr, env)
+        return val
+
+    def _if(self, cond_expr, then_expr, else_expr, env):
+        if self.eval(cond_expr, env):
+            return self.eval(then_expr, env)
+        else:
+            return self.eval(else_expr, env)
+
+    def _op(self, op_expr, args_expr, env):
+        op_val = self.eval(op_expr, env)
+        args_val = [self.eval(arg, env) for arg in args_expr]
+        match op_val:
+            case c if callable(c):
+                return op_val(args_val)
+            case ("func", [params, body_expr]):
+                new_env = Environment(env)
+                for param, arg in zip(params, args_val):
+                    new_env.define(param, arg)
+                return self.eval(body_expr, new_env)
+            case _:
+                assert False, f"Invalid operator @ _op(): {op_val}"
+
+class Interpreter:
+    def __init__(self):
+        self._env = Environment()
+        self._builtins()
+
+    def _builtins(self):
+        self._env.define("add", lambda args: args[0] + args[1])
+        self._env.define("sub", lambda args: args[0] - args[1])
+        self._env.define("mul", lambda args: args[0] * args[1])
+        self._env.define("div", lambda args: args[0] // args[1])
+        self._env.define("mod", lambda args: args[0] % args[1])
+        self._env.define("equal", lambda args: args[0] == args[1])
+        self._env.define("less", lambda args: args[0] < args[1])
+        self._env.define("print", lambda args: print(*args))
+
+        self._env = Environment(self._env)
+
+    def eval(self, expr):
+        return Evaluator().eval(expr, self._env)
+
+if __name__ == "__main__":
+
+    toil = Interpreter()
+
+    # Example
+
+    print("User functions:")
+
+    print(toil.eval(("func", [["a", "b"], ("add", ["a", "b"])])))
+    # -> ('func', [['a', 'b'], ('add', ['a', 'b'])])
+
+    toil.eval(("define", ["myadd", ("func", [["a", "b"], ("add", ["a", "b"])])]))
+    print(toil.eval(("myadd", [2, 3])))
+    # -> 5
+
+    print(toil.eval(("myadd", [("myadd", [2, 3]), ("add", [4, 5])])))
+    # -> 14
+
+    print(toil.eval((
+        ("func", [["a", "b"], ("add", ["a", "b"])]),
+        [2, 3]
+    )))
+    # -> 5
+
+    print(toil.eval(("seq", [
+        ("define", ["twice", ("func", [["f", "x"], ("f", [("f", ["x"])])])]),
+        ("define", ["double", ("func", [["x"], ("mul", ["x", 2])])]),
+        ("twice", ["double", 3])
+    ])))
+    # -> 12
+
+    # toil.eval(("not_defined", []))
+    # -> Undefined variable
+    # toil.eval((2, [3, 4]))
+    # -> Invalid operator
+
+    print(toil.eval(("seq", [
+        ("define", ["a", 2]),
+        ("define", ["f", ("func", [[], "a"])]),
+        ("define", ["g", ("func", [[], ("seq", [
+            ("define", ["a", 3]),
+            ("f", [])
+        ])])]),
+        ("g", [])
+    ])))
+    # -> 3
+
+    print(toil.eval(("seq", [
+        ("define", ["a", 2]),
+        ("define", ["f", ("func", [[], "a"])]),
+        ("f", [])
+    ])))
+    # -> 2
+    print(toil.eval(("scope", [("seq", [
+        ("define", ["a", 3]),
+        ("f", [])
+    ])])))
+    # -> 3
