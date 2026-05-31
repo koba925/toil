@@ -25,20 +25,20 @@ class Evaluator:
 
 if __name__ == "__main__":
 
-    e = Evaluator()
+    toil = Evaluator()
 
     # Example
 
     print("If:")
 
-    print(e.eval(("if", [("equal", [2, 2]), 3, 4])))
+    print(toil.eval(("if", [("equal", [2, 2]), 3, 4])))
     # -> 3
 
-    print(e.eval(("if", [("equal", [2, 3]), 4, 5])))
+    print(toil.eval(("if", [("equal", [2, 3]), 4, 5])))
     # -> 5
 
-    print(e.eval(("if", [True, ("seq", [2, 3]), 4])))
+    print(toil.eval(("if", [True, ("seq", [2, 3]), 4])))
     # -> 3
 
-    print(e.eval(("if", [False, 2, ("if", [True, 3, 4])])))
+    print(toil.eval(("if", [False, 2, ("if", [True, 3, 4])])))
     # -> 3

@@ -7,8 +7,6 @@ class Scanner:
 
     def tokenize(self):
         while True:
-            while self._current_char().isspace(): self._advance()
-
             self._start_pos = self._current_pos
             match self._current_char():
                 case "$EOF":
@@ -150,12 +148,9 @@ if __name__ == "__main__":
     print("Scan numbers:")
 
     print(toil.scan(r""""""))  # -> ['$EOF']
-    print(toil.scan(r""" """))  # -> ['$EOF']
-    print(toil.scan(r""" 2 """))  # -> [2, '$EOF']
-    print(toil.scan(r""" 02 """))  # -> [2, '$EOF']
-    print(toil.scan(r""" 23 """))  # -> [23, '$EOF']
-    print(toil.scan(r""" 2 34 """))  # -> [2, 34, '$EOF']
-    print(toil.scan(""" 2\n34 """))  # -> [2, 34, '$EOF']
+    print(toil.scan(r"""2"""))  # -> [2, '$EOF']
+    print(toil.scan(r"""02"""))  # -> [2, '$EOF']
+    print(toil.scan(r"""23"""))  # -> [23, '$EOF']
 
-    # print(toil.scan(r""" a """))  # -> Invalid character
-    # print(toil.scan(r""" 2a """))  # -> Invalid character
+    # print(toil.scan(r"""$"""))  # -> Invalid character
+    # print(toil.scan(r"""2$"""))  # -> Invalid character

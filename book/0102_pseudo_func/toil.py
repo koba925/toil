@@ -11,26 +11,17 @@ class Evaluator:
 
 if __name__ == "__main__":
 
-    e = Evaluator()
+    toil = Evaluator()
 
     # Example
 
     print("Pseudo Functions:")
 
-    print(e.eval(("add", [2, 3])))
-    # -> 5
+    print(toil.eval(("add", [2, 3]))) # -> 5
+    print(toil.eval(("equal", [2, 2]))) # -> True
+    print(toil.eval(("equal", [2, 3]))) # -> False
+    print(toil.eval(("print", [2]))) # -> 2\nNone
 
-    print(e.eval(("equal", [2, 2])))
-    # -> True
+    toil.eval(("print", [("equal", [("add", [2, 3]), 5])])) # -> True
 
-    print(e.eval(("equal", [2, 3])))
-    # -> False
-
-    print(e.eval(("print", [2])))
-    # -> 2\nNone
-
-    e.eval(("print", [("equal", [("add", [2, 3]), 5])]))
-    # -> True
-
-    # e.eval(("sub", [3, 2]))
-    # -> Unexpected expression
+    # toil.eval(("sub", [3, 2])) # -> Unexpected expression

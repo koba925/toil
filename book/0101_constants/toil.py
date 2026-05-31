@@ -8,23 +8,15 @@ class Evaluator:
 
 if __name__ == "__main__":
 
-    e = Evaluator()
+    toil = Evaluator()
 
     # Example
 
     print("Constants:")
 
-    print(e.eval(None))
-    # -> None
+    print(toil.eval(None)) # -> None
+    print(toil.eval(True)) # -> True
+    print(toil.eval(False)) # -> False
+    print(toil.eval(2)) # -> 2
 
-    print(e.eval(True))
-    # -> True
-
-    print(e.eval(False))
-    # -> False
-
-    print(e.eval(2))
-    # -> 2
-
-    # print(e.eval([]))
-    # -> Unexpected expression
+    # print(toil.eval([])) # -> Unexpected expression

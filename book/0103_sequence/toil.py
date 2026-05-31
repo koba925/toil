@@ -17,22 +17,14 @@ class Evaluator:
 
 if __name__ == "__main__":
 
-    e = Evaluator()
+    toil = Evaluator()
 
     # Example
 
-    print("Empty sequence:")
-    print(e.eval(("seq", [])))
-    # -> None
+    print("Sequence:")
 
-    print("One expression sequence:")
-    print(e.eval(("seq", [("add", [2, 3])])))
-    # -> 5
-
-    print("Two expression sequence:")
-    print(e.eval(("seq", [("print", [2]), 3])))
-    # -> 2\n3
-
-    print("Nested sequence:")
-    print(e.eval(("seq", [("print", [2]), ("seq", [("print", [3]), 4])])))
+    print(toil.eval(("seq", []))) # -> None
+    print(toil.eval(("seq", [("add", [2, 3])]))) # -> 5
+    print(toil.eval(("seq", [("print", [2]), 3]))) # -> 2\n3
+    print(toil.eval(("seq", [("print", [2]), ("seq", [("print", [3]), 4])])))
     # -> 2\n3\n4

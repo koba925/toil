@@ -1,3 +1,5 @@
+#! /usr/bin/env python3
+
 class Scanner:
     def __init__(self, src):
         self._src = src
@@ -7,6 +9,13 @@ class Scanner:
 
     def tokenize(self):
         while True:
+            while self._current_char().isspace(): self._advance()
+
+            if self._current_char() == "#":
+                while self._current_char() not in ("\n", "$EOF"):
+                    self._advance()
+                continue
+
             self._start_pos = self._current_pos
             match self._current_char():
                 case "$EOF":
@@ -164,30 +173,60 @@ class Interpreter:
     def parse(self, tokens):
         return Parser(tokens).parse()
 
+    def ast(self, src):
+        return self.parse(self.scan(src))
+
     def eval(self, expr):
         return Evaluator().eval(expr, self._env)
 
+    def walk(self, src):
+        return self.eval(self.ast(src))
+
 
 if __name__ == "__main__":
+    import sys
 
     toil = Interpreter()
 
+    def repl():
+        while True:
+            print("\nInput source and enter Ctrl+D (Linux/Mac) or Ctrl+Z (Windows):")
+            if (src := sys.stdin.read()) == "":
+                exit(0)
+            try:
+                expr = toil.ast(src)
+                print("AST:", expr, sep="\n")
+                print("Output:")
+                result = toil.eval(expr)
+                print("Result:", result, sep="\n")
+            except AssertionError as e:
+                print("Error:", e, sep="\n")
+
+    def from_file(filename):
+        with open(filename, "r") as f: result = toil.walk(f.read())
+        exit(result if isinstance(result, int) else 255)
+
+    if len(sys.argv) > 1:
+        match sys.argv[1]:
+            case "--repl": repl()
+            case filename: from_file(filename)
+
     # Example
 
-    print("Scan numbers:")
+    print("Whitespaces:")
+    print(toil.walk(r""" 2 """))  # -> 2
+    print(toil.walk(r"""
+        2
+    """))  # ->  2
 
-    print(toil.scan(r""""""))  # -> ['$EOF']
-    print(toil.scan(r"""2"""))  # -> [2, '$EOF']
-    print(toil.scan(r"""02"""))  # -> [2, '$EOF']
-    print(toil.scan(r"""23"""))  # -> [23, '$EOF']
+    # print(toil.walk(r""" """))  # -> Invalid token
+    # print(toil.walk(r""" 2 34 """))  # -> Extra token
 
-    # print(toil.scan(r"""$"""))  # -> Invalid character
-    # print(toil.scan(r"""2$"""))  # -> Invalid character
+    print("Comment:")
 
-    print("Parse numbers:")
-
-    print(toil.parse([2, "$EOF"])) # -> 2
-    print(toil.parse([23, "$EOF"])) # -> 23
-
-    # print(toil.parse([2, 34, "$EOF"])) # -> Extra token
-    # print(toil.parse(['$EOF'])) # -> Invalid token
+    print(toil.walk(r""" 2 # Comment """))  # -> 2
+    print(toil.walk(r"""
+        # Comment
+        2
+        # Comment
+    """))  # -> 2
