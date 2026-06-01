@@ -630,3 +630,25 @@ pprint.pprintでもどうぞ
 左側にある 9 - 4 のマイナスのほうが 4 - 3 のマイナスよりも結合力が強いので
 左のマイナスのほうが先に 9 と 4 を結合する、って感じです。
 
+#### かけ算・割り算・剰余を読む 0206_mul_div_mod
+
+```
+    def _add_sub(self):
+        ops = {"+": "add", "-": "sub"}
+        left = self._mul_div_mod()
+        while type(op := self._current_token()) is str and op in ops:
+            self._current_and_advance()
+            right = self._mul_div_mod()
+            left = (ops[op], [left, right])
+        return left
+
+    def _mul_div_mod(self):
+        ops = {"*": "mul", "/": "div", "%": "mod"}
+        left = self._primary()
+        while type(op := self._current_token()) is str and op in ops:
+            self._current_and_advance()
+            right = self._primary()
+            left = (ops[op], [left, right])
+        return left
+
+```
