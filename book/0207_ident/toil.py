@@ -1,5 +1,9 @@
 #! /usr/bin/env python3
 
+def is_ident_first(c): return c.isalpha() or c == "_"
+def is_ident_rest(c): return c.isalnum() or c == "_"
+def is_ident(s): return is_ident_first(s[0])
+
 class Scanner:
     def __init__(self, src):
         self._src = src
@@ -22,7 +26,8 @@ class Scanner:
                     self._tokens.append("$EOF")
                     break
                 case c if c.isdecimal(): self._number()
-                case c if c in "+-":
+                case c if is_ident_first(c): self._ident()
+                case c if c in "+-*/%":
                     self._tokens.append(c); self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
@@ -32,6 +37,15 @@ class Scanner:
     def _number(self):
         while self._current_char().isdecimal(): self._advance()
         self._tokens.append(int(self._lexeme()))
+
+    def _ident(self):
+        self._advance()
+        while is_ident_rest(self._current_char()): self._advance()
+        match self._lexeme():
+            case "None": self._tokens.append(None)
+            case "True": self._tokens.append(True)
+            case "False": self._tokens.append(False)
+            case ident: self._tokens.append(ident)
 
     def _lexeme(self):
         return self._src[self._start_pos:self._current_pos]
@@ -59,19 +73,27 @@ class Parser:
     def _expression(self): return self._add_sub()
 
     def _add_sub(self):
-        ops = {"+": "add", "-": "sub"}
-        left = self._primary()
-        while type(op := self._current_token()) is str and op in ops:
-            self._current_and_advance()
-            right = self._primary()
-            left = (ops[op], [left, right])
-        return left
+        return self._binary_left({"+": "add", "-": "sub"}, self._mul_div_mod)
+
+    def _mul_div_mod(self):
+        return self._binary_left({
+            "*": "mul", "/": "div", "%": "mod"
+        }, self._primary)
 
     def _primary(self):
         match self._current_token():
-            case int(): return self._current_and_advance()
+            case None | bool() | int(): return self._current_and_advance()
+            case str(name) if is_ident(name): return self._current_and_advance()
             case invalid:
                 assert False, f"Invalid token @ _primary(): {invalid}"
+
+    def _binary_left(self, ops, sub_elem):
+        left = sub_elem()
+        while type(op := self._current_token()) is str and op in ops:
+            self._current_and_advance()
+            right = sub_elem()
+            left = (ops[op], [left, right])
+        return left
 
     def _current_token(self): return self._tokens[self._pos]
 
@@ -224,23 +246,15 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Addition and subtraction:")
+    print("None, bool, and identifier:")
 
-    print(toil.ast(r""" 2+3 """))  # -> ('add', [2, 3])
-    print(toil.walk(r""" 2+3 """))  # -> 5
+    print(toil.walk(r""" None """))  # -> None
+    print(toil.walk(r""" True """))  # -> True
+    print(toil.walk(r""" False """))  # -> False
 
-    print(toil.ast(r""" 5 - 3 """))  # -> ('sub', [5, 3])
-    print(toil.walk(r""" 5 - 3 """))  # -> 2
-
-    print(toil.ast(r""" 2 + 3 + 4 """))  # -> ('add', [('add', [2, 3]), 4])
-    print(toil.walk(r""" 2 + 3 + 4 """))  # -> 9
-
-    print(toil.ast(r""" 9 - 4 - 3 """))  # -> ('sub', [('sub', [9, 4]), 3])
-    print(toil.walk(r""" 9 - 4 - 3 """))  # -> 2
-
-    print(toil.ast(r""" 2 + 3 - 4 """))  # -> ('sub', [('add', [2, 3]), 4])
-    print(toil.walk(r""" 2 + 3 - 4 """))  # -> 1
-
-    # print(toil.walk(r""" 2 + """))  # -> Invalid token
-    # print(toil.walk(r""" 2 - + 3 """))  # -> Invalid token
-    # print(toil.walk(r""" -2 """))  # -> Invalid token
+    # print(toil.walk(r""" a2 """))  # -> Undefined variable @ val(): a2
+    # print(toil.walk(r""" 2a """))  # -> Extra token
+    # print(toil.walk(r""" _a """))  # -> Undefined variable @ val(): _a
+    # print(toil.walk(r""" a_b """))  # -> Undefined variable @ val(): a_b
+    # print(toil.walk(r""" True_ """))  # -> Undefined variable @ val(): True_
+    # print(toil.walk(r""" true """))  # -> Undefined variable @ val(): true
