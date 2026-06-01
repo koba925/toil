@@ -21,6 +21,21 @@ class TestTreeWalkInterpreter:
         assert toil.walk(r""" 02 """) == 2
         assert toil.walk(r""" 23 """) == 23
 
+    def test_add_sub(self):
+        assert toil.walk(r""" 2+3 """) == 5
+        assert toil.walk(r""" 5 - 3 """) == 2
+        assert toil.walk(r""" 2 + 3 + 4""") == 9
+        assert toil.walk(r""" 9 - 4 - 3 """) == 2
+        assert toil.walk(r""" 2 + 3 - 4 """) == 1
+        assert toil.walk(r""" 2 - 5 """) == -3
+
+        with pytest.raises(AssertionError, match="Invalid token"):
+            toil.walk(r""" 2 + """)
+        with pytest.raises(AssertionError, match="Invalid token"):
+            toil.walk(r""" 2 - + 3 """)
+        with pytest.raises(AssertionError, match="Invalid token"):
+            toil.walk(r""" -2 """)
+
     def test_empty_source(self):
         with pytest.raises(AssertionError, match="Invalid token"):
             toil.walk(r"""""")

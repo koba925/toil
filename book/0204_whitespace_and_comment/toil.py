@@ -43,32 +43,6 @@ class Scanner:
             return "$EOF"
 
 
-class Environment:
-    def __init__(self, parent=None):
-        self._parent = parent
-        self._vars = {}
-
-    def define(self, name, val):
-        self._vars[name] = val
-        return val
-
-    def assign(self, name, val):
-        if name in self._vars:
-            self._vars[name] = val
-            return val
-        elif self._parent:
-            return self._parent.assign(name, val)
-        else:
-            assert False, f"Undefined variable @ assign(): {name}"
-
-    def val(self, name):
-        if name in self._vars: return self._vars[name]
-        elif self._parent:
-            return self._parent.val(name)
-        else:
-            assert False, f"Undefined variable @ val(): {name}"
-
-
 class Parser:
     def __init__(self, tokens):
         self._tokens = tokens
@@ -93,6 +67,32 @@ class Parser:
     def _current_and_advance(self):
         self._pos += 1
         return self._tokens[self._pos - 1]
+
+
+class Environment:
+    def __init__(self, parent=None):
+        self._parent = parent
+        self._vars = {}
+
+    def define(self, name, val):
+        self._vars[name] = val
+        return val
+
+    def assign(self, name, val):
+        if name in self._vars:
+            self._vars[name] = val
+            return val
+        elif self._parent:
+            return self._parent.assign(name, val)
+        else:
+            assert False, f"Undefined variable @ assign(): {name}"
+
+    def val(self, name):
+        if name in self._vars: return self._vars[name]
+        elif self._parent:
+            return self._parent.val(name)
+        else:
+            assert False, f"Undefined variable @ val(): {name}"
 
 
 class Evaluator:

@@ -9,12 +9,21 @@ class Scanner:
 
     def tokenize(self):
         while True:
+            while self._current_char().isspace(): self._advance()
+
+            if self._current_char() == "#":
+                while self._current_char() not in ("\n", "$EOF"):
+                    self._advance()
+                continue
+
             self._start_pos = self._current_pos
             match self._current_char():
                 case "$EOF":
                     self._tokens.append("$EOF")
                     break
                 case c if c.isdecimal(): self._number()
+                case c if c in "+-":
+                    self._tokens.append(c); self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
 
@@ -47,7 +56,16 @@ class Parser:
             f"Extra token @ parse(): {self._current_token()}"
         return expr
 
-    def _expression(self): return self._primary()
+    def _expression(self): return self._add_sub()
+
+    def _add_sub(self):
+        ops = {"+": "add", "-": "sub"}
+        left = self._primary()
+        while type(op := self._current_token()) is str and op in ops:
+            self._current_and_advance()
+            right = self._primary()
+            left = (ops[op], [left, right])
+        return left
 
     def _primary(self):
         match self._current_token():
@@ -206,35 +224,23 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Scan numbers:")
+    print("Addition and subtraction:")
 
-    print(toil.scan(r""""""))  # -> ['$EOF']
-    print(toil.scan(r"""2"""))  # -> [2, '$EOF']
-    print(toil.scan(r"""02"""))  # -> [2, '$EOF']
-    print(toil.scan(r"""23"""))  # -> [23, '$EOF']
+    print(toil.ast(r""" 2+3 """))  # -> ('add', [2, 3])
+    print(toil.walk(r""" 2+3 """))  # -> 5
 
-    # print(toil.scan(r"""$"""))  # -> Invalid character
-    # print(toil.scan(r"""2$"""))  # -> Invalid character
+    print(toil.ast(r""" 5 - 3 """))  # -> ('sub', [5, 3])
+    print(toil.walk(r""" 5 - 3 """))  # -> 2
 
-    print("Parse numbers:")
+    print(toil.ast(r""" 2 + 3 + 4"""))  # -> ('add', [('add', [2, 3]), 4])
+    print(toil.walk(r""" 2 + 3 + 4"""))  # -> 9
 
-    print(toil.parse([2, "$EOF"])) # -> 2
-    print(toil.parse([23, "$EOF"])) # -> 23
+    print(toil.ast(r""" 9 - 4 - 3 """))  # -> ('sub', [('sub', [9, 4]), 3])
+    print(toil.walk(r""" 9 - 4 - 3 """))  # -> 2
 
-    # print(toil.parse([2, 34, "$EOF"])) # -> Extra token
-    # print(toil.parse(['$EOF'])) # -> Invalid token
+    print(toil.ast(r""" 2 + 3 - 4 """))  # -> ('sub', [('add', [2, 3]), 4])
+    print(toil.walk(r""" 2 + 3 - 4 """))  # -> 1
 
-    print("AST:")
-
-    print(toil.ast(r"""2"""))  # -> 2
-    print(toil.ast(r"""23"""))  # -> 23
-
-    print("Interpret numbers:")
-
-    print(toil.walk(r"""2"""))  # -> 2
-    print(toil.walk(r"""02"""))  # -> 2
-    print(toil.walk(r"""23"""))  # -> 23
-
-    # print(toil.walk(r"""$"""))  # -> Invalid character
-    # print(toil.walk(r"""2$"""))  # -> Invalid character
-    # print(toil.walk(r""""""))  # -> Invalid token
+    # print(toil.walk(r""" 2 + """))  # -> Invalid token
+    # print(toil.walk(r""" 2 - + 3 """))  # -> Invalid token
+    # print(toil.walk(r""" -2 """))  # -> Invalid token
