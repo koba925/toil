@@ -16,21 +16,6 @@ class TestTreeWalkInterpreter:
             # Comment
         """) == 2
 
-    def test_mul_div_mod(self):
-        assert toil.walk(r""" 2 * 3 """) == 6
-        assert toil.walk(r""" 6 / 2 """) == 3
-        assert toil.walk(r""" 7 % 3 """) == 1
-        assert toil.walk(r""" 2 * 3 * 4 """) == 24
-        assert toil.walk(r""" 24 / 4 / 2 """) == 3
-        assert toil.walk(r""" 4 * 3 / 2 """) == 6
-        assert toil.walk(r""" 2 + 3 * 4 """) == 14
-        assert toil.walk(r""" 2 * 3 + 4 """) == 10
-
-        with pytest.raises(AssertionError, match="Invalid token"):
-            toil.walk(r""" 2 * * 3 """)
-        with pytest.raises(AssertionError, match="Invalid token"):
-            toil.walk(r""" / 3 """)
-
     def test_add_sub(self):
         assert toil.walk(r""" 2+3 """) == 5
         assert toil.walk(r""" 5 - 3 """) == 2
@@ -45,6 +30,21 @@ class TestTreeWalkInterpreter:
             toil.walk(r""" 2 - + 3 """)
         with pytest.raises(AssertionError, match="Invalid token"):
             toil.walk(r""" -2 """)
+
+    def test_mul_div_mod(self):
+        assert toil.walk(r""" 2 * 3 """) == 6
+        assert toil.walk(r""" 6 / 2 """) == 3
+        assert toil.walk(r""" 7 % 3 """) == 1
+        assert toil.walk(r""" 2 * 3 * 4 """) == 24
+        assert toil.walk(r""" 24 / 4 / 2 """) == 3
+        assert toil.walk(r""" 4 * 3 / 2 """) == 6
+        assert toil.walk(r""" 2 + 3 * 4 """) == 14
+        assert toil.walk(r""" 2 * 3 + 4 """) == 10
+
+        with pytest.raises(AssertionError, match="Invalid token"):
+            toil.walk(r""" 2 * * 3 """)
+        with pytest.raises(AssertionError, match="Invalid token"):
+            toil.walk(r""" / 3 """)
 
     def test_numbers(self):
         assert toil.walk(r""" 2 """) == 2
@@ -68,6 +68,23 @@ class TestTreeWalkInterpreter:
             toil.walk(r""" True_ """)
         with pytest.raises(AssertionError, match="Undefined variable .* true"):
             toil.walk(r""" true """)
+
+    def test_paren(self):
+        assert toil.walk(r""" (2 + 3) * 4 """) == 20
+        assert toil.walk(r""" 2 * (3 + 4) """) == 14
+        assert toil.walk(r""" (2 + 3) """) == 5
+        assert toil.walk(r""" (2) """) == 2
+        assert toil.walk(r""" (5 - (4 - 2)) * 2 """) == 6
+        assert toil.walk(r""" (2 + 3) * (4 + 5) """) == 45
+
+        with pytest.raises(AssertionError, match="Extra token"):
+            toil.walk(r""" 2 + 3) """)
+        with pytest.raises(AssertionError, match="Invalid token"):
+            toil.walk(r""" (+) """)
+        with pytest.raises(AssertionError, match=r"Expected \)"):
+            toil.walk(r""" (2 + 3 """)
+        with pytest.raises(AssertionError, match="Invalid token"):
+            toil.walk(r""" () """)
 
     def test_empty_source(self):
         with pytest.raises(AssertionError, match="Invalid token"):

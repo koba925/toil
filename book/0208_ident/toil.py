@@ -27,7 +27,7 @@ class Scanner:
                     break
                 case c if c.isdecimal(): self._number()
                 case c if is_ident_first(c): self._ident()
-                case c if c in "+-*/%":
+                case c if c in "+-*/%()":
                     self._tokens.append(c); self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
@@ -84,8 +84,15 @@ class Parser:
         match self._current_token():
             case None | bool() | int(): return self._current_and_advance()
             case str(name) if is_ident(name): return self._current_and_advance()
+            case "(": return self._group()
             case invalid:
                 assert False, f"Invalid token @ _primary(): {invalid}"
+
+    def _group(self):
+        self._current_and_advance()
+        expr = self._expression()
+        self._consume(")")
+        return expr
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
@@ -94,6 +101,11 @@ class Parser:
             right = sub_elem()
             left = (ops[op], [left, right])
         return left
+
+    def _consume(self, expected):
+        assert self._current_token() == expected, \
+            f"Expected {expected} @ _consume(): {self._current_token()}"
+        return self._current_and_advance()
 
     def _current_token(self): return self._tokens[self._pos]
 
