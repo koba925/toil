@@ -26,6 +26,18 @@ class TestTreeWalkInterpreter:
             # Comment
         """) == 2
 
+    def test_sequence(self):
+        assert toil.walk(r""" 2 + 3; 4 + 5 """) == 9
+        assert toil.walk(r""" 2 + 3; 4 + 5; 6 + 7 """) == 13
+        assert toil.walk(r""" a := 2; a + 3 """) == 5
+
+        with pytest.raises(AssertionError, match="Invalid token"):
+            toil.walk(r""" 2; """)
+        with pytest.raises(AssertionError, match="Invalid token"):
+            toil.walk(r""" ;2 """)
+        with pytest.raises(AssertionError, match="Invalid token"):
+            toil.walk(r""" 2;;3 """)
+
     def test_define_assign(self):
         assert toil.walk(r""" a := 2 """) == 2
         assert toil.walk(r""" a """) == 2

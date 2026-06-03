@@ -31,7 +31,7 @@ class Scanner:
                     self._advance()
                     if self._current_char() == "=": self._advance()
                     self._tokens.append(self._lexeme())
-                case c if c in "+-*/%()<>":
+                case c if c in "+-*/%()<>;":
                     self._tokens.append(c); self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
@@ -74,7 +74,14 @@ class Parser:
             f"Extra token @ parse(): {self._current_token()}"
         return expr
 
-    def _expression(self): return self._define_assign()
+    def _expression(self): return self._sequence()
+
+    def _sequence(self):
+        exprs = [self._define_assign()]
+        while self._current_token() == ";":
+            self._current_and_advance()
+            exprs.append(self._define_assign())
+        return exprs[0] if len(exprs) == 1 else ("seq", exprs)
 
     def _define_assign(self):
         return self._binary_right({
@@ -98,6 +105,7 @@ class Parser:
         match self._current_token():
             case None | bool() | int(): return self._current_and_advance()
             case "(": return self._group()
+            case "if": return self._if()
             case str(name) if is_ident(name): return self._current_and_advance()
             case invalid:
                 assert False, f"Invalid token @ _primary(): {invalid}"
@@ -107,6 +115,16 @@ class Parser:
         expr = self._expression()
         self._consume(")")
         return expr
+
+    def _if(self):
+        self._current_and_advance()
+        cond_expr = self._expression()
+        self._consume("then")
+        then_expr = self._expression()
+        self._consume("else")
+        else_expr = self._expression()
+        self._consume("end")
+        return ("if", [cond_expr, then_expr, else_expr])
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
@@ -281,29 +299,27 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Definition and assignment:")
+    print("If:")
 
-    print(toil.walk(r""" a := 2 """))  # -> 2
-    print(toil.walk(r""" a """))  # -> 2
-    print(toil.walk(r""" a = 3 """))  # -> 3
-    print(toil.walk(r""" a """))  # -> 3
+    print(toil.ast(r""" if 2 == 2 then 3 + 3 else 4 + 4 end """))
+    # -> ('if', [('equal', [2, 2]), ('add', [3, 3]), ('add', [4, 4])])
+    print(toil.walk(r""" if 2 == 2 then 3 + 3 else 4 + 4 end """))  # -> 6
+    print(toil.walk(r""" if 2 == 3 then 3 + 3 else 4 + 4 end """))  # -> 8
 
+    print(toil.walk(r""" if True then 3 else 4 end * 5 """))  # -> 15
 
-    print(toil.ast(r""" b := c := 4 """))  # -> ('define', ['b', ('define', ['c', 4])])
-    print(toil.walk(r""" b := c := 4 """))  # -> 4
-    print(toil.walk(r""" b """))  # -> 4
-    print(toil.walk(r""" c """))  # -> 4
+    print(toil.walk(r""" if True then if True then 3 else 4 end else 5 end """))
+    # -> 3
+    print(toil.walk(r""" if True then if False then 3 else 4 end else 5 end """))
+    # -> 4
+    print(toil.walk(r""" if False then 3 else if True then 4 else 5 end end """))
+    # -> 4
+    print(toil.walk(r""" if False then 3 else if False then 4 else 5 end end """))
+    # -> 5
 
-    print(toil.ast(r""" b = c = 5 """))  # -> ('assign', ['b', ('assign', ['c', 5])])
-    print(toil.walk(r""" b = c = 5 """))  # -> 5
-    print(toil.walk(r""" b """))  # -> 5
-    print(toil.walk(r""" c """))  # -> 5
-
-    print(toil.ast(r""" a := 2 == 2 """))  # -> ('define', ['a', ('equal', [2, 2])])
-    print(toil.walk(r""" a := 2 == 2 """))  # -> True
-    print(toil.walk(r""" a """))  # -> True
-
-    # toil.walk(r""" not_defined = 3 """)  # -> Undefined variable
-    # toil.walk(r""" a = = 3 """)  # -> Invalid token
-    # toil.walk(r""" a = """)  # -> Invalid token
-    # toil.walk(r""" = a """)  # -> Invalid token
+    # toil.walk(r""" if then 2 else 3 end """) # -> Expected then
+    # toil.walk(r""" if True 2 else 3 end """) # -> Expected then
+    # toil.walk(r""" if True then else 3 end """) # -> Expected else
+    # toil.walk(r""" if True then 2 3 end """) # -> Expected else
+    # toil.walk(r""" if True then 2 else end """) # -> Expected end
+    # toil.walk(r""" if True then 2 else 3 """) # -> Expected end
