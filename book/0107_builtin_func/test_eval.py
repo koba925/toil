@@ -103,5 +103,6 @@ class TestEvaluator:
         with pytest.raises(AssertionError, match=r"Undefined variable @ val\(\): not_defined"):
             toil.eval(("not_defined", []))
 
+
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -27,7 +27,11 @@ class Scanner:
                     break
                 case c if c.isdecimal(): self._number()
                 case c if is_ident_first(c): self._ident()
-                case c if c in "+-*/%()":
+                case c if c in "=:":
+                    self._advance()
+                    if self._current_char() == "=": self._advance()
+                    self._tokens.append(self._lexeme())
+                case c if c in "+-*/%()<>":
                     self._tokens.append(c); self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
@@ -70,7 +74,17 @@ class Parser:
             f"Extra token @ parse(): {self._current_token()}"
         return expr
 
-    def _expression(self): return self._add_sub()
+    def _expression(self): return self._define_assign()
+
+    def _define_assign(self):
+        return self._binary_right({
+            ":=": "define", "=": "assign"
+        }, self._comparison)
+
+    def _comparison(self):
+        return self._binary_left({
+            "==": "equal", "<": "less", ">": "greater"
+        }, self._add_sub)
 
     def _add_sub(self):
         return self._binary_left({"+": "add", "-": "sub"}, self._mul_div_mod)
@@ -84,6 +98,7 @@ class Parser:
         match self._current_token():
             case None | bool() | int(): return self._current_and_advance()
             case "(": return self._group()
+            case "if": return self._if()
             case str(name) if is_ident(name): return self._current_and_advance()
             case invalid:
                 assert False, f"Invalid token @ _primary(): {invalid}"
@@ -94,12 +109,31 @@ class Parser:
         self._consume(")")
         return expr
 
+    def _if(self):
+        self._current_and_advance()
+        cond_expr = self._expression()
+        self._consume("then")
+        then_expr = self._expression()
+        self._consume("else")
+        else_expr = self._expression()
+        self._consume("end")
+        return ("if", [cond_expr, then_expr, else_expr])
+
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
         while type(op := self._current_token()) is str and op in ops:
             self._current_and_advance()
             right = sub_elem()
             left = (ops[op], [left, right])
+        return left
+
+    def _binary_right(self, ops, sub_elem):
+        left = sub_elem()
+        if type(self._current_token()) is str and \
+                (op := self._current_token()) in ops:
+            self._current_and_advance()
+            right = self._binary_right(ops, sub_elem)
+            return (ops[op], [left, right])
         return left
 
     def _consume(self, expected):
@@ -258,15 +292,27 @@ if __name__ == "__main__":
 
     # Example
 
-    print("None, bool, and identifier:")
+    print("If:")
 
-    print(toil.walk(r""" None """))  # -> None
-    print(toil.walk(r""" True """))  # -> True
-    print(toil.walk(r""" False """))  # -> False
+    print(toil.ast(r""" if 2 == 2 then 3 + 3 else 4 + 4 end """))
+    # -> ('if', [('equal', [2, 2]), ('add', [3, 3]), ('add', [4, 4])])
+    print(toil.walk(r""" if 2 == 2 then 3 + 3 else 4 + 4 end """))  # -> 6
+    print(toil.walk(r""" if 2 == 3 then 3 + 3 else 4 + 4 end """))  # -> 8
 
-    # print(toil.walk(r""" a2 """))  # -> Undefined variable @ val(): a2
-    # print(toil.walk(r""" 2a """))  # -> Extra token
-    # print(toil.walk(r""" _a """))  # -> Undefined variable @ val(): _a
-    # print(toil.walk(r""" a_b """))  # -> Undefined variable @ val(): a_b
-    # print(toil.walk(r""" True_ """))  # -> Undefined variable @ val(): True_
-    # print(toil.walk(r""" true """))  # -> Undefined variable @ val(): true
+    print(toil.walk(r""" if True then 3 else 4 end * 5 """))  # -> 15
+
+    print(toil.walk(r""" if True then if True then 3 else 4 end else 5 end """))
+    # -> 3
+    print(toil.walk(r""" if True then if False then 3 else 4 end else 5 end """))
+    # -> 4
+    print(toil.walk(r""" if False then 3 else if True then 4 else 5 end end """))
+    # -> 4
+    print(toil.walk(r""" if False then 3 else if False then 4 else 5 end end """))
+    # -> 5
+
+    # toil.walk(r""" if then 2 else 3 end """) # -> Expected then
+    # toil.walk(r""" if True 2 else 3 end """) # -> Expected then
+    # toil.walk(r""" if True then else 3 end """) # -> Expected else
+    # toil.walk(r""" if True then 2 3 end """) # -> Expected else
+    # toil.walk(r""" if True then 2 else end """) # -> Expected end
+    # toil.walk(r""" if True then 2 else 3 """) # -> Expected end

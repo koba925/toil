@@ -92,8 +92,8 @@ class Parser:
     def _primary(self):
         match self._current_token():
             case None | bool() | int(): return self._current_and_advance()
-            case str(name) if is_ident(name): return self._current_and_advance()
             case "(": return self._group()
+            case str(name) if is_ident(name): return self._current_and_advance()
             case invalid:
                 assert False, f"Invalid token @ _primary(): {invalid}"
 

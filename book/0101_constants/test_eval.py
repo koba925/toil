@@ -13,5 +13,6 @@ class TestEvaluator:
         with pytest.raises(AssertionError, match="Unexpected expression"):
             toil.eval([])
 
+
 if __name__ == "__main__":
     pytest.main([__file__])

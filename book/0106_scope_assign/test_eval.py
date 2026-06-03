@@ -86,5 +86,6 @@ class TestEvaluator:
         with pytest.raises(AssertionError, match="Undefined variable"):
             toil.eval("b")
 
+
 if __name__ == "__main__":
     pytest.main([__file__])

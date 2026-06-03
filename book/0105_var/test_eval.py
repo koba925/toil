@@ -51,5 +51,6 @@ class TestEvaluator:
         assert toil.eval(("define", ["a", 6])) == 6
         assert toil.eval("a") == 6
 
+
 if __name__ == "__main__":
     pytest.main([__file__])

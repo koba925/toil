@@ -84,5 +84,6 @@ class TestTreeWalkInterpreter:
         with pytest.raises(AssertionError, match="Extra token"):
             toil.walk(r""" 2 34 """)
 
+
 if __name__ == "__main__":
     pytest.main([__file__])

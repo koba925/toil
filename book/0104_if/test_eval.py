@@ -44,5 +44,6 @@ class TestEvaluator:
         assert toil.eval(("if", [True, ("seq", [2, 3]), 4])) == 3
         assert toil.eval(("if", [False, 2, ("if", [True, 3, 4])])) == 3
 
+
 if __name__ == "__main__":
     pytest.main([__file__])

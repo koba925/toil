@@ -192,5 +192,6 @@ class TestEvaluator:
         ])) == 2
         assert capsys.readouterr().out == "0 0\n0 1\n0 2\n1 0\n1 1\n1 2\n"
 
+
 if __name__ == "__main__":
     pytest.main([__file__])

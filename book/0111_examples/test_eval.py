@@ -358,5 +358,6 @@ class TestExamples:
         ]))
         assert capsys.readouterr().out == "False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9\n"
 
+
 if __name__ == "__main__":
     pytest.main([__file__])

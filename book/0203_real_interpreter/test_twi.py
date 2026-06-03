@@ -19,5 +19,6 @@ class TestTreeWalkInterpreter:
         with pytest.raises(AssertionError, match="Invalid character"):
             toil.walk(r"""2$""")
 
+
 if __name__ == "__main__":
     pytest.main([__file__])
