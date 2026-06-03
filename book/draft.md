@@ -708,4 +708,8 @@ if then else end
 elifはありませんしelseの省略もできませんが式志向の言語のifはけっこうそんなもんです
 あとでelifつけたりelseを省略できるようにはしますが今はこれで
 
+#### while 0213_while
 
+while do end
+
+もうパターンが読めてきましたね！
