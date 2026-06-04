@@ -29,7 +29,7 @@ class Scanner:
                     self._advance()
                     if self._current_char() == "=": self._advance()
                     self._tokens.append(self._lexeme())
-                case c if c in "+-*/%()<>,":
+                case c if c in "+-*/%()<>":
                     self._tokens.append(c); self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
@@ -90,15 +90,7 @@ class Parser:
     def _mul_div_mod(self):
         return self._binary_left({
             "*": "mul", "/": "div", "%": "mod"
-        }, self._call)
-
-    def _call(self):
-        target = self._primary()
-        while self._current_token() == "(":
-            self._current_and_advance()
-            target = (target, self._comma_separated_exprs(")"))
-            self._consume(")")
-        return target
+        }, self._primary)
 
     def _primary(self):
         match self._current_token():
@@ -130,15 +122,6 @@ class Parser:
             right = self._binary_right(ops, sub_elem)
             return (ops[op], [left, right])
         return left
-
-    def _comma_separated_exprs(self, terminator):
-        cse = []
-        if self._current_token() != terminator:
-            cse.append(self._expression())
-            while self._current_token() == ",":
-                self._current_and_advance()
-                cse.append(self._expression())
-        return cse
 
     def _consume(self, expected):
         assert self._current_token() == expected, \

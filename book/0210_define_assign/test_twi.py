@@ -109,36 +109,6 @@ class TestTreeWalkInterpreter:
         with pytest.raises(AssertionError, match="Invalid token"):
             toil.walk(r""" / 3 """)
 
-    def test_call(self, capsys):
-        assert toil.walk(r""" add(2, 3) """) == 5
-        assert toil.walk(r""" add(2 + 3, add(4, 5)) """) == 14
-        assert toil.walk(r""" add(2, 3) * 4 """) == 20
-
-        toil.walk(r""" myadd := add """)
-        assert toil.walk(r""" myadd(2, 3) """) == 5
-
-        toil.walk(r""" print() """)
-        assert capsys.readouterr().out == "\n"
-        toil.walk(r""" print(2) """)
-        assert capsys.readouterr().out == "2\n"
-        toil.walk(r""" print(2, 3) """)
-        assert capsys.readouterr().out == "2 3\n"
-
-        with pytest.raises(AssertionError, match="Invalid token"):
-            toil.walk(r""" print( """)
-        with pytest.raises(AssertionError, match=r"Expected \)"):
-            toil.walk(r""" print(2 """)
-        with pytest.raises(AssertionError, match=r"Expected \)"):
-            toil.walk(r""" print(2 3) """)
-        with pytest.raises(AssertionError, match="Invalid token"):
-            toil.walk(r""" print(2,) """)
-        with pytest.raises(AssertionError, match="Invalid token"):
-            toil.walk(r""" print(, 3) """)
-        with pytest.raises(AssertionError, match="Undefined variable"):
-            toil.walk(r""" not_defined_func(2) """)
-        with pytest.raises(AssertionError, match="Invalid operator"):
-            toil.walk(r""" 2(3) """)
-
     def test_numbers(self):
         assert toil.walk(r""" 2 """) == 2
         assert toil.walk(r""" 02 """) == 2
