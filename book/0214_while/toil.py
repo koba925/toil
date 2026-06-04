@@ -31,7 +31,7 @@ class Scanner:
                     self._advance()
                     if self._current_char() == "=": self._advance()
                     self._tokens.append(self._lexeme())
-                case c if c in "+-*/%()<>;":
+                case c if c in "+-*/%()<>,;":
                     self._tokens.append(c); self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
@@ -99,13 +99,22 @@ class Parser:
     def _mul_div_mod(self):
         return self._binary_left({
             "*": "mul", "/": "div", "%": "mod"
-        }, self._primary)
+        }, self._call)
+
+    def _call(self):
+        target = self._primary()
+        while self._current_token() == "(":
+            self._current_and_advance()
+            target = (target, self._comma_separated_exprs(")"))
+            self._consume(")")
+        return target
 
     def _primary(self):
         match self._current_token():
             case None | bool() | int(): return self._current_and_advance()
             case "(": return self._group()
             case "if": return self._if()
+            case "while": return self._while()
             case str(name) if is_ident(name): return self._current_and_advance()
             case invalid:
                 assert False, f"Invalid token @ _primary(): {invalid}"
@@ -126,6 +135,14 @@ class Parser:
         self._consume("end")
         return ("if", [cond_expr, then_expr, else_expr])
 
+    def _while(self):
+        self._current_and_advance()
+        cond_expr = self._expression()
+        self._consume("do")
+        body_expr = self._expression()
+        self._consume("end")
+        return ("while", [cond_expr, body_expr])
+
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
         while type(op := self._current_token()) is str and op in ops:
@@ -142,6 +159,15 @@ class Parser:
             right = self._binary_right(ops, sub_elem)
             return (ops[op], [left, right])
         return left
+
+    def _comma_separated_exprs(self, terminator):
+        cse = []
+        if self._current_token() != terminator:
+            cse.append(self._expression())
+            while self._current_token() == ",":
+                self._current_and_advance()
+                cse.append(self._expression())
+        return cse
 
     def _consume(self, expected):
         assert self._current_token() == expected, \
@@ -299,27 +325,28 @@ if __name__ == "__main__":
 
     # Example
 
-    print("If:")
+    print("While:")
 
-    print(toil.ast(r""" if 2 == 2 then 3 + 3 else 4 + 4 end """))
-    # -> ('if', [('equal', [2, 2]), ('add', [3, 3]), ('add', [4, 4])])
-    print(toil.walk(r""" if 2 == 2 then 3 + 3 else 4 + 4 end """))  # -> 6
-    print(toil.walk(r""" if 2 == 3 then 3 + 3 else 4 + 4 end """))  # -> 8
+    print(toil.ast(r""" while i < 3 do i = i + 1 end """))
+    # -> ('while', [('less', ['i', 3]), ('assign', ['i', ('add', ['i', 1])])])
+    print(toil.walk(r""" i := 1; while i < 3 do i = i + 1 end """)) # -> 3
 
-    print(toil.walk(r""" if True then 3 else 4 end * 5 """))  # -> 15
+    print(toil.walk(r"""
+        sum := 0;
+        i := 1; while i < 4 do sum = sum + i; i = i + 1 end;
+        sum
+    """))  # -> 6
 
-    print(toil.walk(r""" if True then if True then 3 else 4 end else 5 end """))
-    # -> 3
-    print(toil.walk(r""" if True then if False then 3 else 4 end else 5 end """))
-    # -> 4
-    print(toil.walk(r""" if False then 3 else if True then 4 else 5 end end """))
-    # -> 4
-    print(toil.walk(r""" if False then 3 else if False then 4 else 5 end end """))
-    # -> 5
+    toil.walk(r"""
+        i := 1; while i < 3 do
+            j := 1; while j < 3 do print(i, j); j = j + 1 end;
+            i = i + 1
+        end
+    """)  # -> 1 1\n1 2\n2 1\n2 2
 
-    # toil.walk(r""" if then 2 else 3 end """) # -> Expected then
-    # toil.walk(r""" if True 2 else 3 end """) # -> Expected then
-    # toil.walk(r""" if True then else 3 end """) # -> Expected else
-    # toil.walk(r""" if True then 2 3 end """) # -> Expected else
-    # toil.walk(r""" if True then 2 else end """) # -> Expected end
-    # toil.walk(r""" if True then 2 else 3 """) # -> Expected end
+    print(toil.walk(r""" while False do 1/0 end """)) # -> None
+
+    # toil.walk(r""" while do 2 end """) # -> Expected do
+    # toil.walk(r""" while True 2 end """) # -> Expected do
+    # toil.walk(r""" while True do end """) # -> Expected end
+    # toil.walk(r""" while True do 2 """) # -> Expected end

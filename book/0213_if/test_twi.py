@@ -26,10 +26,11 @@ class TestTreeWalkInterpreter:
             # Comment
         """) == 2
 
-    def test_sequence(self):
-        assert toil.walk(r""" 2 + 3; 4 + 5 """) == 9
+    def test_sequence(self, capsys):
+        assert toil.walk(r""" print(2); print(3) """) is None
+        assert capsys.readouterr().out == "2\n3\n"
+
         assert toil.walk(r""" 2 + 3; 4 + 5; 6 + 7 """) == 13
-        assert toil.walk(r""" a := 2; a + 3 """) == 5
 
         with pytest.raises(AssertionError, match="Invalid token"):
             toil.walk(r""" 2; """)
@@ -121,6 +122,36 @@ class TestTreeWalkInterpreter:
         with pytest.raises(AssertionError, match="Invalid token"):
             toil.walk(r""" / 3 """)
 
+    def test_call(self, capsys):
+        assert toil.walk(r""" add(2, 3) """) == 5
+        assert toil.walk(r""" add(2 + 3, add(4, 5)) """) == 14
+        assert toil.walk(r""" add(2, 3) * 4 """) == 20
+
+        toil.walk(r""" myadd := add """)
+        assert toil.walk(r""" myadd(2, 3) """) == 5
+
+        toil.walk(r""" print() """)
+        assert capsys.readouterr().out == "\n"
+        toil.walk(r""" print(2) """)
+        assert capsys.readouterr().out == "2\n"
+        toil.walk(r""" print(2, 3) """)
+        assert capsys.readouterr().out == "2 3\n"
+
+        with pytest.raises(AssertionError, match="Invalid token"):
+            toil.walk(r""" print( """)
+        with pytest.raises(AssertionError, match=r"Expected \)"):
+            toil.walk(r""" print(2 """)
+        with pytest.raises(AssertionError, match=r"Expected \)"):
+            toil.walk(r""" print(2 3) """)
+        with pytest.raises(AssertionError, match="Invalid token"):
+            toil.walk(r""" print(2,) """)
+        with pytest.raises(AssertionError, match="Invalid token"):
+            toil.walk(r""" print(, 3) """)
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            toil.walk(r""" not_defined_func(2) """)
+        with pytest.raises(AssertionError, match="Invalid operator"):
+            toil.walk(r""" 2(3) """)
+
     def test_numbers(self):
         assert toil.walk(r""" 2 """) == 2
         assert toil.walk(r""" 02 """) == 2
@@ -184,40 +215,6 @@ class TestTreeWalkInterpreter:
             toil.walk(r""" if True then 2 else end """)
         with pytest.raises(AssertionError, match="Expected end"):
             toil.walk(r""" if True then 2 else 3 """)
-
-    def test_while(self):
-        assert toil.walk(r""" i := 1; while i < 3 do i = i + 1 end """) == 3
-        assert toil.walk(r""" i := 1; while i < 3 do i = i + 1; i * 10 end """) == 30
-
-        assert toil.walk(r"""
-            sum := 0;
-            i := 1; while i < 4 do
-                sum = sum + i;
-                i = i + 1
-            end;
-            sum
-        """) == 6
-
-        assert toil.walk(r"""
-            sum := 0;
-            i := 1; while i < 3 do
-                j := 1; while j < 3 do sum = sum + j; j = j + 1 end;
-                sum = sum + i; i = i + 1
-            end;
-            sum
-        """) == 9
-
-        assert toil.walk(r""" while False do 1/0 end """) is None
-
-
-        with pytest.raises(AssertionError, match="Expected do"):
-            toil.walk(r""" while do 2 end """)
-        with pytest.raises(AssertionError, match="Expected do"):
-            toil.walk(r""" while True 2 end """)
-        with pytest.raises(AssertionError, match="Expected end"):
-            toil.walk(r""" while True do end """)
-        with pytest.raises(AssertionError, match="Expected end"):
-            toil.walk(r""" while True do 2 """)
 
     def test_empty_source(self):
         with pytest.raises(AssertionError, match="Invalid token"):

@@ -31,7 +31,7 @@ class Scanner:
                     self._advance()
                     if self._current_char() == "=": self._advance()
                     self._tokens.append(self._lexeme())
-                case c if c in "+-*/%()<>;":
+                case c if c in "+-*/%()<>,;":
                     self._tokens.append(c); self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
@@ -99,12 +99,21 @@ class Parser:
     def _mul_div_mod(self):
         return self._binary_left({
             "*": "mul", "/": "div", "%": "mod"
-        }, self._primary)
+        }, self._call)
+
+    def _call(self):
+        target = self._primary()
+        while self._current_token() == "(":
+            self._current_and_advance()
+            target = (target, self._comma_separated_exprs(")"))
+            self._consume(")")
+        return target
 
     def _primary(self):
         match self._current_token():
             case None | bool() | int(): return self._current_and_advance()
             case "(": return self._group()
+            case "func": return self._func()
             case "if": return self._if()
             case "while": return self._while()
             case str(name) if is_ident(name): return self._current_and_advance()
@@ -116,6 +125,14 @@ class Parser:
         expr = self._expression()
         self._consume(")")
         return expr
+
+    def _func(self):
+        self._current_and_advance()
+        params = self._comma_separated_exprs("do")
+        self._consume("do")
+        body_expr = self._expression()
+        self._consume("end")
+        return ("func", [params, body_expr])
 
     def _if(self):
         self._current_and_advance()
@@ -151,6 +168,15 @@ class Parser:
             right = self._binary_right(ops, sub_elem)
             return (ops[op], [left, right])
         return left
+
+    def _comma_separated_exprs(self, terminator):
+        cse = []
+        if self._current_token() != terminator:
+            cse.append(self._expression())
+            while self._current_token() == ",":
+                self._current_and_advance()
+                cse.append(self._expression())
+        return cse
 
     def _consume(self, expected):
         assert self._current_token() == expected, \
@@ -308,33 +334,40 @@ if __name__ == "__main__":
 
     # Example
 
-    print("While:")
+    print("Function:")
 
-    print(toil.ast(r""" while i < 3 do i = i + 1 end """))
-    # -> ('while', [('less', ['i', 3]), ('assign', ['i', ('add', ['i', 1])])])
-    print(toil.walk(r""" i := 1; while i < 3 do i = i + 1 end """)) # -> 3
+    print(toil.ast(r""" func do 2 end """)) # -> ('func', [[], 2])
+    print(toil.walk(r""" func do 2 end """))
+    # -> ('closure', [[], 2, <__main__.Environment object at ...>])
+    print(toil.walk(r""" func do 2 end () """)) # -> 2
+
+    print(toil.ast(r""" func a do a + 2 end """))
+    # -> ('func', [['a'], ('add', ['a', 2])])
+    print(toil.walk(r""" func a do a + 2 end """))
+    # -> ('closure', [['a'], ('add', ['a', 2]), <__main__.Environment ...>])
+    print(toil.walk(r""" func a do a + 2 end (3) """)) # -> 5
+
+    print(toil.ast(r""" func a, b do a + b end """))
+    # -> ('func', [['a', 'b'], ('add', ['a', 'b'])])
+    print(toil.walk(r""" func a, b do a + b end """))
+    # -> ('closure', [['a', 'b'], ('add', ['a', 'b']), <__main__.Environment ...>])
+    print(toil.walk(r""" func a, b do a + b end (2, 3) """)) # -> 5
+
+    # toil.walk(r""" func a, b a + b end """) # -> Expected do
+    # toil.walk(r""" func a, b do end """) # -> Expected End
+    # toil.walk(r""" func a, b do a + b """) # -> Expected End
+    # toil.walk(r""" func a, do a + b end """) # -> Expected do
+    # toil.walk(r""" func , b do a + b end """) # -> Invalid token
 
     print(toil.walk(r"""
-        sum := 0;
-        i := 1; while i < 4 do
-            sum = sum + i;
-            i = i + 1
-        end;
-        sum
-    """))  # -> 6
+        twice := func f, x do f(f(x)) end;
+        double := func x do x * 2 end;
+        twice(double, 3)
+    """)) # -> 12
 
     print(toil.walk(r"""
-        sum := 0;
-        i := 1; while i < 3 do
-            j := 1; while j < 3 do sum = sum + j; j = j + 1 end;
-            sum = sum + i; i = i + 1
-        end;
-        sum
-    """))  # -> 9
-
-    print(toil.walk(r""" while False do 1/0 end """)) # -> None
-
-    # toil.walk(r""" while do 2 end """) # -> Expected do
-    # toil.walk(r""" while True 2 end """) # -> Expected do
-    # toil.walk(r""" while True do end """) # -> Expected end
-    # toil.walk(r""" while True do 2 """) # -> Expected end
+        a := 2;
+        f := func do a end;
+        g := func do a := 3; f() end;
+        g()
+    """)) # -> 2
