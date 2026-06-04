@@ -1,5 +1,3 @@
-#! /usr/bin/env python3
-
 def is_ident_first(c): return c.isalpha() or c == "_"
 def is_ident_rest(c): return c.isalnum() or c == "_"
 def is_ident(s): return is_ident_first(s[0])
@@ -238,32 +236,8 @@ class Interpreter:
 
 
 if __name__ == "__main__":
-    import sys
 
     toil = Interpreter()
-
-    def repl():
-        while True:
-            print("\nInput source and enter Ctrl+D (Linux/Mac) or Ctrl+Z (Windows):")
-            if (src := sys.stdin.read()) == "":
-                exit(0)
-            try:
-                expr = toil.ast(src)
-                print("AST:", expr, sep="\n")
-                print("Output:")
-                result = toil.eval(expr)
-                print("Result:", result, sep="\n")
-            except AssertionError as e:
-                print("Error:", e, sep="\n")
-
-    def from_file(filename):
-        with open(filename, "r") as f: result = toil.walk(f.read())
-        exit(result if isinstance(result, int) else 255)
-
-    if len(sys.argv) > 1:
-        match sys.argv[1]:
-            case "--repl": repl()
-            case filename: from_file(filename)
 
     # Example
 

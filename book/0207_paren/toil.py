@@ -1,5 +1,3 @@
-#! /usr/bin/env python3
-
 class Scanner:
     def __init__(self, src):
         self._src = src
@@ -214,32 +212,8 @@ class Interpreter:
 
 
 if __name__ == "__main__":
-    import sys
 
     toil = Interpreter()
-
-    def repl():
-        while True:
-            print("\nInput source and enter Ctrl+D (Linux/Mac) or Ctrl+Z (Windows):")
-            if (src := sys.stdin.read()) == "":
-                exit(0)
-            try:
-                expr = toil.ast(src)
-                print("AST:", expr, sep="\n")
-                print("Output:")
-                result = toil.eval(expr)
-                print("Result:", result, sep="\n")
-            except AssertionError as e:
-                print("Error:", e, sep="\n")
-
-    def from_file(filename):
-        with open(filename, "r") as f: result = toil.walk(f.read())
-        exit(result if isinstance(result, int) else 255)
-
-    if len(sys.argv) > 1:
-        match sys.argv[1]:
-            case "--repl": repl()
-            case filename: from_file(filename)
 
     # Example
 

@@ -670,6 +670,12 @@ pprint.pprintでもどうぞ
 
 Noneやboolができたので数の計算以外もやってみましょう
 
+#### scope 0210_scope
+
+scope-end
+構文らしきものを
+でも式です
+
 #### 変数の定義と代入 0210_define_assign
 
 ### seq 0211_seq
