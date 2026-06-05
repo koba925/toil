@@ -111,9 +111,8 @@ class Parser:
         match self._current_token():
             case None | bool() | int(): return self._current_and_advance()
             case "(": return self._group()
-            case "func": return self._func()
+            case "scope": return self._scope()
             case "if": return self._if()
-            case "while": return self._while()
             case str(name) if is_ident(name): return self._current_and_advance()
             case invalid:
                 assert False, f"Invalid token @ _primary(): {invalid}"
@@ -124,13 +123,11 @@ class Parser:
         self._consume(")")
         return expr
 
-    def _func(self):
+    def _scope(self):
         self._current_and_advance()
-        params = self._comma_separated_exprs("do")
-        self._consume("do")
         body_expr = self._expression()
         self._consume("end")
-        return ("func", [params, body_expr])
+        return ("scope", [body_expr])
 
     def _if(self):
         self._current_and_advance()
@@ -141,14 +138,6 @@ class Parser:
         else_expr = self._expression()
         self._consume("end")
         return ("if", [cond_expr, then_expr, else_expr])
-
-    def _while(self):
-        self._current_and_advance()
-        cond_expr = self._expression()
-        self._consume("do")
-        body_expr = self._expression()
-        self._consume("end")
-        return ("while", [cond_expr, body_expr])
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
@@ -308,40 +297,27 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Function:")
+    print("If:")
 
-    print(toil.ast(r""" func do 2 end """)) # -> ('func', [[], 2])
-    print(toil.walk(r""" func do 2 end """))
-    # -> ('closure', [[], 2, <__main__.Environment object at ...>])
-    print(toil.walk(r""" func do 2 end () """)) # -> 2
+    print(toil.ast(r""" if 2 == 2 then 3 + 3 else 4 + 4 end """))
+    # -> ('if', [('equal', [2, 2]), ('add', [3, 3]), ('add', [4, 4])])
+    print(toil.walk(r""" if 2 == 2 then 3 + 3 else 4 + 4 end """))  # -> 6
+    print(toil.walk(r""" if 2 == 3 then 3 + 3 else 4 + 4 end """))  # -> 8
 
-    print(toil.ast(r""" func a do a + 2 end """))
-    # -> ('func', [['a'], ('add', ['a', 2])])
-    print(toil.walk(r""" func a do a + 2 end """))
-    # -> ('closure', [['a'], ('add', ['a', 2]), <__main__.Environment ...>])
-    print(toil.walk(r""" func a do a + 2 end (3) """)) # -> 5
+    print(toil.walk(r""" if True then 3 else 4 end * 5 """))  # -> 15
 
-    print(toil.ast(r""" func a, b do a + b end """))
-    # -> ('func', [['a', 'b'], ('add', ['a', 'b'])])
-    print(toil.walk(r""" func a, b do a + b end """))
-    # -> ('closure', [['a', 'b'], ('add', ['a', 'b']), <__main__.Environment ...>])
-    print(toil.walk(r""" func a, b do a + b end (2, 3) """)) # -> 5
+    print(toil.walk(r""" if True then if True then 3 else 4 end else 5 end """))
+    # -> 3
+    print(toil.walk(r""" if True then if False then 3 else 4 end else 5 end """))
+    # -> 4
+    print(toil.walk(r""" if False then 3 else if True then 4 else 5 end end """))
+    # -> 4
+    print(toil.walk(r""" if False then 3 else if False then 4 else 5 end end """))
+    # -> 5
 
-    # toil.walk(r""" func a, b a + b end """) # -> Expected do
-    # toil.walk(r""" func a, b do end """) # -> Expected End
-    # toil.walk(r""" func a, b do a + b """) # -> Expected End
-    # toil.walk(r""" func a, do a + b end """) # -> Expected do
-    # toil.walk(r""" func , b do a + b end """) # -> Invalid token
-
-    print(toil.walk(r"""
-        twice := func f, x do f(f(x)) end;
-        double := func x do x * 2 end;
-        twice(double, 3)
-    """)) # -> 12
-
-    print(toil.walk(r"""
-        a := 2;
-        f := func do a end;
-        g := func do a := 3; f() end;
-        g()
-    """)) # -> 2
+    # toil.walk(r""" if then 2 else 3 end """) # -> Expected then
+    # toil.walk(r""" if True 2 else 3 end """) # -> Expected then
+    # toil.walk(r""" if True then else 3 end """) # -> Expected else
+    # toil.walk(r""" if True then 2 3 end """) # -> Expected else
+    # toil.walk(r""" if True then 2 else end """) # -> Expected end
+    # toil.walk(r""" if True then 2 else 3 """) # -> Expected end

@@ -111,8 +111,7 @@ class Parser:
         match self._current_token():
             case None | bool() | int(): return self._current_and_advance()
             case "(": return self._group()
-            case "if": return self._if()
-            case "while": return self._while()
+            case "scope": return self._scope()
             case str(name) if is_ident(name): return self._current_and_advance()
             case invalid:
                 assert False, f"Invalid token @ _primary(): {invalid}"
@@ -123,23 +122,11 @@ class Parser:
         self._consume(")")
         return expr
 
-    def _if(self):
+    def _scope(self):
         self._current_and_advance()
-        cond_expr = self._expression()
-        self._consume("then")
-        then_expr = self._expression()
-        self._consume("else")
-        else_expr = self._expression()
-        self._consume("end")
-        return ("if", [cond_expr, then_expr, else_expr])
-
-    def _while(self):
-        self._current_and_advance()
-        cond_expr = self._expression()
-        self._consume("do")
         body_expr = self._expression()
         self._consume("end")
-        return ("while", [cond_expr, body_expr])
+        return ("scope", [body_expr])
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
@@ -299,28 +286,18 @@ if __name__ == "__main__":
 
     # Example
 
-    print("While:")
+    print("Scope:")
 
-    print(toil.ast(r""" while i < 3 do i = i + 1 end """))
-    # -> ('while', [('less', ['i', 3]), ('assign', ['i', ('add', ['i', 1])])])
-    print(toil.walk(r""" i := 1; while i < 3 do i = i + 1 end """)) # -> 3
+    print(toil.walk(r""" a := 2; scope a end """)) # -> 2
+    print(toil.walk(r""" a := 2; scope scope a end end """)) # -> 2
 
-    print(toil.walk(r"""
-        sum := 0;
-        i := 1; while i < 4 do sum = sum + i; i = i + 1 end;
-        sum
-    """))  # -> 6
+    print(toil.walk(r""" a := 2; scope a := 3 end """)) # -> 3
+    print(toil.walk(r""" a """)) # -> 2
 
-    toil.walk(r"""
-        i := 1; while i < 3 do
-            j := 1; while j < 3 do print(i, j); j = j + 1 end;
-            i = i + 1
-        end
-    """)  # -> 1 1\n1 2\n2 1\n2 2
+    print(toil.walk(r""" a := 2; scope a = 3 end """)) # -> 3
+    print(toil.walk(r""" a """)) # -> 3
 
-    print(toil.walk(r""" while False do 1/0 end """)) # -> None
+    # toil.walk(r""" a := 2; scope d = 3 end """)  # -> Undefined variable
+    # toil.walk(r""" scope 2 """)  # -> Expected end
+    # toil.walk(r""" scope end """)  # -> Expected end
 
-    # toil.walk(r""" while do 2 end """) # -> Expected do
-    # toil.walk(r""" while True 2 end """) # -> Expected do
-    # toil.walk(r""" while True do end """) # -> Expected end
-    # toil.walk(r""" while True do 2 """) # -> Expected end
