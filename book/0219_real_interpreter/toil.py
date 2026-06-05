@@ -1,3 +1,5 @@
+#! /usr/bin/env python3
+
 def is_ident_first(c): return c.isalpha() or c == "_"
 def is_ident_rest(c): return c.isalnum() or c == "_"
 def is_ident(s): return is_ident_first(s[0])
@@ -111,6 +113,8 @@ class Parser:
         match self._current_token():
             case None | bool() | int(): return self._current_and_advance()
             case "(": return self._group()
+            case "func": return self._func()
+            case "def": return self._def()
             case "scope": return self._scope()
             case "if": return self._if()
             case "while": return self._while()
@@ -123,6 +127,28 @@ class Parser:
         expr = self._expression()
         self._consume(")")
         return expr
+
+    def _func(self):
+        self._current_and_advance()
+        params = self._comma_separated_exprs("do")
+        self._consume("do")
+        body_expr = self._expression()
+        self._consume("end")
+        return ("func", [params, body_expr])
+
+    def _def(self):
+        self._current_and_advance()
+        call_expr = self._expression()
+        self._consume("do")
+        body_expr = self._expression()
+        self._consume("end")
+        match call_expr:
+            case (name, params):
+                return ("define", [name, ("func", [params, body_expr])])
+            case str():
+                return ("define", [call_expr, ("func", [[], body_expr])])
+            case _:
+                assert False, f"Invalid def syntax @ _def(): {call_expr}"
 
     def _scope(self):
         self._current_and_advance()
@@ -301,33 +327,33 @@ class Interpreter:
 
 
 if __name__ == "__main__":
+    import sys
 
     toil = Interpreter()
 
+    def repl():
+        while True:
+            print("\nInput source and enter Ctrl+D (Linux/Mac) or Ctrl+Z (Windows):")
+            if (src := sys.stdin.read()) == "":
+                exit(0)
+            try:
+                expr = toil.ast(src)
+                print("AST:", expr, sep="\n")
+                print("Output:")
+                result = toil.eval(expr)
+                print("Result:", result, sep="\n")
+            except AssertionError as e:
+                print("Error:", e, sep="\n")
+
+    def from_file(filename):
+        with open(filename, "r") as f: result = toil.walk(f.read())
+        exit(result if isinstance(result, int) else 255)
+
+    if len(sys.argv) > 1:
+        match sys.argv[1]:
+            case "--repl": repl()
+            case filename: from_file(filename)
+
     # Example
 
-    print("While:")
-
-    print(toil.ast(r""" while i < 3 do i = i + 1 end """))
-    # -> ('while', [('less', ['i', 3]), ('assign', ['i', ('add', ['i', 1])])])
-    print(toil.walk(r""" i := 1; while i < 3 do i = i + 1 end """)) # -> 3
-
-    print(toil.walk(r"""
-        sum := 0;
-        i := 1; while i < 4 do sum = sum + i; i = i + 1 end;
-        sum
-    """))  # -> 6
-
-    toil.walk(r"""
-        i := 1; while i < 3 do
-            j := 1; while j < 3 do print(i, j); j = j + 1 end;
-            i = i + 1
-        end
-    """)  # -> 1 1\n1 2\n2 1\n2 2
-
-    print(toil.walk(r""" while False do 1/0 end """)) # -> None
-
-    # toil.walk(r""" while do 2 end """) # -> Expected do
-    # toil.walk(r""" while True 2 end """) # -> Expected do
-    # toil.walk(r""" while True do end """) # -> Expected end
-    # toil.walk(r""" while True do 2 """) # -> Expected end
+    toil.walk(r""" print(2) """)
