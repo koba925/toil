@@ -339,5 +339,169 @@ class TestTreeWalkInterpreter:
             toil.walk(r""" 2 34 """)
 
 
+class TestExamples:
+    def test_factorial(self):
+        toil.walk(r"""
+            def factorial_iter(n) do
+                result := 1;
+                while n > 0 do
+                    result = result * n;
+                    n = n - 1
+                end;
+                result
+            end
+        """)
+        assert toil.walk(r""" factorial_iter(0) """) == 1
+        assert toil.walk(r""" factorial_iter(1) """) == 1
+        assert toil.walk(r""" factorial_iter(4) """) == 24
+
+        toil.walk(r"""
+            def factorial_rec(n) do
+                if n == 0 then 1 else n * factorial_rec(n - 1) end
+            end
+        """)
+        assert toil.walk(r""" factorial_rec(0) """) == 1
+        assert toil.walk(r""" factorial_rec(1) """) == 1
+        assert toil.walk(r""" factorial_rec(4) """) == 24
+
+    def test_fibonacci(self):
+        toil.walk(r"""
+            def fib_iter(n) do
+                a := 0; b := 1;
+                while n > 0 do
+                    tmp := b; b = a + b; a = tmp;
+                    n = n - 1
+                end;
+                a
+            end
+        """)
+        assert toil.walk(r""" fib_iter(0) """) == 0
+        assert toil.walk(r""" fib_iter(1) """) == 1
+        assert toil.walk(r""" fib_iter(6) """) == 8
+
+        toil.walk(r"""
+            def fib_rec(n) do
+                if n == 0 then 0
+                else if n == 1 then 1
+                else fib_rec(n - 1) + fib_rec(n - 2) end end
+            end
+        """)
+        assert toil.walk(r""" fib_rec(0) """) == 0
+        assert toil.walk(r""" fib_rec(1) """) == 1
+        assert toil.walk(r""" fib_rec(6) """) == 8
+
+    def test_GCD(self):
+        toil.walk(r"""
+            def gcd_iter(a, b) do
+                while b > 0 do
+                    tmp := b; b = a % b; a = tmp
+                end;
+                a
+            end
+        """)
+        assert toil.walk(r""" gcd_iter(12, 18) """) == 6
+
+        toil.walk(r"""
+            def gcd_rec(a, b) do
+                if b == 0 then a else gcd_rec(b, a % b) end
+            end
+        """)
+        assert toil.walk(r""" gcd_rec(12, 18) """) == 6
+
+    def test_mutual_recursion(self):
+        toil.walk(r"""
+            def even(n) do if n == 0 then True else odd(n - 1) end end;
+            def odd(n) do if n == 0 then False else even(n - 1) end end
+        """)
+        assert toil.walk(r""" even(2) """) is True
+        assert toil.walk(r""" even(3) """) is False
+        assert toil.walk(r""" odd(2) """) is False
+        assert toil.walk(r""" odd(3) """) is True
+
+    def test_counter(self):
+        toil.walk(r"""
+            def make_counter() do
+                count := 0;
+                func do count = count + 1 end
+            end
+        """)
+        toil.walk(r""" c1 := make_counter() """)
+        toil.walk(r""" c2 := make_counter() """)
+        assert toil.walk(r""" c1() """) == 1
+        assert toil.walk(r""" c1() """) == 2
+        assert toil.walk(r""" c2() """) == 1
+        assert toil.walk(r""" c2() """) == 2
+
+    def test_binary_search_tree(self, capsys):
+        toil.walk(r"""
+            def node(val, left, right) do
+                func op do
+                    if op == 1 then val
+                    else if op == 2 then left
+                    else right end end
+                end
+            end
+        """)
+        toil.walk(r""" n1 := node(2, 3, 4) """)
+        assert toil.walk(r""" n1(1) """) == 2
+        assert toil.walk(r""" n1(2) """) == 3
+        assert toil.walk(r""" n1(3) """) == 4
+
+        toil.walk(r"""
+            def bst_put(bst, val) do
+                if bst == None then node(val, None, None)
+                else
+                    cur_val := bst(1);
+                    if val == cur_val then
+                        bst
+                    else if val < cur_val then
+                        node(cur_val, bst_put(bst(2), val), bst(3))
+                    else
+                        node(cur_val, bst(2), bst_put(bst(3), val))
+                    end end
+                end
+            end
+        """)
+        toil.walk(r""" bst := None """)
+        toil.walk(r""" bst = bst_put(bst, 7) """)
+        toil.walk(r""" bst = bst_put(bst, 3) """)
+        toil.walk(r""" bst = bst_put(bst, 1) """)
+        toil.walk(r""" bst = bst_put(bst, 9) """)
+        toil.walk(r""" bst = bst_put(bst, 5) """)
+
+        toil.walk(r"""
+            def bst_walk(bst) do
+                if bst == None then None
+                else
+                    bst_walk(bst(2)); print(bst(1)); bst_walk(bst(3))
+                end
+            end
+        """)
+        toil.walk(r"""
+            def bst_find(bst, val) do
+                if bst == None then False
+                else
+                    cur_val := bst(1);
+                    if val == cur_val then val
+                    else if val < cur_val then bst_find(bst(2), val)
+                    else bst_find(bst(3), val)
+                    end end
+                end
+            end
+        """)
+
+        toil.walk(r""" bst_walk(bst) """)
+        assert capsys.readouterr().out == "1\n3\n5\n7\n9\n"
+
+        toil.walk(r"""
+            i := 0;
+            while i < 10 do
+                print(bst_find(bst, i));
+                i = i + 1
+            end
+        """)
+        assert capsys.readouterr().out == "False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9\n"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
