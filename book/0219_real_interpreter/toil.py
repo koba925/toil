@@ -349,10 +349,11 @@ if __name__ == "__main__":
         with open(filename, "r") as f: result = toil.walk(f.read())
         exit(result if isinstance(result, int) else 255)
 
-    if len(sys.argv) > 1:
-        match sys.argv[1]:
-            case "--repl": repl()
-            case filename: from_file(filename)
+    match sys.argv:
+        case [_]: pass
+        case [_, "--repl"]: repl()
+        case [_, filename]: from_file(filename)
+        case _: assert False, f"Invalid command line: {sys.argv}"
 
     # Example
 

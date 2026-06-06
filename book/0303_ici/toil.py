@@ -409,13 +409,13 @@ if __name__ == "__main__":
                 result = toil.run(f.read())
         exit(result if isinstance(result, int) else 255)
 
-    if len(sys.argv) > 1:
-        match sys.argv[1]:
-            case "--repl": repl("walk")
-            case "--rcepl": repl("run")
-            case "--walk": from_file("walk", sys.argv[2])
-            case "--run": from_file("run", sys.argv[2])
-        assert False, f"Invalid option: {sys.argv[1]}"
+    match sys.argv:
+        case [_]: pass
+        case [_, "--repl"]: repl("walk")
+        case [_, "--rcepl"]: repl("run")
+        case [_, "--walk", filename]: from_file("walk", filename)
+        case [_, "--run", filename]: from_file("run", filename)
+        case _: assert False, f"Invalid command line: {sys.argv}"
 
     # Example
 
