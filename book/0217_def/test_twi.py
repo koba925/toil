@@ -280,6 +280,10 @@ class TestTreeWalkInterpreter:
             g()
         """) == 2
 
+        assert toil.walk(r"""
+            func a do func b do a + b end end (2)(3)
+        """) == 5
+
         with pytest.raises(AssertionError, match="Expected do"):
             toil.walk(r""" func a, b a + b end """)
         with pytest.raises(AssertionError, match="Expected end"):
