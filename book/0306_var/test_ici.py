@@ -7,11 +7,31 @@ def setup_toil():
     toil = Interpreter()
 
 class TestIntermediateCodeInterpreter:
+    # Ensure test independence
+    def test_env_isolation_step1(self):
+        assert toil.run(r""" a := 2 """) == 2
+    def test_env_isolation_step2(self):
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            toil.run(r""" a """)
+
     def test_constants(self):
         assert toil.run(r""" 2 """) == 2
         assert toil.run(r""" None """) is None
         assert toil.run(r""" True """) is True
         assert toil.run(r""" False """) is False
+
+    def test_variable_definition(self):
+        assert toil.run(r""" a := 2 """) == 2
+        assert toil.run(r""" a """) == 2
+
+        assert toil.run(r""" a := b := 2 == 2 """) is True
+        assert toil.run(r""" a """) is True
+        assert toil.run(r""" b """) is True
+
+        assert toil.run(r""" a := 2; b := 3; a * b """) == 6
+
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            toil.run(r""" c """)
 
     def test_sequence(self, capsys):
         assert toil.run(r""" 2; 3; 4 """) == 4

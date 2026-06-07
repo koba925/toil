@@ -308,6 +308,10 @@ class Compiler:
     def _expression(self, expr):
         match expr:
             case None | bool() | int(): self._emit("const", expr)
+            case str(name): self._emit("get", name)
+            case ("define", [name, expr]):
+                self._expression(expr)
+                self._emit("def", name)
             case ("seq", exprs): self._seq(exprs)
             case (op, [expr]):
                 self._expression(expr)
@@ -330,8 +334,9 @@ class Compiler:
 
 
 class VM:
-    def __init__(self, code):
+    def __init__(self, code, env):
         self._code = code
+        self._env = env
         self._ip = 0
         self._stack = []
 
@@ -342,6 +347,8 @@ class VM:
                 case ("halt",): break
                 case ("const", val): self._stack.append(val)
                 case ("pop",): self._stack.pop()
+                case ("def", name): self._env.define(name, self._stack[-1])
+                case ("get", name): self._stack.append(self._env.val(name))
                 case ("print",):
                     val = print(self._stack.pop()); self._stack.append(None)
                 case ("add",):
@@ -402,7 +409,7 @@ class Interpreter:
         return self.compile(self.ast(src))
 
     def execute(self, code):
-        return VM(code).execute()
+        return VM(code, self._env).execute()
 
     def run(self, src):
         return self.execute(self.code(src))
@@ -455,28 +462,37 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Sequence:")
+    print("Variable and definition:")
 
-    print(toil.ast(r""" 2; 3; 4 """))
-    # -> ('seq', [2, 3, 4])
-    print_code(toil.code(r""" 2; 3; 4 """))
+    print(toil.ast(r""" a := 2 """))
+    # -> ('define', ['a', 2])
+    print_code(toil.code(r""" a := 2 """))
     # ->   0: ('const', 2)
-    # ->   1: ('pop',)
-    # ->   2: ('const', 3)
-    # ->   3: ('pop',)
-    # ->   4: ('const', 4)
-    # ->   5: ('halt',)
-    print(toil.run(r""" 2; 3; 4 """)) # -> 4
+    # ->   1: ('def', 'a')
+    # ->   2: ('halt',)
+    print(toil.run(r""" a := 2 """)) # -> 2
 
-    print(toil.ast(r""" print(2); print(3) """))
-    # -> ('seq', [('print', [2]), ('print', [3])])
-    print_code(toil.code(r""" print(2); print(3) """))
+    print(toil.ast(r""" a """))
+    # -> a
+    print_code(toil.code(r""" a """))
+    # ->   0: ('get', 'a')
+    # ->   1: ('halt',)
+    print(toil.run(r""" a """)) # -> 2
+
+    print(toil.ast(r""" a := b := 2 == 2 """))
+    # -> ('define', ['a', ('define', ['b', ('equal', [2, 2])])])
+    print_code(toil.code(r""" a := b := 2 == 2  """))
     # ->   0: ('const', 2)
-    # ->   1: ('print',)
-    # ->   2: ('pop',)
-    # ->   3: ('const', 3)
-    # ->   4: ('print',)
+    # ->   1: ('const', 2)
+    # ->   2: ('equal',)
+    # ->   3: ('def', 'b')
+    # ->   4: ('def', 'a')
     # ->   5: ('halt',)
-    print(toil.run(r""" print(2); print(3) """)) # -> 2\n3\nNone
+    print(toil.run(r""" a := b := 2 == 2  """)) # -> True
+    print(toil.run(r""" a """)) # -> True
+    print(toil.run(r""" b """)) # -> True
 
-    # toil.compile(("seq", [])) # -> Empty sequence
+    print(toil.run(r""" a := 2; b := 3; a * b """)) # -> 6
+
+    # toil.run(r""" c """) # -> Undefined variable
+

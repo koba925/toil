@@ -302,20 +302,23 @@ class Compiler:
 
     def compile(self):
         self._expression(self._expr)
-        self._code.append(("halt",))
+        self._emit("halt")
         return self._code
 
     def _expression(self, expr):
         match expr:
-            case None | bool() | int(): self._code.append(("const", expr))
+            case None | bool() | int(): self._emit("const", expr)
             case (op, [expr]):
                 self._expression(expr)
-                self._code.append((op,))
+                self._emit(op)
             case (op, [left_expr, right_expr]):
                 self._expression(left_expr)
                 self._expression(right_expr)
-                self._code.append((op,))
+                self._emit(op)
             case _: assert False, f"Unsupported expression @ compile(): {expr}"
+
+    def _emit(self, *inst):
+        self._code.append(inst)
 
 
 class VM:
