@@ -355,3 +355,7 @@ if __name__ == "__main__":
         g := func do a := 3; f() end;
         g()
     """)) # -> 2
+
+    print(toil.walk(r"""
+        func a do func b do a + b end end (2)(3)
+    """)) # -> 5
