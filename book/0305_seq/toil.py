@@ -450,17 +450,6 @@ if __name__ == "__main__":
 
     print("Pseudo functions:")
 
-    print(toil.ast(r""" print(2); print(3) """))
-    # -> ('seq', [('print', [2]), ('print', [3])])
-    print_code(toil.code(r""" print(2); print(3) """))
-    # ->   0: ('const', 2)
-    # ->   1: ('print',)
-    # ->   2: ('pop',)
-    # ->   3: ('const', 3)
-    # ->   4: ('print',)
-    # ->   5: ('halt',)
-    print(toil.run(r""" print(2); print(3) """)) # -> 2\n3\nNone
-
     print(toil.ast(r""" 2; 3; 4 """))
     # -> ('seq', [2, 3, 4])
     print_code(toil.code(r""" 2; 3; 4 """))
@@ -471,5 +460,16 @@ if __name__ == "__main__":
     # ->   4: ('const', 4)
     # ->   5: ('halt',)
     print(toil.run(r""" 2; 3; 4 """)) # -> 4
+
+    print(toil.ast(r""" print(2); print(3) """))
+    # -> ('seq', [('print', [2]), ('print', [3])])
+    print_code(toil.code(r""" print(2); print(3) """))
+    # ->   0: ('const', 2)
+    # ->   1: ('print',)
+    # ->   2: ('pop',)
+    # ->   3: ('const', 3)
+    # ->   4: ('print',)
+    # ->   5: ('halt',)
+    print(toil.run(r""" print(2); print(3) """)) # -> 2\n3\nNone
 
     # toil.compile(("seq", [])) # -> Empty sequence

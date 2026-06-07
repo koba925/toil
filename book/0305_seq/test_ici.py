@@ -24,10 +24,10 @@ class TestIntermediateCodeInterpreter:
         assert capsys.readouterr().out == "5\n"
 
     def test_sequence(self, capsys):
+        assert toil.run(r""" 2; 3; 4 """) == 4
+
         assert toil.run(r""" print(2); print(3) """) is None
         assert capsys.readouterr().out == "2\n3\n"
-
-        assert toil.run(r""" 2; 3; 4 """) == 4
 
         with pytest.raises(Exception, match="Empty sequence"):
             toil.compile(("seq", []))
