@@ -235,6 +235,10 @@ class Environment:
         else:
             assert False, f"Undefined variable @ val(): {name}"
 
+    def bind(self, params, args):
+        for param, arg in zip(params, args):
+            self.define(param, arg)
+
 
 class Evaluator:
     def eval(self, expr, env):
@@ -283,8 +287,7 @@ class Evaluator:
                 return op_val(args_val)
             case ("closure", [params, body_expr, closure_env]):
                 new_env = Environment(closure_env)
-                for param, arg in zip(params, args_val):
-                    new_env.define(param, arg)
+                new_env.bind(params, args_val)
                 return self.eval(body_expr, new_env)
             case _:
                 assert False, f"Invalid operator @ _op(): {op_val}"
