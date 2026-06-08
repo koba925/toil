@@ -308,7 +308,17 @@ class Compiler:
     def _expression(self, expr):
         match expr:
             case None | bool() | int(): self._emit("const", expr)
+            case str(name): self._emit("get", name)
+            case ("define", [name, expr]):
+                self._expression(expr)
+                self._emit("def", name)
+            case ("assign", [name, expr]):
+                self._expression(expr)
+                self._emit("set", name)
+            case ("scope", [body_expr]): self._scope(body_expr)
             case ("seq", exprs): self._seq(exprs)
+            case ("if", [cond_expr, then_expr, else_expr]):
+                self._if(cond_expr, then_expr, else_expr)
             case (op, [expr]):
                 self._expression(expr)
                 self._emit(op)
@@ -318,6 +328,11 @@ class Compiler:
                 self._emit(op)
             case _: assert False, f"Unsupported expression @ compile(): {expr}"
 
+    def _scope(self, body_expr):
+        self._emit("push_env")
+        self._expression(body_expr)
+        self._emit("pop_env")
+
     def _seq(self, exprs):
         assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
         for expr in exprs[:-1]:
@@ -325,15 +340,35 @@ class Compiler:
             self._emit("pop")
         self._expression(exprs[-1])
 
+    def _if(self, cond_expr, then_expr, else_expr):
+        self._expression(cond_expr)
+        else_jump = self._current_addr()
+        self._emit("jump_if_false", None)
+        self._expression(then_expr)
+        end_jump = self._current_addr()
+        self._emit("jump", None)
+        self._set_operand(else_jump, self._current_addr())
+        self._expression(else_expr)
+        self._set_operand(end_jump, self._current_addr())
+
+    def _set_operand(self, ip, operand):
+        inst = self._code[ip]
+        self._code[ip] = (inst[0], operand)
+
     def _emit(self, *inst):
         self._code.append(inst)
 
+    def _current_addr(self):
+        return len(self._code)
+
 
 class VM:
-    def __init__(self, code):
+    def __init__(self, code, env):
         self._code = code
+        self._env = env
         self._ip = 0
         self._stack = []
+        self._ctrl_stack = []
 
     def execute(self):
         while (inst := self._code[self._ip]) != ("halt",):
@@ -341,6 +376,16 @@ class VM:
             match inst:
                 case ("const", val): self._stack.append(val)
                 case ("pop",): self._stack.pop()
+                case ("push_env",):
+                    self._ctrl_stack.append(self._env)
+                    self._env = Environment(self._env)
+                case ("pop_env",): self._env = self._ctrl_stack.pop()
+                case ("def", name): self._env.define(name, self._stack[-1])
+                case ("set", name): self._env.assign(name, self._stack[-1])
+                case ("get", name): self._stack.append(self._env.val(name))
+                case ("jump", addr): self._ip = addr
+                case ("jump_if_false", addr):
+                    if not self._stack.pop(): self._ip = addr
                 case ("print",):
                     val = print(self._stack.pop()); self._stack.append(None)
                 case ("add",):
@@ -401,7 +446,7 @@ class Interpreter:
         return self.compile(self.ast(src))
 
     def execute(self, code):
-        return VM(code).execute()
+        return VM(code, self._env).execute()
 
     def run(self, src):
         return self.execute(self.code(src))
@@ -454,28 +499,33 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Sequence:")
+    print("If:")
 
-    print(toil.ast(r""" 2; 3; 4 """))
-    # -> ('seq', [2, 3, 4])
-    print_code(toil.code(r""" 2; 3; 4 """))
+    print(toil.ast(r""" if 2 == 2 then 3 + 3 else 4 + 4 end """))
+    # -> ('if', [('equal', [2, 2]), ('add', [3, 3]), ('add', [4, 4])])
+    print_code(toil.code(r""" if 2 == 2 then 3 + 3 else 4 + 4 end """))
     # ->   0: ('const', 2)
-    # ->   1: ('pop',)
-    # ->   2: ('const', 3)
-    # ->   3: ('pop',)
-    # ->   4: ('const', 4)
-    # ->   5: ('halt',)
-    print(toil.run(r""" 2; 3; 4 """)) # -> 4
+    # ->   1: ('const', 2)
+    # ->   2: ('equal',)
+    # ->   3: ('jump_if_false', 8)
+    # ->   4: ('const', 3)
+    # ->   5: ('const', 3)
+    # ->   6: ('add',)
+    # ->   7: ('jump', 11)
+    # ->   8: ('const', 4)
+    # ->   9: ('const', 4)
+    # ->  10: ('add',)
+    # ->  11: ('halt',)
+    print(toil.run(r""" if 2 == 2 then 3 + 3 else 4 + 4 end """)) # -> 6
+    print(toil.run(r""" if 2 == 3 then 3 + 3 else 4 + 4 end """)) # -> 8
 
-    print(toil.ast(r""" print(2); print(3) """))
-    # -> ('seq', [('print', [2]), ('print', [3])])
-    print_code(toil.code(r""" print(2); print(3) """))
-    # ->   0: ('const', 2)
-    # ->   1: ('print',)
-    # ->   2: ('pop',)
-    # ->   3: ('const', 3)
-    # ->   4: ('print',)
-    # ->   5: ('halt',)
-    print(toil.run(r""" print(2); print(3) """)) # -> 2\n3\nNone
+    print(toil.run(r""" if True then 3 else 4 end * 5 """))  # -> 15
 
-    # toil.compile(("seq", [])) # -> Empty sequence
+    print(toil.run(r""" if True then if True then 3 else 4 end else 5 end """))
+    # -> 3
+    print(toil.run(r""" if True then if False then 3 else 4 end else 5 end """))
+    # -> 4
+    print(toil.run(r""" if False then 3 else if True then 4 else 5 end end """))
+    # -> 4
+    print(toil.run(r""" if False then 3 else if False then 4 else 5 end end """))
+    # -> 5

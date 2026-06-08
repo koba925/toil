@@ -351,10 +351,9 @@ class VM:
         self._ctrl_stack = []
 
     def execute(self):
-        while True:
-            inst = self._code[self._ip]; self._ip += 1
+        while (inst := self._code[self._ip]) != ("halt",):
+            self._ip += 1
             match inst:
-                case ("halt",): break
                 case ("const", val): self._stack.append(val)
                 case ("pop",): self._stack.pop()
                 case ("push_env",):

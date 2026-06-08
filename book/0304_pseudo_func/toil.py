@@ -328,10 +328,9 @@ class VM:
         self._stack = []
 
     def execute(self):
-        while True:
-            inst = self._code[self._ip]; self._ip += 1
+        while (inst := self._code[self._ip]) != ("halt",):
+            self._ip += 1
             match inst:
-                case ("halt",): break
                 case ("const", val): self._stack.append(val)
                 case ("print",):
                     val = print(self._stack.pop()); self._stack.append(None)
