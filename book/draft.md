@@ -873,6 +873,24 @@ Environmentを使いまわします
 
 バックパッチ
 
+#### 0309_while
+
+同じように
+
+#### 0310_builtin_functions
+
+ツリーウォークインタプリタのbuiltinsを使いまわします
+
+#### 0311_user_function
+
+ちょっとややこしい
+
+#### 0312_examples
+
+すんなり動く
+_ipを保存しておいて戻る
+defは作っていないのに？
+ctrl_stackに入れるのでscopeと区別がつくように
 
 ## これから
 

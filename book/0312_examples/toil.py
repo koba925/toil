@@ -529,50 +529,197 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Functions:")
+    print("Factorial:")
 
-    print(toil.ast(r""" func do 2 end ()"""))
-    # -> (('func', [[], 2]), [])
-    print_code(toil.code(r""" func do 2 end ()"""))
-    # ->   0: ('make_closure', [], [('const', 2), ('ret',)])
-    # ->   1: ('call', 0)
-    # ->   2: ('halt',)
-    print(toil.run(r""" func do 2 end () """)) # -> 2
+    toil.run(r"""
+        def factorial_iter(n) do
+            result := 1;
+            while n > 0 do
+                result = result * n;
+                n = n - 1
+            end;
+            result
+        end
+    """)
+    print(toil.run(r""" factorial_iter(0) """))
+    # -> 1
+    print(toil.run(r""" factorial_iter(1) """))
+    # -> 1
+    print(toil.run(r""" factorial_iter(4) """))
+    # -> 24
 
-    print(toil.ast(r""" func a do a + 2 end (3) """))
-    # -> (('func', [['a'], ('add', ['a', 2])]), [3])
-    print_code(toil.code(r""" func a do a + 2 end (3) """))
-    # ->   0: ('const', 3)
-    # ->   1: ('make_closure', ['a'], [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('ret',)])
-    # ->   2: ('call', 1)
-    # ->   3: ('halt',)
-    print(toil.run(r""" func a do a + 2 end (3) """)) # -> 5
+    toil.run(r"""
+        def factorial_rec(n) do
+            if n == 0 then 1 else n * factorial_rec(n - 1) end
+        end
+    """)
+    print(toil.run(r""" factorial_rec(0) """))
+    # -> 1
+    print(toil.run(r""" factorial_rec(1) """))
+    # -> 1
+    print(toil.run(r""" factorial_rec(4) """))
+    # -> 24
 
-    print(toil.ast(r""" func a, b do a + b end (2, 3) """))
-    # -> (('func', [['a', 'b'], ('add', ['a', 'b'])]), [2, 3])
-    print_code(toil.code(r""" func a, b do a + b end (2, 3) """))
-    # ->   0: ('const', 2)
-    # ->   1: ('const', 3)
-    # ->   2: ('make_closure', ['a', 'b'], [('get', 'a'), ('get', 'b'), ('get', 'add'), ('call', 2), ('ret',)])
-    # ->   3: ('call', 2)
-    # ->   4: ('halt',)
-    print(toil.run(r""" func a, b do a + b end (2, 3) """)) # -> 5
+    print("Fibonacci:")
 
-    print(toil.run(r"""
-        twice := func f, x do f(f(x)) end;
-        double := func x do x * 2 end;
-        twice(double, 3)
-    """)) # -> 12
+    toil.run(r"""
+        def fib_iter(n) do
+            a := 0; b := 1;
+            while n > 0 do
+                tmp := b; b = a + b; a = tmp;
+                n = n - 1
+            end;
+            a
+        end
+    """)
+    print(toil.run(r""" fib_iter(0) """))
+    # -> 0
+    print(toil.run(r""" fib_iter(1) """))
+    # -> 1
+    print(toil.run(r""" fib_iter(6) """))
+    # -> 8
 
-    print(toil.run(r"""
-        a := 2;
-        f := func do a end;
-        g := func do a := 3; f() end;
-        g()
-    """)) # -> 2
+    toil.run(r"""
+        def fib_rec(n) do
+            if n == 0 then 0
+            else if n == 1 then 1
+            else fib_rec(n - 1) + fib_rec(n - 2) end end
+        end
+    """)
+    print(toil.run(r""" fib_rec(0) """))
+    # -> 0
+    print(toil.run(r""" fib_rec(1) """))
+    # -> 1
+    print(toil.run(r""" fib_rec(6) """))
+    # -> 8
 
-    print(toil.run(r"""
-        func a do func b do a + b end end (2)(3)
-    """)) # -> 5
+    print("GCD:")
 
-    # toil.run(r""" 2(3) """) # -> Invalid operator
+    toil.run(r"""
+        def gcd_iter(a, b) do
+            while b > 0 do
+                tmp := b; b = a % b; a = tmp
+            end;
+            a
+        end
+    """)
+    print(toil.run(r""" gcd_iter(12, 18) """))
+    # -> 6
+
+    toil.run(r"""
+        def gcd_rec(a, b) do
+            if b == 0 then a else gcd_rec(b, a % b) end
+        end
+    """)
+    print(toil.run(r""" gcd_rec(12, 18) """))
+    # -> 6
+
+    print("Even/Odd (Mutual Recursion):")
+
+    toil.run(r"""
+        def even(n) do if n == 0 then True else odd(n - 1) end end;
+        def odd(n) do if n == 0 then False else even(n - 1) end end
+    """)
+    print(toil.run(r""" even(2) """))
+    # -> True
+    print(toil.run(r""" even(3) """))
+    # -> False
+    print(toil.run(r""" odd(2) """))
+    # -> False
+    print(toil.run(r""" odd(3) """))
+    # -> True
+
+    print("Counter (Closure):")
+
+    toil.run(r"""
+        def make_counter() do
+            count := 0;
+            func do count = count + 1 end
+        end
+    """)
+    toil.run(r""" c1 := make_counter() """)
+    toil.run(r""" c2 := make_counter() """)
+    print(toil.run(r""" c1() """))
+    # -> 1
+    print(toil.run(r""" c1() """))
+    # -> 2
+    print(toil.run(r""" c2() """))
+    # -> 1
+    print(toil.run(r""" c2() """))
+    # -> 2
+
+    print("Binary search tree:")
+    print("Building tree:")
+
+    toil.run(r"""
+        def node(val, left, right) do
+            func op do
+                if op == 1 then val
+                else if op == 2 then left
+                else right end end
+            end
+        end
+    """)
+
+    toil.run(r""" n1 := node(2, 3, 4) """)
+    print(toil.run(r""" n1(1) """))
+    print(toil.run(r""" n1(2) """))
+    print(toil.run(r""" n1(3) """))
+    # -> 2\n3\n4
+
+    toil.run(r"""
+        def bst_put(bst, val) do
+            if bst == None then node(val, None, None)
+            else
+                cur_val := bst(1);
+                if val == cur_val then
+                    bst
+                else if val < cur_val then
+                    node(cur_val, bst_put(bst(2), val), bst(3))
+                else
+                    node(cur_val, bst(2), bst_put(bst(3), val))
+                end end
+            end
+        end
+    """)
+    toil.run(r""" bst := None """)
+    toil.run(r""" bst = bst_put(bst, 7) """)
+    toil.run(r""" bst = bst_put(bst, 3) """)
+    toil.run(r""" bst = bst_put(bst, 1) """)
+    toil.run(r""" bst = bst_put(bst, 9) """)
+    toil.run(r""" bst = bst_put(bst, 5) """)
+
+    print("Walking tree:")
+    toil.run(r"""
+        def bst_walk(bst) do
+            if bst == None then None
+            else
+                bst_walk(bst(2)); print(bst(1)); bst_walk(bst(3))
+            end
+        end
+    """)
+    toil.run(r"""
+        def bst_find(bst, val) do
+            if bst == None then False
+            else
+                cur_val := bst(1);
+                if val == cur_val then val
+                else if val < cur_val then bst_find(bst(2), val)
+                else bst_find(bst(3), val)
+                end end
+            end
+        end
+    """)
+
+    toil.run(r""" bst_walk(bst) """)
+    # -> 1\n3\n5\n7\n9
+
+    print("Finding values:")
+    toil.run(r"""
+        i := 0;
+        while i < 10 do
+            print(bst_find(bst, i));
+            i = i + 1
+        end
+    """)
+    # -> False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9
