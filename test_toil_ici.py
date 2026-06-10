@@ -171,7 +171,7 @@ class TestICI:
 
         with pytest.raises(AssertionError, match="Undefined variable"):
             toil.run(r""" 2.not_found() """)
-        with pytest.raises(AssertionError, match="Invalid operator"):
+        with pytest.raises(AssertionError, match="Invalid call"):
             toil.run(r""" foo := 2; 3.foo() """)
 
     def test_method_notation(self):
@@ -319,6 +319,13 @@ class TestICI:
 
     def test_return(self):
         assert toil.run(r""" f := func do return(2); 3 end; f() """) == 2
+
+        assert toil.run(r"""
+            def early_return() do
+                2 + return(3)
+            end;
+            early_return() + 4
+        """) == 7
 
     def test_closure(self):
         toil.run(r"""

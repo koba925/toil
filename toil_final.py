@@ -1017,33 +1017,27 @@ class VM:
 
     def _dot(self, attr_name):
         target_val = self._stack.pop()
-
-        def apply_method(func_val, target_val, args):
-            match func_val:
-                case (Ident("closure"), [params, _, body_code, closure_env]) if body_code:
-                    new_env = Environment(closure_env)
-                    if new_env.bind(params, [target_val] + args):
-                        return VM(body_code, new_env).execute()
-                    assert False, f"Pattern mismatch @ _dot(): {params}, {[target_val] + args}"
-                case _:
-                    return Evaluator().apply(func_val, [target_val] + args)
-
         match target_val:
             case dict() if attr_name in target_val:
                 func_val = target_val[attr_name]
                 match func_val:
                     case (Ident("closure"), [[Ident("self"), *_], *_]):
-                        self._stack.append(lambda args: apply_method(func_val, target_val, args))
-                        return
-                self._stack.append(func_val)
-                return
-
-        func_val = self._env.val(attr_name)
-        self._stack.append(lambda args: apply_method(func_val, target_val, args))
+                        self._stack.append(
+                            (Ident("bound_method"), func_val, target_val))
+                    case _:
+                        self._stack.append(func_val)
+            case _:
+                func_val = self._env.val(attr_name)
+                self._stack.append(
+                    (Ident("bound_method"), func_val, target_val))
 
     def _call(self, nargs):
         op = self._stack.pop()
         args = list(reversed([self._stack.pop() for _ in range(nargs)]))
+        match op:
+            case (Ident("bound_method"), func_val, target_val):
+                op = func_val
+                args = [target_val] + args
         match op:
             case f if callable(f): self._stack.append(f(args))
             case (Ident("closure"), [params, body_expr, body_code, closure_env]):
@@ -1073,7 +1067,8 @@ class VM:
 
         while self._ctrl_stack:
             match self._ctrl_stack.pop():
-                case ("scope", *_): pass
+                case ("scope", env):
+                    self._env = env
                 case ("call", code, ip, env):
                     self._code = code
                     self._ip = ip
@@ -1639,39 +1634,48 @@ if __name__ == "__main__":
         fib(6)
     """)) # -> 8
 
-    # # UFCS
-    # print_code(toil.code(r""" 2.add(3) """))
-    # print(toil.run(r""" 2.add(3) """)) # -> 5
-    # print(toil.run(r""" [2, 3, 4].len().add(5) """)) # -> 8
+    # Return early inside an expression
+    print(toil.run(r"""
+        def early_return() do
+            2 + return(3)
+        end;
+        early_return() + 4
+    """)) # -> 7
 
-    # # Method notation
-    # toil.run(r"""
-    #     obj := {
-    #         set: func self, val do self.val = val end,
-    #         add: func self, a do self.val + a end,
-    #         val: None
-    #     }
-    # """)
-    # toil.run(r""" obj.set(2) """)
-    # print(toil.run(r""" obj.val """)) # -> 2
-    # print(toil.run(r""" obj.add(3) """)) # -> 5
-    # print(toil.run(r""" {a: 2, b: 3}.keys() """)) # -> ['a', 'b']
+    exit()
+    # UFCS
+    print_code(toil.code(r""" 2.add(3) """))
+    print(toil.run(r""" 2.add(3) """)) # -> 5
+    print(toil.run(r""" [2, 3, 4].len().add(5) """)) # -> 8
 
-    # # Match
-    # print_code(toil.code(r""" match x case int(a) then 1 case str(a) then 2 end """))
-    # toil.run(r"""
-    #     def test_match(x) do
-    #         match x
-    #             case int(a) then "int: " + to_str(a)
-    #             case str(a) then "str: " + a
-    #         end
-    #     end
-    # """)
-    # print(toil.run(r""" test_match(2) """)) # -> int: 2
-    # print(toil.run(r""" test_match("hello") """)) # -> str: hello
-    # print(toil.run(r""" test_match([]) """)) # -> None
+    # Method notation
+    toil.run(r"""
+        obj := {
+            set: func self, val do self.val = val end,
+            add: func self, a do self.val + a end,
+            val: None
+        }
+    """)
+    toil.run(r""" obj.set(2) """)
+    print(toil.run(r""" obj.val """)) # -> 2
+    print(toil.run(r""" obj.add(3) """)) # -> 5
+    print(toil.run(r""" {a: 2, b: 3}.keys() """)) # -> ['a', 'b']
 
-    # print(toil.run(r""" match 2 end """)) # -> None
+    # Match
+    print_code(toil.code(r""" match x case int(a) then 1 case str(a) then 2 end """))
+    toil.run(r"""
+        def test_match(x) do
+            match x
+                case int(a) then "int: " + to_str(a)
+                case str(a) then "str: " + a
+            end
+        end
+    """)
+    print(toil.run(r""" test_match(2) """)) # -> int: 2
+    print(toil.run(r""" test_match("hello") """)) # -> str: hello
+    print(toil.run(r""" test_match([]) """)) # -> None
+
+    print(toil.run(r""" match 2 end """)) # -> None
 
     # Try-Except
     print_code(toil.code(r""" try 2; 3 except e then e end """))
