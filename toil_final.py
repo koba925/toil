@@ -799,9 +799,9 @@ class Compiler:
 
     def _scope(self, body_expr):
         self._control_stack.append(("scope",))
-        self._code.append(("push_env",))
+        self._code.append(("enter_scope",))
         self._expression(body_expr)
-        self._code.append(("pop_env",))
+        self._code.append(("leave_scope",))
         self._control_stack.pop()
 
     def _seq(self, exprs):
@@ -865,10 +865,10 @@ class Compiler:
 
     def _try(self, body_expr, clauses):
         handler_jump = self._current_addr()
-        self._code.append(("push_try", None))
+        self._code.append(("enter_try", None))
         self._control_stack.append(("try",))
         self._expression(body_expr)
-        self._code.append(("pop_try",))
+        self._code.append(("leave_try",))
         self._control_stack.pop()
 
         end_jump = self._current_addr()
@@ -903,9 +903,9 @@ class Compiler:
         for ctrl in reversed(self._control_stack):
             match ctrl:
                 case ("scope",):
-                    self._code.append(("pop_env",))
+                    self._code.append(("leave_scope",))
                 case ("try",):
-                    self._code.append(("pop_try",))
+                    self._code.append(("leave_try",))
                 case ("while", loop_jump, _):
                     self._code.append(("jump", loop_jump))
                     return
@@ -915,9 +915,9 @@ class Compiler:
         for ctrl in reversed(self._control_stack):
             match ctrl:
                 case ("scope",):
-                    self._code.append(("pop_env",))
+                    self._code.append(("leave_scope",))
                 case ("try",):
-                    self._code.append(("pop_try",))
+                    self._code.append(("leave_try",))
                 case ("while", _, break_addrs):
                     break_addrs.append(self._current_addr())
                     self._code.append(("jump", None))
@@ -947,7 +947,6 @@ class VM:
         self._ip = 0
         self._stack = []
         self._ctrl_stack = []
-        self._try_stack = []
 
     def execute(self) -> Value:
         while True:
@@ -974,13 +973,23 @@ class VM:
                         )
                     case ("call", nargs): self._call(nargs)
                     case ("ret",): self._ret()
-                    case ("push_env",):
-                        self._ctrl_stack.append(self._env)
+                    case ("enter_scope",):
+                        self._ctrl_stack.append(("scope", self._env))
                         self._env = Environment(self._env)
-                    case ("pop_env",): self._env = self._ctrl_stack.pop()
-                    case ("push_try", addr):
-                        self._try_stack.append((addr, len(self._stack), self._env, len(self._ctrl_stack)))
-                    case ("pop_try",): self._try_stack.pop()
+                    case ("leave_scope",):
+                        match self._ctrl_stack.pop():
+                            case ("scope", env): self._env = env
+                            case invalid:
+                                assert False, f"Invalid control @ execute(): {invalid}"
+                    case ("enter_try", addr):
+                        self._ctrl_stack.append(
+                            ("try", addr, len(self._stack), self._env)
+                        )
+                    case ("leave_try",):
+                        match self._ctrl_stack.pop():
+                            case ("try", _, _, _): pass
+                            case invalid:
+                                assert False, f"Invalid control @ execute(): {invalid}"
                     case ("raise",): self._raise()
                     case _:
                         assert False, f"Invalid instruction @ execute(): {inst}"
@@ -1061,13 +1070,22 @@ class VM:
 
     def _raise(self):
         exc_val = self._stack.pop()
-        if not self._try_stack: raise ToilException(exc_val)
-        catch_addr, stack_size, catch_env, ctrl_stack_size = self._try_stack.pop()
-        del self._stack[stack_size:]
-        self._env = catch_env
-        del self._ctrl_stack[ctrl_stack_size:]
-        self._stack.append(exc_val)
-        self._ip = catch_addr
+
+        while self._ctrl_stack:
+            match self._ctrl_stack.pop():
+                case ("scope", *_): pass
+                case ("call", code, ip, env):
+                    self._code = code
+                    self._ip = ip
+                    self._env = env
+                case ("try", catch_addr, stack_size, catch_env):
+                    del self._stack[stack_size:]
+                    self._env = catch_env
+                    self._stack.append(exc_val)
+                    self._ip = catch_addr
+                    return
+
+        raise ToilException(exc_val)
 
 class Interpreter:
     def __init__(self) -> None:
@@ -1420,169 +1438,169 @@ if __name__ == "__main__":
 
     # Example
 
-    # # If
-    # print_code(toil.code(r""" if 2 == 2 then 4 + 5 else 6 + 7  end """))
-    # print(toil.run(r""" if 2 == 2 then 4 + 5 else 6 + 7  end """)) # -> 9
-    # print(toil.run(r""" if 2 == 3 then 4 + 5 else 6 + 7  end """)) # -> 13
-    # print(toil.run(r""" if False then 2 elif False then 3 else 4 end """)) # -> 4
+    # If
+    print_code(toil.code(r""" if 2 == 2 then 4 + 5 else 6 + 7  end """))
+    print(toil.run(r""" if 2 == 2 then 4 + 5 else 6 + 7  end """)) # -> 9
+    print(toil.run(r""" if 2 == 3 then 4 + 5 else 6 + 7  end """)) # -> 13
+    print(toil.run(r""" if False then 2 elif False then 3 else 4 end """)) # -> 4
 
-    # # Variable
-    # print_code(toil.code(r""" a := 2 + 3 """))
-    # print_code(toil.code(r""" a = 2 + 3 """))
-    # print(toil.run(r""" a := 2 + 3 """)) # -> 5
-    # print(toil.run(r""" a """)) # -> 5
-    # print(toil.run(r""" a = 4 + 5 """)) # -> 9
-    # print(toil.run(r""" a """)) # -> 9
-    # # print(toil.run(r""" b """)) # -> Undefined variable
+    # Variable
+    print_code(toil.code(r""" a := 2 + 3 """))
+    print_code(toil.code(r""" a = 2 + 3 """))
+    print(toil.run(r""" a := 2 + 3 """)) # -> 5
+    print(toil.run(r""" a """)) # -> 5
+    print(toil.run(r""" a = 4 + 5 """)) # -> 9
+    print(toil.run(r""" a """)) # -> 9
+    # print(toil.run(r""" b """)) # -> Undefined variable
 
-    # # Destructuring
-    # print_code(toil.code(r""" [a, b] := [2, 3] """))
-    # print(toil.run(r""" [a, b] := [2, 3]; [a, b] """))
+    # Destructuring
+    print_code(toil.code(r""" [a, b] := [2, 3] """))
+    print(toil.run(r""" [a, b] := [2, 3]; [a, b] """))
 
-    # print(toil.run(r""" [a, *b] := [2, 3, 4]; [a, b] """))
-    # print(toil.run(r""" {a, b} := {a: 2, b: {c: 3, d: 4}}; [a, b] """))
+    print(toil.run(r""" [a, *b] := [2, 3, 4]; [a, b] """))
+    print(toil.run(r""" {a, b} := {a: 2, b: {c: 3, d: 4}}; [a, b] """))
 
-    # # Scope
-    # print_code(toil.code(r""" a := 2; scope a end """))
-    # print(toil.run(r""" a := 2; scope a end """)) # ->  2
-    # print(toil.run(r""" a := 2; scope scope a end end """)) # -> 2
+    # Scope
+    print_code(toil.code(r""" a := 2; scope a end """))
+    print(toil.run(r""" a := 2; scope a end """)) # ->  2
+    print(toil.run(r""" a := 2; scope scope a end end """)) # -> 2
 
-    # print(toil.run(r""" a := 2; scope a := 3 end """)) # -> 3
-    # print(toil.run(r""" a """)) # -> 2
+    print(toil.run(r""" a := 2; scope a := 3 end """)) # -> 3
+    print(toil.run(r""" a """)) # -> 2
 
-    # print(toil.run(r""" a := 2; scope a = 3 end """)) # -> 3
-    # print(toil.run(r""" a """)) # -> 3
+    print(toil.run(r""" a := 2; scope a = 3 end """)) # -> 3
+    print(toil.run(r""" a """)) # -> 3
 
-    # print(toil.run(r""" a := 2; scope d := 3 end """)) # -> 3
-    # # toil.run(r""" d """) # -> Undefined variable
+    print(toil.run(r""" a := 2; scope d := 3 end """)) # -> 3
+    # toil.run(r""" d """) # -> Undefined variable
 
-    # # While
-    # print_code(toil.code(r""" while i < 3 do i = i + 1 then i + 1 end """))
-    # print(toil.run(r""" i := 0; while i < 3 do i = i + 1 then i + 1 end """)) # -> 4
-    # print_code(toil.code(r""" while i < 3 do print(i); i = i + 1 end """))
-    # print(toil.run(r""" i := 0; while i < 3 do print(i); i = i + 1 end """)) # -> 0\n1\n2\nNone
+    # While
+    print_code(toil.code(r""" while i < 3 do i = i + 1 then i + 1 end """))
+    print(toil.run(r""" i := 0; while i < 3 do i = i + 1 then i + 1 end """)) # -> 4
+    print_code(toil.code(r""" while i < 3 do print(i); i = i + 1 end """))
+    print(toil.run(r""" i := 0; while i < 3 do print(i); i = i + 1 end """)) # -> 0\n1\n2\nNone
 
-    # # Continue
-    # print_code(toil.code(r""" while i < 3 do i = i + 1; if i == 2 then continue end end """))
-    # toil.run(r""" i := 0; while i < 3 do i = i + 1; if i == 2 then continue end; print(i) end """) # -> 1\n3\n
+    # Continue
+    print_code(toil.code(r""" while i < 3 do i = i + 1; if i == 2 then continue end end """))
+    toil.run(r""" i := 0; while i < 3 do i = i + 1; if i == 2 then continue end; print(i) end """) # -> 1\n3\n
 
-    # toil.run(r"""
-    #     i := 0; while i < 2 do
-    #         j := 0; while j < 3 do
-    #             j = j + 1; if j == 2 then continue end;
-    #             print(i, j)
-    #         end;
-    #         i = i + 1
-    #     end
-    # """) # -> 0 1\n0 3\n1 1\n1 3
+    toil.run(r"""
+        i := 0; while i < 2 do
+            j := 0; while j < 3 do
+                j = j + 1; if j == 2 then continue end;
+                print(i, j)
+            end;
+            i = i + 1
+        end
+    """) # -> 0 1\n0 3\n1 1\n1 3
 
-    # toil.run(r"""
-    #     i := 0; while i < 3 do
-    #         i = i + 1;
-    #         scope
-    #             if i == 2 then continue end;
-    #             print(i)
-    #         end
-    #     end
-    # """) # -> 1\n3
+    toil.run(r"""
+        i := 0; while i < 3 do
+            i = i + 1;
+            scope
+                if i == 2 then continue end;
+                print(i)
+            end
+        end
+    """) # -> 1\n3
 
-    # # toil.run(r""" continue """) # -> Continue outside of loop
+    # toil.run(r""" continue """) # -> Continue outside of loop
 
-    # # Break
-    # print_code(toil.code(r""" while i < 3 do if i == 1 then break end; i = i + 1 end """))
-    # print(toil.run(r""" i := 0; while i < 3 do if i == 1 then break end; print(i); i = i + 1 end """)) # -> 0\nNone
+    # Break
+    print_code(toil.code(r""" while i < 3 do if i == 1 then break end; i = i + 1 end """))
+    print(toil.run(r""" i := 0; while i < 3 do if i == 1 then break end; print(i); i = i + 1 end """)) # -> 0\nNone
 
-    # print_code(toil.code(r""" while i < 3 do if i == 1 then break end; i = i + 1 then i * 2 else i * 3 end """))
-    # print(toil.run(r""" i := 0; while i < 3 do if i == 1 then break end; print(i); i = i + 1 then i * 2 else i * 3 end """)) # -> 0\n3
+    print_code(toil.code(r""" while i < 3 do if i == 1 then break end; i = i + 1 then i * 2 else i * 3 end """))
+    print(toil.run(r""" i := 0; while i < 3 do if i == 1 then break end; print(i); i = i + 1 then i * 2 else i * 3 end """)) # -> 0\n3
 
-    # toil.run(r"""
-    #     i := 0; while i < 2 do
-    #         j := 0; while j < 3 do
-    #             if i == 0 and j == 1 then break end;
-    #             print(i, j);
-    #             j = j + 1
-    #         end;
-    #         i = i + 1
-    #     end
-    # """) # ->  0 0\n1 0\n1 1\n1 2
+    toil.run(r"""
+        i := 0; while i < 2 do
+            j := 0; while j < 3 do
+                if i == 0 and j == 1 then break end;
+                print(i, j);
+                j = j + 1
+            end;
+            i = i + 1
+        end
+    """) # ->  0 0\n1 0\n1 1\n1 2
 
-    # toil.run(r"""
-    #     i := 0; while i < 2 do
-    #         j := 0; while j < 3 do
-    #             if i == 1 and j == 1 then break end;
-    #             print(i, j);
-    #             j = j + 1
-    #         else break end;
-    #         i = i + 1
-    #     end
-    # """) # -> 0 0\n0 1\n0 2\n1 0
+    toil.run(r"""
+        i := 0; while i < 2 do
+            j := 0; while j < 3 do
+                if i == 1 and j == 1 then break end;
+                print(i, j);
+                j = j + 1
+            else break end;
+            i = i + 1
+        end
+    """) # -> 0 0\n0 1\n0 2\n1 0
 
-    # toil.run(r"""
-    #     i := 0; while i < 3 do
-    #         scope
-    #             if i == 1 then break end;
-    #             print(i)
-    #         end;
-    #         i = i + 1
-    #     end
-    # """) # -> 0
+    toil.run(r"""
+        i := 0; while i < 3 do
+            scope
+                if i == 1 then break end;
+                print(i)
+            end;
+            i = i + 1
+        end
+    """) # -> 0
 
-    # # toil.run(r""" break """) # -> Break outside of loop
+    # toil.run(r""" break """) # -> Break outside of loop
 
-    # # Built-in functions
-    # print_code(toil.code(r""" add(mul(2, 3), 4) """))
-    # print(toil.run(r""" add(mul(2, 3), 4) """)) # -> 10
+    # Built-in functions
+    print_code(toil.code(r""" add(mul(2, 3), 4) """))
+    print(toil.run(r""" add(mul(2, 3), 4) """)) # -> 10
 
-    # print(toil.run(r""" tuple() """)) # -> ()
-    # print(toil.run(r""" tuple(2, 3, 4) """)) # -> (2, 3, 4)
+    print(toil.run(r""" tuple() """)) # -> ()
+    print(toil.run(r""" tuple(2, 3, 4) """)) # -> (2, 3, 4)
 
-    # toil.run(r""" print() """) # -> (newline)
-    # toil.run(r""" print(2, 3, 4) """) # -> 2 3 4
+    toil.run(r""" print() """) # -> (newline)
+    toil.run(r""" print(2, 3, 4) """) # -> 2 3 4
 
-    # print(toil.run(r""" myadd := add; myadd(2, 3) """)) # -> 5
+    print(toil.run(r""" myadd := add; myadd(2, 3) """)) # -> 5
 
-    # # List
-    # print_code(toil.code(r""" [] """))
-    # print(toil.run(r""" [] """)) # -> []
+    # List
+    print_code(toil.code(r""" [] """))
+    print(toil.run(r""" [] """)) # -> []
 
-    # print_code(toil.code(r""" [2, [3, 4]] """))
-    # print(toil.run(r""" [2, [3, 4]] """)) # -> [2, [3, 4]]
+    print_code(toil.code(r""" [2, [3, 4]] """))
+    print(toil.run(r""" [2, [3, 4]] """)) # -> [2, [3, 4]]
 
-    # print_code(toil.code(r""" [2, [3, 4]][1] """))
-    # print(toil.run(r""" [2, [3, 4]][1] """)) # -> [3, 4]
-    # print(toil.run(r""" [2, [3, 4]][1][0] """)) # -> 3
+    print_code(toil.code(r""" [2, [3, 4]][1] """))
+    print(toil.run(r""" [2, [3, 4]][1] """)) # -> [3, 4]
+    print(toil.run(r""" [2, [3, 4]][1][0] """)) # -> 3
 
-    # # Assign list element
-    # toil.run(r""" a := [2, [3, 4]] """)
-    # print_code(toil.code(r""" a[0] = 5 """))
-    # print(toil.run(r""" a[0] = 5; a """)) # -> [5, [3, 4]]
-    # print(toil.run(r""" a[1][0] = 6; a """)) # -> [5, [6, 4]]
-    # print(toil.run(r""" a[-1][1] = 7; a """)) # -> [5, [6, 7]]
-    # print(toil.run(r""" l1 := [2, 3]; l2 := [4, 5]; l1[0] = l2[1] = 6; [l1, l2] """)) # -> [[6, 3], [4, 6]]
+    # Assign list element
+    toil.run(r""" a := [2, [3, 4]] """)
+    print_code(toil.code(r""" a[0] = 5 """))
+    print(toil.run(r""" a[0] = 5; a """)) # -> [5, [3, 4]]
+    print(toil.run(r""" a[1][0] = 6; a """)) # -> [5, [6, 4]]
+    print(toil.run(r""" a[-1][1] = 7; a """)) # -> [5, [6, 7]]
+    print(toil.run(r""" l1 := [2, 3]; l2 := [4, 5]; l1[0] = l2[1] = 6; [l1, l2] """)) # -> [[6, 3], [4, 6]]
 
-    # # Dict
-    # print_code(toil.code(r""" {} """))
-    # print(toil.run(r""" {} """)) # -> {}
+    # Dict
+    print_code(toil.code(r""" {} """))
+    print(toil.run(r""" {} """)) # -> {}
 
-    # print_code(toil.code(r""" {a: 2, b: {c: 3, d: 4}} """))
-    # print(toil.run(r""" {a: 2, b: {c: 3, d: 4}} """)) # -> {'a': 2, 'b': {'c': 3, 'd': 4}}
+    print_code(toil.code(r""" {a: 2, b: {c: 3, d: 4}} """))
+    print(toil.run(r""" {a: 2, b: {c: 3, d: 4}} """)) # -> {'a': 2, 'b': {'c': 3, 'd': 4}}
 
-    # print_code(toil.code(r""" {a: 2, b: {c: 3, d: 4}}["b"] """))
-    # print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}["b"] """)) # -> {'c': 3, 'd': 4}
-    # print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}["b"]["c"] """)) # -> 3
+    print_code(toil.code(r""" {a: 2, b: {c: 3, d: 4}}["b"] """))
+    print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}["b"] """)) # -> {'c': 3, 'd': 4}
+    print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}["b"]["c"] """)) # -> 3
 
-    # print_code(toil.code(r""" {a: 2, b: {c: 3, d: 4}}.b """))
-    # print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}.b """)) # -> {'c': 3, 'd': 4}
-    # print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}.b.c """)) # -> 3
+    print_code(toil.code(r""" {a: 2, b: {c: 3, d: 4}}.b """))
+    print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}.b """)) # -> {'c': 3, 'd': 4}
+    print(toil.run(r""" {a: 2, b: {c: 3, d: 4}}.b.c """)) # -> 3
 
-    # # Assign dict element
-    # toil.run(r""" d := {a: 2, b: {c: 3, d: 4}} """)
-    # print_code(toil.code(r""" d["a"] = 5 """))
-    # print(toil.run(r""" d["a"] = 5; d """)) # -> {'a': 5, 'b': {'c': 3, 'd': 4}}
-    # print(toil.run(r""" d["b"]["c"] = 6; d """)) # -> {'a': 5, 'b': {'c': 6, 'd': 4}}
+    # Assign dict element
+    toil.run(r""" d := {a: 2, b: {c: 3, d: 4}} """)
+    print_code(toil.code(r""" d["a"] = 5 """))
+    print(toil.run(r""" d["a"] = 5; d """)) # -> {'a': 5, 'b': {'c': 3, 'd': 4}}
+    print(toil.run(r""" d["b"]["c"] = 6; d """)) # -> {'a': 5, 'b': {'c': 6, 'd': 4}}
 
-    # print(toil.run(r""" d.b.c = 7; d """)) # -> {'a': 5, 'b': {'c': 7, 'd': 4}}
-    # print(toil.run(r""" d1 := {a: 2}; d2 := {b: 3}; d1.a = d2["b"] = 4; [d1, d2] """)) # -> [{'a': 4}, {'b': 4}]
+    print(toil.run(r""" d.b.c = 7; d """)) # -> {'a': 5, 'b': {'c': 7, 'd': 4}}
+    print(toil.run(r""" d1 := {a: 2}; d2 := {b: 3}; d1.a = d2["b"] = 4; [d1, d2] """)) # -> [{'a': 4}, {'b': 4}]
 
     # User defined function
     print_code(toil.code(r""" myadd := func a, b do a + b end """))
@@ -1655,82 +1673,82 @@ if __name__ == "__main__":
 
     # print(toil.run(r""" match 2 end """)) # -> None
 
-    # # Try-Except
-    # print_code(toil.code(r""" try 2; 3 except e then e end """))
-    # print(toil.run(r""" try 2; 3 except e then e end """)) # -> 3
+    # Try-Except
+    print_code(toil.code(r""" try 2; 3 except e then e end """))
+    print(toil.run(r""" try 2; 3 except e then e end """)) # -> 3
 
-    # print_code(toil.code(r""" try 2; raise(2 + 3); 3 except e then e end """))
-    # print(toil.run(r""" try 2; raise(2 + 3); 3 except e then e end """)) # -> 5
+    print_code(toil.code(r""" try 2; raise(2 + 3); 3 except e then e end """))
+    print(toil.run(r""" try 2; raise(2 + 3); 3 except e then e end """)) # -> 5
 
-    # toil.run(r"""
-    #     def test_try(x) do
-    #         try
-    #             raise([x, 3])
-    #         except ["foo", val] then ["foo", val]
-    #         except ["bar", val] then ["bar", val]
-    #         end
-    #     end
-    # """)
-    # print(toil.run(r""" test_try("foo") """)) # -> ['foo', 3]
-    # print(toil.run(r""" test_try("bar") """)) # -> ['bar', 3]
-    # # print(toil.run(r""" test_try("baz") """)) # -> Unhandled exception
+    toil.run(r"""
+        def test_try(x) do
+            try
+                raise([x, 3])
+            except ["foo", val] then ["foo", val]
+            except ["bar", val] then ["bar", val]
+            end
+        end
+    """)
+    print(toil.run(r""" test_try("foo") """)) # -> ['foo', 3]
+    print(toil.run(r""" test_try("bar") """)) # -> ['bar', 3]
+    # print(toil.run(r""" test_try("baz") """)) # -> Unhandled exception
 
-    # print(toil.run(r"""
-    #     for a in range(0, 3, 1) do
-    #         try if a == 1 then break end
-    #         except _ then 1/0 end
-    #     then 1/0 else a end
-    # """)) # -> 1
+    print(toil.run(r"""
+        for a in range(0, 3, 1) do
+            try if a == 1 then break end
+            except _ then 1/0 end
+        then 1/0 else a end
+    """)) # -> 1
 
-    # print(toil.run(r"""
-    #     a := 2; try scope a := 3; raise() end except _ then a end
-    # """)) # -> 2
+    print(toil.run(r"""
+        a := 2; try scope a := 3; raise() end except _ then a end
+    """)) # -> 2
 
-    # print(toil.run(r"""
-    #     a := 2; try scope a = 3; raise() end except _ then a end
-    # """)) # -> 3
+    print(toil.run(r"""
+        a := 2; try scope a = 3; raise() end except _ then a end
+    """)) # -> 3
 
-    # print(toil.run(r"""
-    #     for a in range(0, 3, 1) do
-    #         try scope
-    #             if a == 0 then continue end;
-    #             if a == 1 then break end
-    #         end except _ then 1/0 end
-    #     then 1/0 else a end
-    # """)) # -> 1
+    print(toil.run(r"""
+        for a in range(0, 3, 1) do
+            try scope
+                if a == 0 then continue end;
+                if a == 1 then break end
+            end except _ then 1/0 end
+        then 1/0 else a end
+    """)) # -> 1
 
-    # print(toil.run(r"""
-    #     try
-    #         try
-    #             raise(2)
-    #         except e then
-    #             raise(e + 1)
-    #         end
-    #     except e then
-    #         e
-    #     end
-    # """)) # -> 3
+    print(toil.run(r"""
+        try
+            try
+                raise(2)
+            except e then
+                raise(e + 1)
+            end
+        except e then
+            e
+        end
+    """)) # -> 3
 
-    # print(toil.run(r"""
-    #     try
-    #         try
-    #             raise("outer")
-    #         except "inner" then "caught inner"
-    #         end
-    #     except "outer" then "caught outer"
-    #     end
-    # """)) # -> caught outer
+    print(toil.run(r"""
+        try
+            try
+                raise("outer")
+            except "inner" then "caught inner"
+            end
+        except "outer" then "caught outer"
+        end
+    """)) # -> caught outer
 
-    # print(toil.run(r"""
-    #     def f() do raise(2) end;
-    #     try f() except e then e end
-    # """)) # -> 2
+    print(toil.run(r"""
+        def f() do raise(2) end;
+        try f() except e then e end
+    """)) # -> 2
 
-    # toil.walk(r""" def f() do raise(2) end """)
-    # print(toil.run(r""" try f() except e then e end """)) # -> 2
+    toil.walk(r""" def f() do raise(2) end """)
+    print(toil.run(r""" try f() except e then e end """)) # -> 2
 
-    # toil.run(r""" def f() do raise(2) end """)
-    # print(toil.walk(r""" try f() except e then e end """)) # -> 2
+    toil.run(r""" def f() do raise(2) end """)
+    print(toil.walk(r""" try f() except e then e end """)) # -> 2
 
     # # Mutual call
     # toil.walk(r""" def even(n) do if n == 0 then True else odd(n - 1) end end """)
@@ -1771,4 +1789,3 @@ if __name__ == "__main__":
     #     end;
     #     fib(6)
     # """)) # -> 8
-
