@@ -777,7 +777,7 @@ class Compiler:
     def _return(self, args):
         if args: self._expression(args[0])
         else: self._code.append(("const", None))
-        self._code.append(("return",))
+        self._code.append(("ret",))
 
     def _assign(self, left_expr, right_expr):
         match left_expr:
@@ -955,7 +955,6 @@ class VM:
                 inst = self._code[self._ip]; self._ip += 1
                 match inst:
                     case ("halt",): break
-                    case ("return",): return self._stack.pop()
                     case ("const", val): self._stack.append(val)
                     case ("pop",): self._stack.pop()
                     case ("def", pat): self._def(pat)
@@ -1057,6 +1056,7 @@ class VM:
                 assert False, f"Invalid call @ _call(): {unexpected}"
 
     def _ret(self):
+        while self._ctrl_stack[-1][0] != "call": self._ctrl_stack.pop()
         _, self._code, self._ip, self._env = self._ctrl_stack.pop()
 
     def _raise(self):
@@ -1611,15 +1611,15 @@ if __name__ == "__main__":
     print(toil.run(r"""c2()""")) # -> 1
     print(toil.run(r"""c2()""")) # -> 2
 
-    # # Recursive Fibonacci
-    # print(toil.run(r"""
-    #     def fib(n) do
-    #         if n == 0 then return(0) end;
-    #         if n == 1 then return(1) end;
-    #         fib(n - 1) + fib(n - 2)
-    #     end;
-    #     fib(6)
-    # """)) # -> 8
+    # Recursive Fibonacci
+    print(toil.run(r"""
+        def fib(n) do
+            if n == 0 then return(0) end;
+            if n == 1 then return(1) end;
+            fib(n - 1) + fib(n - 2)
+        end;
+        fib(6)
+    """)) # -> 8
 
     # # UFCS
     # print_code(toil.code(r""" 2.add(3) """))
