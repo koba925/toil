@@ -969,8 +969,7 @@ class VM:
                     case ("dot", attr_name): self._dot(attr_name)
                     case ("make_closure", params, body_code):
                         self._stack.append(
-                            (Ident("closure"), [params, None, body_code, self._env])
-                        )
+                            (Ident("closure"), [params, None, body_code, self._env]))
                     case ("call", nargs): self._call(nargs)
                     case ("ret",): self._ret()
                     case ("enter_scope",):
@@ -983,8 +982,7 @@ class VM:
                                 assert False, f"Invalid control @ execute(): {invalid}"
                     case ("enter_try", addr):
                         self._ctrl_stack.append(
-                            ("try", addr, len(self._stack), self._env)
-                        )
+                            ("try", addr, len(self._stack), self._env))
                     case ("leave_try",):
                         match self._ctrl_stack.pop():
                             case ("try", _, _, _): pass
@@ -1044,7 +1042,8 @@ class VM:
                 new_env = Environment(closure_env)
                 if new_env.bind(params, args):
                     if body_code:
-                        self._ctrl_stack.append(("call", self._code, self._ip, self._env))
+                        self._ctrl_stack.append(
+                            ("call", self._code, self._ip, len(self._stack), self._env))
                         self._env = Environment(new_env)
                         self._code = body_code
                         self._ip = 0
@@ -1059,20 +1058,26 @@ class VM:
                 assert False, f"Invalid call @ _call(): {unexpected}"
 
     def _ret(self):
-        while self._ctrl_stack[-1][0] != "call": self._ctrl_stack.pop()
-        _, self._code, self._ip, self._env = self._ctrl_stack.pop()
+        result = self._stack.pop()
+        while self._ctrl_stack:
+            match self._ctrl_stack.pop():
+                case ("scope", _env): pass
+                case ("try", _catch_addr, _stack_size, _catch_env): pass
+                case ("call", code, ip, stack_size, env):
+                    self._code = code
+                    self._ip = ip
+                    del self._stack[stack_size:]; self._stack.append(result)
+                    self._env = env
+                    return
 
     def _raise(self):
         exc_val = self._stack.pop()
 
         while self._ctrl_stack:
             match self._ctrl_stack.pop():
-                case ("scope", env):
-                    self._env = env
-                case ("call", code, ip, env):
+                case ("scope", _env): pass
+                case ("call", code, _ip, _env):
                     self._code = code
-                    self._ip = ip
-                    self._env = env
                 case ("try", catch_addr, stack_size, catch_env):
                     del self._stack[stack_size:]
                     self._env = catch_env
