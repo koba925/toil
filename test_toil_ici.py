@@ -14,8 +14,8 @@ class TestICI:
         assert toil.scan(r""" 2 """) == [2, Ident('$EOF')]
         assert toil.parse([2, Ident('$EOF')]) == 2
         assert toil.ast(r""" 2 """) == 2
-        assert toil.code(""" 2 """) == [('const', 2), ('halt',)]
-        assert toil.execute([('const', 2), ('halt',)]) == 2
+        assert toil.code(""" 2 """) == [('const', 2), ('ret',)]
+        assert toil.execute([('const', 2), ('ret',)]) == 2
         assert toil.run(r""" 2 """) == 2
 
     def test_const(self):
@@ -353,15 +353,26 @@ class TestICI:
 
     def test_runtime_compile(self):
         toil.walk(r""" add2 := a -> a + 2 """)
-        assert toil.run(r""" add2 """)[0] == Ident("closure")
+        func = toil.run(r""" add2 """)
+        assert func[0] == Ident("closure")
+        assert func[1][1] is not None # body_expr
+        assert func[1][2] is None     # body_code
+        assert toil.run(r""" add2(3) """) == 5
 
         toil.walk(r""" add2 := compile(add2) """)
         compiled_func = toil.run(r""" add2 """)
-        assert len(compiled_func[1][2]) > 0
+        assert compiled_func[1][1] is not None # body_expr
+        assert len(compiled_func[1][2]) > 0    # body_code
         assert toil.run(r""" add2(3) """) == 5
 
         toil.walk(r""" add2 := compile(add2) """)
         assert toil.run(r""" add2(3) """) == 5
+
+        toil.run(r""" add3 := a -> a + 3 """)
+        func_run = toil.run(r""" add3 """)
+        assert func_run[1][1] is not None # body_expr
+        assert len(func_run[1][2]) > 0    # body_code
+        assert toil.run(r""" add3(2) """) == 5
 
     def test_match(self):
         toil.run(r"""
@@ -452,6 +463,22 @@ class TestICI:
             def f() do raise(2) end;
             try f() except e then e end
         """) == 2
+
+    def test_raise_over_boundary(self):
+        toil.walk(r""" def f() do raise(2) end """)
+        assert toil.run(r""" try f() except e then e end """) == 2
+
+        toil.run(r""" def f() do raise(2) end """)
+        assert toil.walk(r""" try f() except e then e end """) == 2
+
+    def test_inter_interpreter_mutual_recursion(self):
+        toil.walk(r""" def even(n) do if n == 0 then True else odd(n - 1) end end """)
+        toil.run(r""" def odd(n) do if n == 0 then False else even(n - 1) end end """)
+
+        assert toil.walk(r"""even(2)""") is True
+        assert toil.walk(r"""even(3)""") is False
+        assert toil.run(r"""odd(2)""") is False
+        assert toil.run(r"""odd(3)""") is True
 
     def test_jit_execution(self):
         assert toil.walk(r"""

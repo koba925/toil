@@ -578,7 +578,7 @@ class Evaluator:
             case Ident(name): return env.val(name)
             case (Ident("quote"), [expr]): return expr
             case (Ident("func"), [params, body_expr]):
-                return (Ident("closure"), [params, body_expr, [], env])
+                return (Ident("closure"), [params, body_expr, None, env])
             case (Ident("return"), args):
                 raise ReturnException(self.eval(args[0], env) if args else None)
             case (Ident("define"), [pat, expr]):
@@ -715,16 +715,9 @@ class Compiler:
 
     def compile(self) -> Code:
         self._expression(self._expr)
-        self._code.append(("halt",))
-        assert self._control_stack == [], \
-            f"Invalid control stack state @ compile(): {self._control_stack}"
-        return self._code
-
-    def compile_func(self) -> Code:
-        self._expression(self._expr)
         self._code.append(("ret",))
         assert self._control_stack == [], \
-            f"Invalid control stack state @ compile_func(): {self._control_stack}"
+            f"Invalid control stack state @ compile(): {self._control_stack}"
         return self._code
 
     def _expression(self, expr):
@@ -771,8 +764,8 @@ class Compiler:
         self._code.append(("call", len(dic)))
 
     def _func(self, params, body_expr):
-        body_code = Compiler(body_expr).compile_func()
-        self._code.append(("make_closure", params, body_code))
+        body_code = Compiler(body_expr).compile()
+        self._code.append(("make_closure", params, body_expr, body_code))
 
     def _return(self, args):
         if args: self._expression(args[0])
@@ -868,8 +861,8 @@ class Compiler:
         self._code.append(("enter_try", None))
         self._control_stack.append(("try",))
         self._expression(body_expr)
-        self._code.append(("leave_try",))
         self._control_stack.pop()
+        self._code.append(("leave_try",))
 
         end_jump = self._current_addr()
         self._code.append(("jump", None))
@@ -946,9 +939,10 @@ class VM:
         self._env = env
         self._ip = 0
         self._stack = []
-        self._ctrl_stack = []
+        self._ctrl_stack: list = ["top"]
 
     def execute(self) -> Value:
+        self._ctrl_stack.append(("call", [("halt",)], 0, len(self._stack), self._env))
         while True:
             try:
                 inst = self._code[self._ip]; self._ip += 1
@@ -967,34 +961,28 @@ class VM:
                         val = self._stack[-1]
                         self._stack.append(self._env.bind(pat, val))
                     case ("dot", attr_name): self._dot(attr_name)
-                    case ("make_closure", params, body_code):
+                    case ("make_closure", params, body_expr, body_code):
                         self._stack.append(
-                            (Ident("closure"), [params, None, body_code, self._env]))
+                            (Ident("closure"), [params, body_expr, body_code, self._env]))
                     case ("call", nargs): self._call(nargs)
                     case ("ret",): self._ret()
                     case ("enter_scope",):
                         self._ctrl_stack.append(("scope", self._env))
                         self._env = Environment(self._env)
                     case ("leave_scope",):
-                        match self._ctrl_stack.pop():
-                            case ("scope", env): self._env = env
-                            case invalid:
-                                assert False, f"Invalid control @ execute(): {invalid}"
+                        self._env = self._ctrl_stack.pop()[1]
                     case ("enter_try", addr):
                         self._ctrl_stack.append(
                             ("try", addr, len(self._stack), self._env))
                     case ("leave_try",):
-                        match self._ctrl_stack.pop():
-                            case ("try", _, _, _): pass
-                            case invalid:
-                                assert False, f"Invalid control @ execute(): {invalid}"
+                        self._ctrl_stack.pop()
                     case ("raise",): self._raise()
                     case _:
                         assert False, f"Invalid instruction @ execute(): {inst}"
             except ToilException as e:
                 self._stack.append(e.e)
                 self._raise()
-        assert len(self._ctrl_stack) == 0, f"Invalid control stack state @ execute(): {self._ctrl_stack}"
+        assert self._ctrl_stack == ["top"], f"Invalid control stack state @ execute(): {self._ctrl_stack}"
         assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
         return self._stack.pop()
 
@@ -1044,7 +1032,7 @@ class VM:
                     if body_code:
                         self._ctrl_stack.append(
                             ("call", self._code, self._ip, len(self._stack), self._env))
-                        self._env = Environment(new_env)
+                        self._env = new_env
                         self._code = body_code
                         self._ip = 0
                     else:
@@ -1069,20 +1057,20 @@ class VM:
                     del self._stack[stack_size:]; self._stack.append(result)
                     self._env = env
                     return
+        assert False, "Call frame not found @ _ret()"
 
     def _raise(self):
         exc_val = self._stack.pop()
-
         while self._ctrl_stack:
             match self._ctrl_stack.pop():
                 case ("scope", _env): pass
-                case ("call", code, _ip, _env):
+                case ("call", code, _ip, _stack_size, _env):
                     self._code = code
                 case ("try", catch_addr, stack_size, catch_env):
-                    del self._stack[stack_size:]
-                    self._env = catch_env
-                    self._stack.append(exc_val)
                     self._ip = catch_addr
+                    del self._stack[stack_size:]
+                    self._stack.append(exc_val)
+                    self._env = catch_env
                     return
 
         raise ToilException(exc_val)
@@ -1165,7 +1153,7 @@ class Interpreter:
             match func:
                 case (Ident("closure"), [params, body_expr, body_code, closure_env]):
                     if not body_code:
-                        func[1][2] = self.compile(body_expr)
+                        func[1][2] = Compiler(body_expr).compile()
                     return func
                 case _:
                     assert False, f"Expected a closure @ compile(): {func}"
@@ -1647,7 +1635,6 @@ if __name__ == "__main__":
         early_return() + 4
     """)) # -> 7
 
-    exit()
     # UFCS
     print_code(toil.code(r""" 2.add(3) """))
     print(toil.run(r""" 2.add(3) """)) # -> 5
@@ -1753,48 +1740,49 @@ if __name__ == "__main__":
         try f() except e then e end
     """)) # -> 2
 
+    # Raise over TWI/ICI boundary
     toil.walk(r""" def f() do raise(2) end """)
     print(toil.run(r""" try f() except e then e end """)) # -> 2
 
     toil.run(r""" def f() do raise(2) end """)
     print(toil.walk(r""" try f() except e then e end """)) # -> 2
 
-    # # Mutual call
-    # toil.walk(r""" def even(n) do if n == 0 then True else odd(n - 1) end end """)
-    # toil.run(r""" def odd(n) do if n == 0 then False else even(n - 1) end end """)
-    # print(toil.walk(r"""even(2)""")) # -> True
-    # print(toil.walk(r"""even(3)""")) # -> False
-    # print(toil.run(r"""odd(2)""")) # -> False
-    # print(toil.run(r"""odd(3)""")) # -> True
+    # Mutual call
+    toil.walk(r""" def even(n) do if n == 0 then True else odd(n - 1) end end """)
+    toil.run(r""" def odd(n) do if n == 0 then False else even(n - 1) end end """)
+    print(toil.walk(r"""even(2)""")) # -> True
+    print(toil.walk(r"""even(3)""")) # -> False
+    print(toil.run(r"""odd(2)""")) # -> False
+    print(toil.run(r"""odd(3)""")) # -> True
 
-    # # Run-time compile
-    # toil.walk(r""" add2 := a -> a + 2 """)
-    # print(toil.run(r""" add2 """)) # -> (closure, [[a], (add, [a, 2]), [], [...]])
-    # print(toil.run(r""" add2(3) """)) # -> 5
+    # Run-time compile
+    toil.walk(r""" add2 := a -> a + 2 """)
+    print(toil.run(r""" add2 """)) # -> (closure, [[a], (add, [a, 2]), [], [...]])
+    print(toil.run(r""" add2(3) """)) # -> 5
 
-    # toil.walk(r""" add2 := compile(add2) """)
-    # print(toil.run(r""" add2 """)) # -> (closure, [[a], (add, [a, 2]), [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
-    # print(toil.run(r""" add2(3) """)) # -> 5
+    toil.walk(r""" add2 := compile(add2) """)
+    print(toil.run(r""" add2 """)) # -> (closure, [[a], (add, [a, 2]), [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
+    print(toil.run(r""" add2(3) """)) # -> 5
 
-    # toil.walk(r""" add2 := compile(add2) """)
-    # print(toil.run(r""" add2 """)) # -> (closure, [[a], (add, [a, 2]), [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
-    # print(toil.run(r""" add2(3) """)) # -> 5
+    toil.walk(r""" add2 := compile(add2) """)
+    print(toil.run(r""" add2 """)) # -> (closure, [[a], (add, [a, 2]), [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
+    print(toil.run(r""" add2(3) """)) # -> 5
 
-    # toil.run(r""" add2 := a -> a + 2 """)
-    # print(toil.run(r""" add2 """)) # -> (closure, [[a], None, [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
-    # print(toil.run(r""" add2(3) """)) # -> 5
+    toil.run(r""" add2 := a -> a + 2 """)
+    print(toil.run(r""" add2 """)) # -> (closure, [[a], None, [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('halt',)], [...]])
+    print(toil.run(r""" add2(3) """)) # -> 5
 
-    # # JIT execution
-    # print(toil.walk(r"""
-    #     __jit__ := True;
-    #     def f(x) do x * 2 end;
-    #     f(3)
-    # """)) # -> 6
+    # JIT execution
+    print(toil.walk(r"""
+        __jit__ := True;
+        def f(x) do x * 2 end;
+        f(3)
+    """)) # -> 6
 
-    # print(toil.walk(r"""
-    #     __jit__ := True;
-    #     def fib(n) do
-    #         if n < 2 then n else fib(n - 1) + fib(n - 2) end
-    #     end;
-    #     fib(6)
-    # """)) # -> 8
+    print(toil.walk(r"""
+        __jit__ := True;
+        def fib(n) do
+            if n < 2 then n else fib(n - 1) + fib(n - 2) end
+        end;
+        fib(6)
+    """)) # -> 8
