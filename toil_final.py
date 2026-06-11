@@ -673,11 +673,11 @@ class Evaluator:
                 func_val = target_val[attr_name]
                 match func_val:
                     case (Ident("closure"), [[Ident("self"), *_], *_]):
-                        return lambda args: self.apply(func_val, [target_val] + args)
+                        return (Ident("bound_method"), func_val, target_val)
                 return func_val
 
         func_val = env.val(attr_name)
-        return lambda args: self.apply(func_val, [target_val] + args)
+        return (Ident("bound_method"), func_val, target_val)
 
     def _op(self, op_expr, args_expr, env):
         op_val = self.eval(op_expr, env)
@@ -686,6 +686,8 @@ class Evaluator:
 
     def apply(self, op_val: Value, args_val: list[Value]) -> Value:
         match op_val:
+            case (Ident("bound_method"), func_val, target_val):
+                return self.apply(func_val, [target_val] + args_val)
             case c if callable(c):
                 return c(args_val)
             case (Ident("closure"), [params, body_expr, body_code, closure_env]):
@@ -1168,9 +1170,9 @@ class Interpreter:
         self._env = Environment(self._env)
 
     def _corelib(self):
-        self.walk(r""" __corelib := None """)
+        self.run(r""" __corelib := None """)
 
-        self.walk(r"""
+        self.run(r"""
             syntax quote, EXPR, end call quote end;
             syntax func, EXPRS, do, EXPR, end call func end;
             syntax macro, EXPRS, do, EXPR, end call macro end;
@@ -1293,7 +1295,7 @@ class Interpreter:
         self._env = Environment(self._env)
 
     def stdlib(self) -> 'Interpreter':
-        self.walk("""
+        self.run("""
             __stdlib := None;
 
             def first(a) do a[0] end;
