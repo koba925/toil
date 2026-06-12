@@ -151,11 +151,21 @@ class TestIntermediateCodeInterpreter:
         with pytest.raises(AssertionError, match="Invalid operator"):
             toil.run(r""" 2(3) """)
 
+    def test_def(self):
+        toil.run(r""" def f do 2 end """)
+        assert toil.run(r""" f() """) == 2
+
+        toil.run(r""" def f(a) do a + 2 end """)
+        assert toil.run(r""" f(3) """) == 5
+
+        toil.run(r""" def f(a, b) do a + b end """)
+        assert toil.run(r""" f(2, 3) """) == 5
+
     def test_invalid_expression(self):
         with pytest.raises(Exception, match="Invalid stack state"):
-            toil.execute([('halt',)]) # ->
+            toil.execute([('ret',)]) # ->
         with pytest.raises(Exception, match="Invalid stack state"):
-            toil.execute([('const', 2), ('const', 3), ('halt',)])
+            toil.execute([('const', 2), ('const', 3), ('ret',)])
         with pytest.raises(Exception, match="Invalid instruction"):
             toil.execute([('not_op',), ('halt',)])
         with pytest.raises(Exception, match="Unsupported expression"):

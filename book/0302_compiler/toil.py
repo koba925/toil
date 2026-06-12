@@ -285,8 +285,7 @@ class Evaluator:
         op_val = self.eval(op_expr, env)
         args_val = [self.eval(arg, env) for arg in args_expr]
         match op_val:
-            case c if callable(c):
-                return op_val(args_val)
+            case f if callable(f): return f(args_val)
             case ("closure", [params, body_expr, closure_env]):
                 new_env = Environment(closure_env)
                 new_env.bind(params, args_val)

@@ -941,7 +941,7 @@ class VM:
         self._env = env
         self._ip = 0
         self._stack = []
-        self._ctrl_stack: list = ["top"]
+        self._ctrl_stack: list = []
 
     def execute(self) -> Value:
         self._ctrl_stack.append(("call", [("halt",)], 0, len(self._stack), self._env))
@@ -964,15 +964,15 @@ class VM:
                         self._stack.append(self._env.bind(pat, val))
                     case ("dot", attr_name): self._dot(attr_name)
                     case ("make_closure", params, body_expr, body_code):
-                        self._stack.append(
-                            (Ident("closure"), [params, body_expr, body_code, self._env]))
+                        self._stack.append((Ident("closure"), [
+                            params, body_expr, body_code, self._env]))
                     case ("call", nargs): self._call(nargs)
                     case ("ret",): self._ret()
                     case ("enter_scope",):
                         self._ctrl_stack.append(("scope", self._env))
                         self._env = Environment(self._env)
                     case ("leave_scope",):
-                        self._env = self._ctrl_stack.pop()[1]
+                        _, self._env = self._ctrl_stack.pop()
                     case ("enter_try", addr):
                         self._ctrl_stack.append(
                             ("try", addr, len(self._stack), self._env))
@@ -984,7 +984,7 @@ class VM:
             except ToilException as e:
                 self._stack.append(e.e)
                 self._raise()
-        assert self._ctrl_stack == ["top"], f"Invalid control stack state @ execute(): {self._ctrl_stack}"
+        assert len(self._ctrl_stack) == 0, f"Invalid control stack state @ execute(): {self._ctrl_stack}"
         assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
         return self._stack.pop()
 

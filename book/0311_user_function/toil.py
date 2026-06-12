@@ -285,8 +285,7 @@ class Evaluator:
         op_val = self.eval(op_expr, env)
         args_val = [self.eval(arg, env) for arg in args_expr]
         match op_val:
-            case c if callable(c):
-                return op_val(args_val)
+            case f if callable(f): return f(args_val)
             case ("closure", [params, body_expr, closure_env]):
                 new_env = Environment(closure_env)
                 new_env.bind(params, args_val)
@@ -301,11 +300,6 @@ class Compiler:
         self._code = []
 
     def compile(self):
-        self._expression(self._expr)
-        self._emit("halt")
-        return self._code
-
-    def compile_func(self):
         self._expression(self._expr)
         self._emit("ret")
         return self._code
@@ -332,13 +326,13 @@ class Compiler:
             case _: assert False, f"Unsupported expression @ compile(): {expr}"
 
     def _func(self, params, body_expr):
-        body_code = Compiler(body_expr).compile_func()
+        body_code = Compiler(body_expr).compile()
         self._emit("make_closure", params, body_code)
 
     def _scope(self, body_expr):
-        self._emit("push_env")
+        self._emit("enter_scope")
         self._expression(body_expr)
-        self._emit("pop_env")
+        self._emit("leave_scope")
 
     def _seq(self, exprs):
         assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
@@ -391,7 +385,7 @@ class VM:
         self._env = env
         self._ip = 0
         self._stack = []
-        self._ctrl_stack = []
+        self._ctrl_stack: list = [("call", [("halt",)], 0, env)]
 
     def execute(self):
         while (inst := self._code[self._ip]) != ("halt",):
@@ -399,10 +393,10 @@ class VM:
             match inst:
                 case ("const", val): self._stack.append(val)
                 case ("pop",): self._stack.pop()
-                case ("push_env",):
+                case ("enter_scope",):
                     self._ctrl_stack.append(("scope", self._env))
                     self._env = Environment(self._env)
-                case ("pop_env",):
+                case ("leave_scope",):
                     _, self._env = self._ctrl_stack.pop()
                 case ("def", name): self._env.define(name, self._stack[-1])
                 case ("set", name): self._env.assign(name, self._stack[-1])
@@ -416,14 +410,17 @@ class VM:
                 case ("ret",): self._ret()
                 case _:
                     assert False, f"Invalid instruction @ execute(): {inst}"
-        assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
+        assert len(self._ctrl_stack) == 0, \
+            f"Invalid control stack state @ execute(): {self._ctrl_stack}"
+        assert len(self._stack) == 1, \
+            f"Invalid stack state @ execute(): {self._stack}"
         return self._stack.pop()
 
     def _call(self, nargs):
         op = self._stack.pop()
         args = list(reversed([self._stack.pop() for _ in range(nargs)]))
         match op:
-            case f if callable(f): self._stack.append(op(args))
+            case f if callable(f): self._stack.append(f(args))
             case ("closure", [params, body_code, closure_env]):
                 self._ctrl_stack.append(("call", self._code, self._ip, self._env))
                 self._env = Environment(closure_env)

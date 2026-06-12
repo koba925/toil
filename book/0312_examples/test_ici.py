@@ -163,9 +163,9 @@ class TestIntermediateCodeInterpreter:
 
     def test_invalid_expression(self):
         with pytest.raises(Exception, match="Invalid stack state"):
-            toil.execute([('halt',)]) # ->
+            toil.execute([('ret',)]) # ->
         with pytest.raises(Exception, match="Invalid stack state"):
-            toil.execute([('const', 2), ('const', 3), ('halt',)])
+            toil.execute([('const', 2), ('const', 3), ('ret',)])
         with pytest.raises(Exception, match="Invalid instruction"):
             toil.execute([('not_op',), ('halt',)])
         with pytest.raises(Exception, match="Unsupported expression"):

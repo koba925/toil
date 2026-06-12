@@ -285,8 +285,7 @@ class Evaluator:
         op_val = self.eval(op_expr, env)
         args_val = [self.eval(arg, env) for arg in args_expr]
         match op_val:
-            case c if callable(c):
-                return op_val(args_val)
+            case f if callable(f): return f(args_val)
             case ("closure", [params, body_expr, closure_env]):
                 new_env = Environment(closure_env)
                 new_env.bind(params, args_val)
@@ -331,9 +330,9 @@ class Compiler:
             case _: assert False, f"Unsupported expression @ compile(): {expr}"
 
     def _scope(self, body_expr):
-        self._emit("push_env")
+        self._emit("enter_scope")
         self._expression(body_expr)
-        self._emit("pop_env")
+        self._emit("leave_scope")
 
     def _seq(self, exprs):
         assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
@@ -389,10 +388,11 @@ class VM:
             match inst:
                 case ("const", val): self._stack.append(val)
                 case ("pop",): self._stack.pop()
-                case ("push_env",):
-                    self._ctrl_stack.append(self._env)
+                case ("enter_scope",):
+                    self._ctrl_stack.append(("scope", self._env))
                     self._env = Environment(self._env)
-                case ("pop_env",): self._env = self._ctrl_stack.pop()
+                case ("leave_scope",):
+                    _, self._env = self._ctrl_stack.pop()
                 case ("def", name): self._env.define(name, self._stack[-1])
                 case ("set", name): self._env.assign(name, self._stack[-1])
                 case ("get", name): self._stack.append(self._env.val(name))
@@ -415,7 +415,10 @@ class VM:
                     self._stack.append(l < r)
                 case _:
                     assert False, f"Invalid instruction @ execute(): {inst}"
-        assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
+        assert len(self._ctrl_stack) == 0, \
+            f"Invalid control stack state @ execute(): {self._ctrl_stack}"
+        assert len(self._stack) == 1, \
+            f"Invalid stack state @ execute(): {self._stack}"
         return self._stack.pop()
 
 
