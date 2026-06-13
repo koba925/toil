@@ -102,6 +102,11 @@ class TestIntermediateCodeInterpreter:
         assert toil.run(r""" 6 / 3 """) == 2
         assert toil.run(r""" 7 % 3 """) == 1
 
+        assert toil.run(r""" 2 + 3 * 4 """) == 14
+        assert toil.run(r""" (2 + 3) * 4 """) == 20
+        assert toil.run(r""" 2 + 3 == 2 * 3 """) is False
+        assert toil.run(r""" 2 + 3 < 2 * 3 """) is True
+
         assert toil.run(r""" 2 == 2 """) is True
         assert toil.run(r""" 2 == 3 """) is False
 
