@@ -1,4 +1,3 @@
-#! /usr/bin/env python
 import sys; sys.setrecursionlimit(200000)
 import time
 from toil_final import Interpreter

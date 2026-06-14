@@ -1,5 +1,3 @@
-#! /usr/bin/env python3
-
 def is_ident_first(c): return c.isalpha() or c == "_"
 def is_ident_rest(c): return c.isalnum() or c == "_"
 def is_ident(s): return is_ident_first(s[0])

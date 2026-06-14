@@ -1,5 +1,3 @@
-#! /usr/bin/env python3
-
 from toil_final import Interpreter
 
 class ToTWrapper:
