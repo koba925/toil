@@ -1,0 +1,120 @@
+--- ./0201_scan_numbers/toil.py	2026-06-14 08:10:50.876789901 +0900
++++ ./0202_parse_numbers/toil.py	2026-06-14 08:10:50.877036192 +0900
+@@ -17,40 +17,66 @@
+                     assert False, f"Invalid character @ tokenize(): {invalid}"
+ 
+         return self._tokens
+ 
+     def _number(self):
+         while self._current_char().isdecimal(): self._advance()
+         self._tokens.append(int(self._lexeme()))
+ 
+     def _lexeme(self):
+         return self._src[self._start_pos:self._current_pos]
+ 
+     def _advance(self): self._current_pos += 1
+ 
+     def _current_char(self):
+         if self._current_pos < len(self._src):
+             return self._src[self._current_pos]
+         else:
+             return "$EOF"
+ 
+ 
++class Parser:
++    def __init__(self, tokens):
++        self._tokens = tokens
++        self._pos = 0
++
++    def parse(self):
++        expr = self._expression()
++        assert self._current_token() == "$EOF", \
++            f"Extra token @ parse(): {self._current_token()}"
++        return expr
++
++    def _expression(self): return self._primary()
++
++    def _primary(self):
++        match self._current_token():
++            case int(): return self._current_and_advance()
++            case invalid:
++                assert False, f"Invalid token @ _primary(): {invalid}"
++
++    def _current_token(self): return self._tokens[self._pos]
++
++    def _current_and_advance(self):
++        self._pos += 1
++        return self._tokens[self._pos - 1]
++
++
+ class Environment:
+     def __init__(self, parent=None):
+         self._parent = parent
+         self._vars = {}
+ 
+     def define(self, name, val):
+         self._vars[name] = val
+         return val
+ 
+     def assign(self, name, val):
+         if name in self._vars:
+             self._vars[name] = val
+             return val
+         elif self._parent:
+             return self._parent.assign(name, val)
+         else:
+             assert False, f"Undefined variable @ assign(): {name}"
+ 
+     def val(self, name):
+         if name in self._vars: return self._vars[name]
+@@ -120,39 +146,50 @@
+     def __init__(self):
+         self._env = Environment()
+         self._builtins()
+ 
+     def _builtins(self):
+         self._env.define("add", lambda args: args[0] + args[1])
+         self._env.define("sub", lambda args: args[0] - args[1])
+         self._env.define("mul", lambda args: args[0] * args[1])
+         self._env.define("div", lambda args: args[0] // args[1])
+         self._env.define("mod", lambda args: args[0] % args[1])
+         self._env.define("equal", lambda args: args[0] == args[1])
+         self._env.define("less", lambda args: args[0] < args[1])
+         self._env.define("greater", lambda args: args[0] > args[1])
+         self._env.define("print", lambda args: print(*args))
+ 
+         self._env = Environment(self._env)
+ 
+     def scan(self, src):
+         return Scanner(src).tokenize()
+ 
++    def parse(self, tokens):
++        return Parser(tokens).parse()
++
+     def eval(self, expr):
+         return Evaluator().eval(expr, self._env)
+ 
+ 
+ if __name__ == "__main__":
+ 
+     toil = Interpreter()
+ 
+     # Example
+ 
+     print("Scan numbers:")
+ 
+     print(toil.scan(r""""""))  # -> ['$EOF']
+     print(toil.scan(r"""2"""))  # -> [2, '$EOF']
+     print(toil.scan(r"""02"""))  # -> [2, '$EOF']
+     print(toil.scan(r"""23"""))  # -> [23, '$EOF']
+ 
+     # print(toil.scan(r"""$"""))  # -> Invalid character
+     # print(toil.scan(r"""2$"""))  # -> Invalid character
++
++    print("Parse numbers:")
++
++    print(toil.parse([2, "$EOF"])) # -> 2
++    print(toil.parse([23, "$EOF"])) # -> 23
++
++    # print(toil.parse([2, 34, "$EOF"])) # -> Extra token
++    # print(toil.parse(['$EOF'])) # -> Invalid token

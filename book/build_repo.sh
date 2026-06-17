@@ -35,6 +35,7 @@ for CHAP_DIR in $(find "$SOURCE_DIR" -mindepth 1 -maxdepth 1 -type d -name "[0-9
         --exclude '*.pyc' \
         --exclude '.pytest_cache/' \
         --exclude '.DS_Store' \
+        --exclude 'diff.txt' \
         "$CHAP_DIR/" "$DEST_DIR/"
 
     # 共通のREADMEファイルがあれば配置する
@@ -44,9 +45,9 @@ for CHAP_DIR in $(find "$SOURCE_DIR" -mindepth 1 -maxdepth 1 -type d -name "[0-9
 
     # DEST_DIR に移動してGit操作
     cd "$DEST_DIR"
-    
+
     git add .
-    
+
     if ! git diff --cached --quiet; then
         git commit -m "Step: $TAG_NAME"
         git tag "$TAG_NAME"

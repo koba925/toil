@@ -1,0 +1,259 @@
+--- ./0310_builtin_functions/toil.py	2026-06-14 14:27:06.038389255 +0900
++++ ./0311_user_function/toil.py	2026-06-14 14:27:06.119978747 +0900
+@@ -282,63 +282,68 @@
+     def _op(self, op_expr, args_expr, env):
+         op_val = self.eval(op_expr, env)
+         args_val = [self.eval(arg, env) for arg in args_expr]
+         match op_val:
+             case f if callable(f): return f(args_val)
+             case ("closure", [params, body_expr, closure_env]):
+                 new_env = Environment(closure_env)
+                 new_env.bind(params, args_val)
+                 return self.eval(body_expr, new_env)
+             case _:
+                 assert False, f"Invalid operator @ _op(): {op_val}"
+ 
+ 
+ class Compiler:
+     def __init__(self, expr):
+         self._expr = expr
+         self._code = []
+ 
+     def compile(self):
+         self._expression(self._expr)
+-        self._emit("halt")
++        self._emit("ret")
+         return self._code
+ 
+     def _expression(self, expr):
+         match expr:
+             case None | bool() | int(): self._emit("const", expr)
+             case str(name): self._emit("get", name)
++            case ("func", [params, body_expr]): self._func(params, body_expr)
+             case ("define", [name, expr]):
+                 self._expression(expr)
+                 self._emit("def", name)
+             case ("assign", [name, expr]):
+                 self._expression(expr)
+                 self._emit("set", name)
+             case ("scope", [body_expr]): self._scope(body_expr)
+             case ("seq", exprs): self._seq(exprs)
+             case ("if", [cond_expr, then_expr, else_expr]):
+                 self._if(cond_expr, then_expr, else_expr)
+             case ("while", [cond_expr, body_expr]):
+                 self._while(cond_expr, body_expr)
+             case (op_expr, args_expr):
+                 self._op(op_expr, args_expr)
+             case _: assert False, f"Unsupported expression @ compile(): {expr}"
+ 
++    def _func(self, params, body_expr):
++        body_code = Compiler(body_expr).compile()
++        self._emit("make_closure", params, body_code)
++
+     def _scope(self, body_expr):
+         self._emit("enter_scope")
+         self._expression(body_expr)
+         self._emit("leave_scope")
+ 
+     def _seq(self, exprs):
+         assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
+         for expr in exprs[:-1]:
+             self._expression(expr)
+             self._emit("pop")
+         self._expression(exprs[-1])
+ 
+     def _if(self, cond_expr, then_expr, else_expr):
+         self._expression(cond_expr)
+         else_jump = self._current_addr()
+         self._emit("jump_if_false", None)
+         self._expression(then_expr)
+         end_jump = self._current_addr()
+         self._emit("jump", None)
+         self._set_operand(else_jump, self._current_addr())
+@@ -361,73 +366,87 @@
+         self._expression(op_expr)
+         self._emit("call", len(args_expr))
+ 
+     def _set_operand(self, ip, operand):
+         inst = self._code[ip]
+         self._code[ip] = (inst[0], operand)
+ 
+     def _emit(self, *inst):
+         self._code.append(inst)
+ 
+     def _current_addr(self):
+         return len(self._code)
+ 
+ 
+ class VM:
+     def __init__(self, code, env):
+         self._code = code
+         self._env = env
+         self._ip = 0
+         self._stack = []
+-        self._ctrl_stack = []
++        self._ctrl_stack: list = [("call", [("halt",)], 0, env)]
+ 
+     def execute(self):
+         while (inst := self._code[self._ip]) != ("halt",):
+             self._ip += 1
+             match inst:
+                 case ("const", val): self._stack.append(val)
+                 case ("pop",): self._stack.pop()
+                 case ("enter_scope",):
+                     self._ctrl_stack.append(("scope", self._env))
+                     self._env = Environment(self._env)
+                 case ("leave_scope",):
+                     _, self._env = self._ctrl_stack.pop()
+                 case ("def", name): self._env.define(name, self._stack[-1])
+                 case ("set", name): self._env.assign(name, self._stack[-1])
+                 case ("get", name): self._stack.append(self._env.val(name))
+                 case ("jump", addr): self._ip = addr
+                 case ("jump_if_false", addr):
+                     if not self._stack.pop(): self._ip = addr
++                case ("make_closure", params, body_code):
++                    self._stack.append(("closure", [params, body_code, self._env]))
+                 case ("call", nargs): self._call(nargs)
++                case ("ret",): self._ret()
+                 case _:
+                     assert False, f"Invalid instruction @ execute(): {inst}"
+         assert len(self._ctrl_stack) == 0, \
+             f"Invalid control stack state @ execute(): {self._ctrl_stack}"
+         assert len(self._stack) == 1, \
+             f"Invalid stack state @ execute(): {self._stack}"
+         return self._stack.pop()
+ 
+     def _call(self, nargs):
+         op = self._stack.pop()
+         args = list(reversed([self._stack.pop() for _ in range(nargs)]))
+-        self._stack.append(op(args))
++        match op:
++            case f if callable(f): self._stack.append(f(args))
++            case ("closure", [params, body_code, closure_env]):
++                self._ctrl_stack.append(("call", self._code, self._ip, self._env))
++                self._env = Environment(closure_env)
++                self._env.bind(params, args)
++                self._code = body_code
++                self._ip = 0
++            case _:
++                assert False, f"Invalid operator @ _call(): {op}"
+ 
++    def _ret(self):
++        _, self._code, self._ip, self._env = self._ctrl_stack.pop()
+ 
+ class Interpreter:
+     def __init__(self):
+         self._env = Environment()
+         self._builtins()
+ 
+     def _builtins(self):
+         self._env.define("add", lambda args: args[0] + args[1])
+         self._env.define("sub", lambda args: args[0] - args[1])
+         self._env.define("mul", lambda args: args[0] * args[1])
+         self._env.define("div", lambda args: args[0] // args[1])
+         self._env.define("mod", lambda args: args[0] % args[1])
+         self._env.define("equal", lambda args: args[0] == args[1])
+         self._env.define("less", lambda args: args[0] < args[1])
+         self._env.define("greater", lambda args: args[0] > args[1])
+         self._env.define("print", lambda args: print(*args))
+ 
+         self._env = Environment(self._env)
+ 
+     def scan(self, src):
+@@ -488,56 +507,67 @@
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(walk_or_run, filename):
+         with open(filename, "r") as f:
+             if walk_or_run == "walk":
+                 result = toil.walk(f.read())
+             else:
+                 result = toil.run(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl("walk")
+         case [_, "--rcepl"]: repl("run")
+         case [_, "--walk", filename]: from_file("walk", filename)
+         case [_, "--run", filename]: from_file("run", filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    # Built-in functions
++    print("Functions:")
+ 
+-    print(toil.ast(r""" add(2, 3) """))
+-    # -> ('add', [2, 3])
+-    print_code(toil.code(r""" add(2, 3) """))
++    print(toil.ast(r""" func do 2 end ()"""))
++    # -> (('func', [[], 2]), [])
++    print_code(toil.code(r""" func do 2 end ()"""))
++    # ->   0: ('make_closure', [], [('const', 2), ('ret',)])
++    # ->   1: ('call', 0)
++    # ->   2: ('halt',)
++    print(toil.run(r""" func do 2 end () """)) # -> 2
++
++    print(toil.ast(r""" func a do a + 2 end (3) """))
++    # -> (('func', [['a'], ('add', ['a', 2])]), [3])
++    print_code(toil.code(r""" func a do a + 2 end (3) """))
++    # ->   0: ('const', 3)
++    # ->   1: ('make_closure', ['a'], [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('ret',)])
++    # ->   2: ('call', 1)
++    # ->   3: ('halt',)
++    print(toil.run(r""" func a do a + 2 end (3) """)) # -> 5
++
++    print(toil.ast(r""" func a, b do a + b end (2, 3) """))
++    # -> (('func', [['a', 'b'], ('add', ['a', 'b'])]), [2, 3])
++    print_code(toil.code(r""" func a, b do a + b end (2, 3) """))
+     # ->   0: ('const', 2)
+     # ->   1: ('const', 3)
+-    # ->   2: ('get', 'add')
++    # ->   2: ('make_closure', ['a', 'b'], [('get', 'a'), ('get', 'b'), ('get', 'add'), ('call', 2), ('ret',)])
+     # ->   3: ('call', 2)
+     # ->   4: ('halt',)
+-    print(toil.run(r""" add(2, 3) """)) # -> 5
+-
+-    print(toil.run(r""" 2 + 3 """)) # -> 5
+-    print(toil.run(r""" 3 - 2 """)) # -> 1
+-    print(toil.run(r""" 2 * 3 """)) # -> 6
+-    print(toil.run(r""" 6 / 3 """)) # -> 2
+-    print(toil.run(r""" 7 % 3 """)) # -> 1
+-
+-    print(toil.run(r""" 2 == 2 """)) # -> True
+-    print(toil.run(r""" 2 == 3 """)) # -> False
+-
+-    print(toil.run(r""" 2 < 2 """)) # -> False
+-    print(toil.run(r""" 2 < 3 """)) # -> True
+-
+-    print(toil.run(r""" 2 > 2 """)) # -> False
+-    print(toil.run(r""" 3 > 2 """)) # -> True
+-
+-    toil.run(r""" print() """) # -> (empty line)
+-    toil.run(r""" print(2) """) # -> 2
+-    toil.run(r""" print(2, 3) """) # -> 2 3
+-
+-    toil.run(r""" print(2 + 3 == 5) """) # -> True
++    print(toil.run(r""" func a, b do a + b end (2, 3) """)) # -> 5
+ 
+-    print(toil.run(r""" myadd := add; myadd(2, 3) """)) # -> 5
++    print(toil.run(r"""
++        twice := func f, x do f(f(x)) end;
++        double := func x do x * 2 end;
++        twice(double, 3)
++    """)) # -> 12
++
++    print(toil.run(r"""
++        a := 2;
++        f := func do a end;
++        g := func do a := 3; f() end;
++        g()
++    """)) # -> 2
++
++    print(toil.run(r"""
++        func a do func b do a + b end end (2)(3)
++    """)) # -> 5
+ 
+-    # toil.run(r""" not_defined() """) # -> Undefined variable
++    # toil.run(r""" 2(3) """) # -> Invalid operator

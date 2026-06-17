@@ -1,0 +1,7 @@
+         match expr:
+             case None | bool() | int(): return expr
++            case ("add", [a, b]): return self.eval(a) + self.eval(b)
++            case ("equal", [a, b]): return self.eval(a) == self.eval(b)
++            case ("print", [a]): return print(self.eval(a))
+             case _:
+                 assert False, f"Unexpected expression @ eval(): {expr}"

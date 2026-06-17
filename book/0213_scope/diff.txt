@@ -1,0 +1,111 @@
+--- ./0212_seq/toil.py	2026-06-14 08:10:50.879178739 +0900
++++ ./0213_scope/toil.py	2026-06-14 08:10:50.879332462 +0900
+@@ -94,50 +94,57 @@
+     def _add_sub(self):
+         return self._binary_left({"+": "add", "-": "sub"}, self._mul_div_mod)
+ 
+     def _mul_div_mod(self):
+         return self._binary_left({
+             "*": "mul", "/": "div", "%": "mod"
+         }, self._call)
+ 
+     def _call(self):
+         target = self._primary()
+         while self._current_token() == "(":
+             self._current_and_advance()
+             target = (target, self._comma_separated_exprs(")"))
+             self._consume(")")
+         return target
+ 
+     def _primary(self):
+         match self._current_token():
+             case None | bool() | int(): return self._current_and_advance()
+             case "(": return self._group()
++            case "scope": return self._scope()
+             case str(name) if is_ident(name): return self._current_and_advance()
+             case invalid:
+                 assert False, f"Invalid token @ _primary(): {invalid}"
+ 
+     def _group(self):
+         self._current_and_advance()
+         expr = self._expression()
+         self._consume(")")
+         return expr
+ 
++    def _scope(self):
++        self._current_and_advance()
++        body_expr = self._expression()
++        self._consume("end")
++        return ("scope", [body_expr])
++
+     def _binary_left(self, ops, sub_elem):
+         left = sub_elem()
+         while type(op := self._current_token()) is str and op in ops:
+             self._current_and_advance()
+             right = sub_elem()
+             left = (ops[op], [left, right])
+         return left
+ 
+     def _binary_right(self, ops, sub_elem):
+         left = sub_elem()
+         if type(self._current_token()) is str and \
+                 (op := self._current_token()) in ops:
+             self._current_and_advance()
+             right = self._binary_right(ops, sub_elem)
+             return (ops[op], [left, right])
+         return left
+ 
+     def _comma_separated_exprs(self, terminator):
+         cse = []
+         if self._current_token() != terminator:
+@@ -264,36 +271,35 @@
+ 
+     def parse(self, tokens):
+         return Parser(tokens).parse()
+ 
+     def ast(self, src):
+         return self.parse(self.scan(src))
+ 
+     def eval(self, expr):
+         return Evaluator().eval(expr, self._env)
+ 
+     def walk(self, src):
+         return self.eval(self.ast(src))
+ 
+ 
+ if __name__ == "__main__":
+ 
+     toil = Interpreter()
+ 
+     # Example
+ 
+-    print("Sequence:")
++    print("Scope:")
++
++    print(toil.walk(r""" a := 2; scope a end """)) # -> 2
++    print(toil.walk(r""" a := 2; scope scope a end end """)) # -> 2
++
++    print(toil.walk(r""" a := 2; scope a := 3 end """)) # -> 3
++    print(toil.walk(r""" a """)) # -> 2
++
++    print(toil.walk(r""" a := 2; scope a = 3 end """)) # -> 3
++    print(toil.walk(r""" a """)) # -> 3
++
++    # toil.walk(r""" a := 2; scope d = 3 end """)  # -> Undefined variable
++    # toil.walk(r""" scope 2 """)  # -> Expected end
++    # toil.walk(r""" scope end """)  # -> Expected end
+ 
+-    print(toil.ast(r""" print(2); print(3) """))
+-    # -> ('seq', [('print', [2]), ('print', [3])])
+-    print(toil.walk(r""" print(2); print(3) """))  # -> 2\n3\nNone
+-
+-    print(toil.ast(r""" 2 + 3; 4 + 5; 6 + 7 """))
+-    # -> ('seq', [('add', [2, 3]), ('add', [4, 5]), ('add', [6, 7])])
+-    print(toil.walk(r""" 2 + 3; 4 + 5; 6 + 7 """))  # -> 13
+-
+-    print(toil.ast(r""" 2 + 3 """))
+-    # -> ('add', [2, 3])
+-
+-    # toil.walk(r""" 2; """)  # -> Invalid token
+-    # toil.walk(r""" ;2 """)  # -> Invalid token
+-    # toil.walk(r""" 2;;3 """)  # -> Invalid token

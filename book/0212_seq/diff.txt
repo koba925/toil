@@ -1,0 +1,153 @@
+--- ./0211_call/toil.py	2026-06-14 08:10:50.879005220 +0900
++++ ./0212_seq/toil.py	2026-06-14 08:10:50.879178739 +0900
+@@ -12,41 +12,41 @@
+     def tokenize(self):
+         while True:
+             while self._current_char().isspace(): self._advance()
+ 
+             if self._current_char() == "#":
+                 while self._current_char() not in ("\n", "$EOF"):
+                     self._advance()
+                 continue
+ 
+             self._start_pos = self._current_pos
+             match self._current_char():
+                 case "$EOF":
+                     self._tokens.append("$EOF")
+                     break
+                 case c if c.isdecimal(): self._number()
+                 case c if is_ident_first(c): self._ident()
+                 case c if c in "=:":
+                     self._advance()
+                     if self._current_char() == "=": self._advance()
+                     self._tokens.append(self._lexeme())
+-                case c if c in "+-*/%()<>,":
++                case c if c in "+-*/%()<>,;":
+                     self._tokens.append(c); self._advance()
+                 case invalid:
+                     assert False, f"Invalid character @ tokenize(): {invalid}"
+ 
+         return self._tokens
+ 
+     def _number(self):
+         while self._current_char().isdecimal(): self._advance()
+         self._tokens.append(int(self._lexeme()))
+ 
+     def _ident(self):
+         self._advance()
+         while is_ident_rest(self._current_char()): self._advance()
+         match self._lexeme():
+             case "None": self._tokens.append(None)
+             case "True": self._tokens.append(True)
+             case "False": self._tokens.append(False)
+             case ident: self._tokens.append(ident)
+ 
+     def _lexeme(self):
+@@ -55,41 +55,48 @@
+     def _advance(self): self._current_pos += 1
+ 
+     def _current_char(self):
+         if self._current_pos < len(self._src):
+             return self._src[self._current_pos]
+         else:
+             return "$EOF"
+ 
+ 
+ class Parser:
+     def __init__(self, tokens):
+         self._tokens = tokens
+         self._pos = 0
+ 
+     def parse(self):
+         expr = self._expression()
+         assert self._current_token() == "$EOF", \
+             f"Extra token @ parse(): {self._current_token()}"
+         return expr
+ 
+-    def _expression(self): return self._define_assign()
++    def _expression(self): return self._sequence()
++
++    def _sequence(self):
++        exprs = [self._define_assign()]
++        while self._current_token() == ";":
++            self._current_and_advance()
++            exprs.append(self._define_assign())
++        return exprs[0] if len(exprs) == 1 else ("seq", exprs)
+ 
+     def _define_assign(self):
+         return self._binary_right({
+             ":=": "define", "=": "assign"
+         }, self._comparison)
+ 
+     def _comparison(self):
+         return self._binary_left({
+             "==": "equal", "<": "less", ">": "greater"
+         }, self._add_sub)
+ 
+     def _add_sub(self):
+         return self._binary_left({"+": "add", "-": "sub"}, self._mul_div_mod)
+ 
+     def _mul_div_mod(self):
+         return self._binary_left({
+             "*": "mul", "/": "div", "%": "mod"
+         }, self._call)
+ 
+     def _call(self):
+@@ -257,42 +264,36 @@
+ 
+     def parse(self, tokens):
+         return Parser(tokens).parse()
+ 
+     def ast(self, src):
+         return self.parse(self.scan(src))
+ 
+     def eval(self, expr):
+         return Evaluator().eval(expr, self._env)
+ 
+     def walk(self, src):
+         return self.eval(self.ast(src))
+ 
+ 
+ if __name__ == "__main__":
+ 
+     toil = Interpreter()
+ 
+     # Example
+ 
+-    print("Function call:")
+-
+-    print(toil.ast(r""" add(2, 3) """))  # -> ('add', [2, 3])
+-    print(toil.walk(r""" add(2, 3) """))  # -> 5
+-
+-    print(toil.walk(r""" add(2 + 3, add(4, 5)) """))  # -> 14
+-    print(toil.walk(r""" add(2, 3) * 4 """)) # -> 20
++    print("Sequence:")
+ 
+-    toil.walk(r""" myadd := add """)
+-    print(toil.walk(r""" myadd(2, 3) """))  # -> 5
+-
+-    toil.walk(r""" print() """)  # -> (empty line)
+-    toil.walk(r""" print(2) """)  # -> 2
+-    toil.walk(r""" print(2, 3) """)  # -> 2 3
+-
+-    # toil.walk(r""" print( """)  # -> Invalid token
+-    # toil.walk(r""" print(2 """)  # -> Expected )
+-    # toil.walk(r""" print(2 3) """)  # -> Expected )
+-    # toil.walk(r""" print(2,) """)  # -> Invalid token
+-    # toil.walk(r""" print(, 3) """)  # -> Invalid token
+-    # toil.walk(r""" not_defined_func(2) """)  # -> Undefined variable
+-    # toil.walk(r""" 2(3) """)  # -> Invalid operator
++    print(toil.ast(r""" print(2); print(3) """))
++    # -> ('seq', [('print', [2]), ('print', [3])])
++    print(toil.walk(r""" print(2); print(3) """))  # -> 2\n3\nNone
++
++    print(toil.ast(r""" 2 + 3; 4 + 5; 6 + 7 """))
++    # -> ('seq', [('add', [2, 3]), ('add', [4, 5]), ('add', [6, 7])])
++    print(toil.walk(r""" 2 + 3; 4 + 5; 6 + 7 """))  # -> 13
++
++    print(toil.ast(r""" 2 + 3 """))
++    # -> ('add', [2, 3])
++
++    # toil.walk(r""" 2; """)  # -> Invalid token
++    # toil.walk(r""" ;2 """)  # -> Invalid token
++    # toil.walk(r""" 2;;3 """)  # -> Invalid token

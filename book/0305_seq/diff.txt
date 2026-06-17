@@ -1,0 +1,152 @@
+--- ./0304_pseudo_func/toil.py	2026-06-14 14:26:51.318729839 +0900
++++ ./0305_seq/toil.py	2026-06-14 14:26:51.378011323 +0900
+@@ -288,64 +288,73 @@
+                 new_env = Environment(closure_env)
+                 new_env.bind(params, args_val)
+                 return self.eval(body_expr, new_env)
+             case _:
+                 assert False, f"Invalid operator @ _op(): {op_val}"
+ 
+ 
+ class Compiler:
+     def __init__(self, expr):
+         self._expr = expr
+         self._code = []
+ 
+     def compile(self):
+         self._expression(self._expr)
+         self._emit("halt")
+         return self._code
+ 
+     def _expression(self, expr):
+         match expr:
+             case None | bool() | int(): self._emit("const", expr)
++            case ("seq", exprs): self._seq(exprs)
+             case (op, [expr]):
+                 self._expression(expr)
+                 self._emit(op)
+             case (op, [left_expr, right_expr]):
+                 self._expression(left_expr)
+                 self._expression(right_expr)
+                 self._emit(op)
+             case _: assert False, f"Unsupported expression @ compile(): {expr}"
+ 
++    def _seq(self, exprs):
++        assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
++        for expr in exprs[:-1]:
++            self._expression(expr)
++            self._emit("pop")
++        self._expression(exprs[-1])
++
+     def _emit(self, *inst):
+         self._code.append(inst)
+ 
+ 
+ class VM:
+     def __init__(self, code):
+         self._code = code
+         self._ip = 0
+         self._stack = []
+ 
+     def execute(self):
+         while (inst := self._code[self._ip]) != ("halt",):
+             self._ip += 1
+             match inst:
+                 case ("const", val): self._stack.append(val)
++                case ("pop",): self._stack.pop()
+                 case ("print",):
+                     val = print(self._stack.pop()); self._stack.append(None)
+                 case ("add",):
+                     r = self._stack.pop(); l = self._stack.pop();
+                     self._stack.append(l + r)
+                 case ("mul",):
+                     r = self._stack.pop(); l = self._stack.pop();
+                     self._stack.append(l * r)
+                 case ("equal",):
+                     r = self._stack.pop(); l = self._stack.pop();
+                     self._stack.append(l == r)
+                 case ("less",):
+                     r = self._stack.pop(); l = self._stack.pop();
+                     self._stack.append(l < r)
+                 case _:
+                     assert False, f"Invalid instruction @ execute(): {inst}"
+         assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
+         return self._stack.pop()
+ 
+ 
+@@ -425,57 +434,45 @@
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(walk_or_run, filename):
+         with open(filename, "r") as f:
+             if walk_or_run == "walk":
+                 result = toil.walk(f.read())
+             else:
+                 result = toil.run(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl("walk")
+         case [_, "--rcepl"]: repl("run")
+         case [_, "--walk", filename]: from_file("walk", filename)
+         case [_, "--run", filename]: from_file("run", filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    print("Pseudo functions:")
++    print("Sequence:")
+ 
+-    print(toil.ast(r""" 2 + 3 """))
+-    # -> ('add', [2, 3])
+-    print_code(toil.code(r""" 2 + 3 """))
+-    # ->  0: ('const', 2)
+-    # ->  1: ('const', 3)
+-    # ->  2: ('add',)
+-    # ->  3: ('halt',)
+-    print(toil.run(r""" 2 + 3 """)) # -> 5
+-
+-    print(toil.ast(r""" 2 + 3 * 4 """))
+-    # -> ('add', [2, ('mul', [3, 4])])
+-    print_code(toil.code(r""" 2 + 3 * 4"""))
++    print(toil.ast(r""" 2; 3; 4 """))
++    # -> ('seq', [2, 3, 4])
++    print_code(toil.code(r""" 2; 3; 4 """))
+     # ->   0: ('const', 2)
+-    # ->   1: ('const', 3)
+-    # ->   2: ('const', 4)
+-    # ->   3: ('mul',)
+-    # ->   4: ('add',)
++    # ->   1: ('pop',)
++    # ->   2: ('const', 3)
++    # ->   3: ('pop',)
++    # ->   4: ('const', 4)
+     # ->   5: ('halt',)
+-    print(toil.run(r""" 2 + 3 * 4 """)) # -> 14
++    print(toil.run(r""" 2; 3; 4 """)) # -> 4
+ 
+-    print(toil.ast(r""" (2 + 3) * 4 """))
+-    # -> ('mul', [('add', [2, 3]), 4])
+-    print_code(toil.code(r""" (2 + 3) * 4"""))
++    print(toil.ast(r""" print(2); print(3) """))
++    # -> ('seq', [('print', [2]), ('print', [3])])
++    print_code(toil.code(r""" print(2); print(3) """))
+     # ->   0: ('const', 2)
+-    # ->   1: ('const', 3)
+-    # ->   2: ('add',)
+-    # ->   3: ('const', 4)
+-    # ->   4: ('mul',)
++    # ->   1: ('print',)
++    # ->   2: ('pop',)
++    # ->   3: ('const', 3)
++    # ->   4: ('print',)
+     # ->   5: ('halt',)
+-    print(toil.run(r""" (2 + 3) * 4 """)) # -> 20
+-
+-    print(toil.run(r""" 2 + 3 == 2 * 3 """)) # -> False
+-    print(toil.run(r""" 2 + 3 < 2 * 3 """)) # -> True
+-    print(toil.run(r""" print(2 + 3) """)) # -> 5\nNone
++    print(toil.run(r""" print(2); print(3) """)) # -> 2\n3\nNone
+ 
++    # toil.compile(("seq", [])) # -> Empty sequence

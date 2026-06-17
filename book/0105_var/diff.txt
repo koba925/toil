@@ -1,0 +1,95 @@
+--- ./0104_if/toil.py	2026-05-31 19:10:21.136616924 +0900
++++ ./0105_var/toil.py	2026-05-30 22:24:37.418994487 +0900
+@@ -1,44 +1,71 @@
++class Environment:
++    def __init__(self):
++        self._vars = {}
++
++    def define(self, name, val):
++        self._vars[name] = val
++        return val
++
++    def val(self, name):
++        return self._vars[name]
++
++
+ class Evaluator:
+-    def eval(self, expr):
++    def eval(self, expr, env):
+         match expr:
+             case None | bool() | int(): return expr
+-            case ("seq", exprs): return self._seq(exprs)
++            case str(name): return env.val(name)
++            case ("define", [name, expr]):
++                return env.define(name, self.eval(expr, env))
++            case ("seq", exprs): return self._seq(exprs, env)
+             case ("if", [cond_expr, then_expr, else_expr]):
+-                return self._if(cond_expr, then_expr, else_expr)
+-            case ("add", [a, b]): return self.eval(a) + self.eval(b)
+-            case ("equal", [a, b]): return self.eval(a) == self.eval(b)
+-            case ("print", [a]): return print(self.eval(a))
++                return self._if(cond_expr, then_expr, else_expr, env)
++            case ("add", [a, b]): return self.eval(a, env) + self.eval(b, env)
++            case ("equal", [a, b]): return self.eval(a, env) == self.eval(b, env)
++            case ("print", [a]): return print(self.eval(a, env))
+             case _:
+                 assert False, f"Unexpected expression @ eval(): {expr}"
+ 
+-    def _seq(self, exprs):
++    def _seq(self, exprs, env):
+         val = None
+-        for expr in exprs: val = self.eval(expr)
++        for expr in exprs: val = self.eval(expr, env)
+         return val
+ 
+-    def _if(self, cond_expr, then_expr, else_expr):
+-        if self.eval(cond_expr):
+-            return self.eval(then_expr)
++    def _if(self, cond_expr, then_expr, else_expr, env):
++        if self.eval(cond_expr, env):
++            return self.eval(then_expr, env)
+         else:
+-            return self.eval(else_expr)
++            return self.eval(else_expr, env)
++
++
++class Interpreter:
++    def __init__(self):
++        self._env = Environment()
++
++    def eval(self, expr):
++        return Evaluator().eval(expr, self._env)
+ 
+ 
+ if __name__ == "__main__":
+ 
+-    toil = Evaluator()
++    toil = Interpreter()
+ 
+     # Example
+ 
+-    print("If:")
++    print("Variable:")
+ 
+-    print(toil.eval(("if", [("equal", [2, 2]), 3, 4])))
+-    # -> 3
++    print(toil.eval(("define", ["a", ("add", [2, 3])])))
++    # -> 5
+ 
+-    print(toil.eval(("if", [("equal", [2, 3]), 4, 5])))
++    print(toil.eval("a"))
+     # -> 5
+ 
+-    print(toil.eval(("if", [True, ("seq", [2, 3]), 4])))
+-    # -> 3
++    print(toil.eval(("if", [("equal", ["a", 5]), 2, 3])))
++    # -> 2
++
++    print(toil.eval(("define", ["a", 6])))
++    # -> 6
++
++    print(toil.eval("a"))
++    # -> 6
+ 
+-    print(toil.eval(("if", [False, 2, ("if", [True, 3, 4])])))
+-    # -> 3

@@ -1,0 +1,118 @@
+--- ./0219_real_interpreter/toil.py	2026-06-14 14:26:48.940142753 +0900
++++ ./0301_stack_machine/toil.py	2026-06-14 14:26:49.652942753 +0900
+@@ -275,86 +275,114 @@
+             return self.eval(else_expr, env)
+ 
+     def _while(self, cond_expr, body_expr, env):
+         val = None
+         while self.eval(cond_expr, env): val = self.eval(body_expr, env)
+         return val
+ 
+     def _op(self, op_expr, args_expr, env):
+         op_val = self.eval(op_expr, env)
+         args_val = [self.eval(arg, env) for arg in args_expr]
+         match op_val:
+             case f if callable(f): return f(args_val)
+             case ("closure", [params, body_expr, closure_env]):
+                 new_env = Environment(closure_env)
+                 new_env.bind(params, args_val)
+                 return self.eval(body_expr, new_env)
+             case _:
+                 assert False, f"Invalid operator @ _op(): {op_val}"
+ 
+ 
++class VM:
++    def __init__(self, code):
++        self._code = code
++        self._ip = 0
++        self._stack = []
++
++    def execute(self):
++        while (inst := self._code[self._ip]) != ("halt",):
++            self._ip += 1
++            match inst:
++                case ("const", val): self._stack.append(val)
++                case _:
++                    assert False, f"Invalid instruction @ execute(): {inst}"
++        assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
++        return self._stack.pop()
++
++
+ class Interpreter:
+     def __init__(self):
+         self._env = Environment()
+         self._builtins()
+ 
+     def _builtins(self):
+         self._env.define("add", lambda args: args[0] + args[1])
+         self._env.define("sub", lambda args: args[0] - args[1])
+         self._env.define("mul", lambda args: args[0] * args[1])
+         self._env.define("div", lambda args: args[0] // args[1])
+         self._env.define("mod", lambda args: args[0] % args[1])
+         self._env.define("equal", lambda args: args[0] == args[1])
+         self._env.define("less", lambda args: args[0] < args[1])
+         self._env.define("greater", lambda args: args[0] > args[1])
+         self._env.define("print", lambda args: print(*args))
+ 
+         self._env = Environment(self._env)
+ 
+     def scan(self, src):
+         return Scanner(src).tokenize()
+ 
+     def parse(self, tokens):
+         return Parser(tokens).parse()
+ 
+     def ast(self, src):
+         return self.parse(self.scan(src))
+ 
+     def eval(self, expr):
+         return Evaluator().eval(expr, self._env)
+ 
+     def walk(self, src):
+         return self.eval(self.ast(src))
+ 
++    def execute(self, code):
++        return VM(code).execute()
++
+ 
+ if __name__ == "__main__":
+     import sys
+ 
+     toil = Interpreter()
+ 
+     def repl():
+         while True:
+             print("\nInput source and enter Ctrl+D (Linux/Mac) or Ctrl+Z (Windows):")
+             if (src := sys.stdin.read()) == "":
+                 exit(0)
+             try:
+                 expr = toil.ast(src)
+                 print("AST:", expr, sep="\n")
+                 print("Output:")
+                 result = toil.eval(expr)
+                 print("Result:", result, sep="\n")
+             except AssertionError as e:
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(filename):
+         with open(filename, "r") as f: result = toil.walk(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl()
+         case [_, filename]: from_file(filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    toil.walk(r""" print(2) """)
++    print("Stack machine:")
++    print(toil.execute([('const', 2), ('halt',)])) # -> 2
++    print(toil.execute([('const', None), ('halt',)])) # -> None
++    print(toil.execute([('const', True), ('halt',)])) # -> True
++    print(toil.execute([('const', False), ('halt',)])) # -> False
++
++    # toil.execute([('halt',)]) # -> Invalid stack state
++    # toil.execute([('const', 2), ('const', 3), ('halt',)]) # -> Invalid stack state
++    # toil.execute([('not_op',), ('halt',)]) # -> Invalid instruction

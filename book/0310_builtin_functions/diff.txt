@@ -1,0 +1,245 @@
+--- ./0309_while/toil.py	2026-06-14 14:27:05.004602741 +0900
++++ ./0310_builtin_functions/toil.py	2026-06-14 14:27:06.038389255 +0900
+@@ -301,141 +301,133 @@
+         self._expression(self._expr)
+         self._emit("halt")
+         return self._code
+ 
+     def _expression(self, expr):
+         match expr:
+             case None | bool() | int(): self._emit("const", expr)
+             case str(name): self._emit("get", name)
+             case ("define", [name, expr]):
+                 self._expression(expr)
+                 self._emit("def", name)
+             case ("assign", [name, expr]):
+                 self._expression(expr)
+                 self._emit("set", name)
+             case ("scope", [body_expr]): self._scope(body_expr)
+             case ("seq", exprs): self._seq(exprs)
+             case ("if", [cond_expr, then_expr, else_expr]):
+                 self._if(cond_expr, then_expr, else_expr)
+             case ("while", [cond_expr, body_expr]):
+                 self._while(cond_expr, body_expr)
+-            case (op, [expr]):
+-                self._expression(expr)
+-                self._emit(op)
+-            case (op, [left_expr, right_expr]):
+-                self._expression(left_expr)
+-                self._expression(right_expr)
+-                self._emit(op)
++            case (op_expr, args_expr):
++                self._op(op_expr, args_expr)
+             case _: assert False, f"Unsupported expression @ compile(): {expr}"
+ 
+     def _scope(self, body_expr):
+         self._emit("enter_scope")
+         self._expression(body_expr)
+         self._emit("leave_scope")
+ 
+     def _seq(self, exprs):
+         assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
+         for expr in exprs[:-1]:
+             self._expression(expr)
+             self._emit("pop")
+         self._expression(exprs[-1])
+ 
+     def _if(self, cond_expr, then_expr, else_expr):
+         self._expression(cond_expr)
+         else_jump = self._current_addr()
+         self._emit("jump_if_false", None)
+         self._expression(then_expr)
+         end_jump = self._current_addr()
+         self._emit("jump", None)
+         self._set_operand(else_jump, self._current_addr())
+         self._expression(else_expr)
+         self._set_operand(end_jump, self._current_addr())
+ 
+     def _while(self, cond_expr, body_expr):
+         self._emit("const", None)
+         loop_jump = self._current_addr()
+         self._expression(cond_expr)
+         cond_jump = self._current_addr()
+         self._emit("jump_if_false", None)
+         self._emit("pop")
+         self._expression(body_expr)
+         self._emit("jump", loop_jump)
+         self._set_operand(cond_jump, self._current_addr())
+ 
++    def _op(self, op_expr, args_expr):
++        for arg in args_expr: self._expression(arg)
++        self._expression(op_expr)
++        self._emit("call", len(args_expr))
++
+     def _set_operand(self, ip, operand):
+         inst = self._code[ip]
+         self._code[ip] = (inst[0], operand)
+ 
+     def _emit(self, *inst):
+         self._code.append(inst)
+ 
+     def _current_addr(self):
+         return len(self._code)
+ 
+ 
+ class VM:
+     def __init__(self, code, env):
+         self._code = code
+         self._env = env
+         self._ip = 0
+         self._stack = []
+         self._ctrl_stack = []
+ 
+     def execute(self):
+         while (inst := self._code[self._ip]) != ("halt",):
+             self._ip += 1
+             match inst:
+                 case ("const", val): self._stack.append(val)
+                 case ("pop",): self._stack.pop()
+                 case ("enter_scope",):
+                     self._ctrl_stack.append(("scope", self._env))
+                     self._env = Environment(self._env)
+                 case ("leave_scope",):
+                     _, self._env = self._ctrl_stack.pop()
+                 case ("def", name): self._env.define(name, self._stack[-1])
+                 case ("set", name): self._env.assign(name, self._stack[-1])
+                 case ("get", name): self._stack.append(self._env.val(name))
+                 case ("jump", addr): self._ip = addr
+                 case ("jump_if_false", addr):
+                     if not self._stack.pop(): self._ip = addr
+-                case ("print",):
+-                    val = print(self._stack.pop()); self._stack.append(None)
+-                case ("add",):
+-                    r = self._stack.pop(); l = self._stack.pop();
+-                    self._stack.append(l + r)
+-                case ("mul",):
+-                    r = self._stack.pop(); l = self._stack.pop();
+-                    self._stack.append(l * r)
+-                case ("equal",):
+-                    r = self._stack.pop(); l = self._stack.pop();
+-                    self._stack.append(l == r)
+-                case ("less",):
+-                    r = self._stack.pop(); l = self._stack.pop();
+-                    self._stack.append(l < r)
++                case ("call", nargs): self._call(nargs)
+                 case _:
+                     assert False, f"Invalid instruction @ execute(): {inst}"
+         assert len(self._ctrl_stack) == 0, \
+             f"Invalid control stack state @ execute(): {self._ctrl_stack}"
+         assert len(self._stack) == 1, \
+             f"Invalid stack state @ execute(): {self._stack}"
+         return self._stack.pop()
+ 
++    def _call(self, nargs):
++        op = self._stack.pop()
++        args = list(reversed([self._stack.pop() for _ in range(nargs)]))
++        self._stack.append(op(args))
++
+ 
+ class Interpreter:
+     def __init__(self):
+         self._env = Environment()
+         self._builtins()
+ 
+     def _builtins(self):
+         self._env.define("add", lambda args: args[0] + args[1])
+         self._env.define("sub", lambda args: args[0] - args[1])
+         self._env.define("mul", lambda args: args[0] * args[1])
+         self._env.define("div", lambda args: args[0] // args[1])
+         self._env.define("mod", lambda args: args[0] % args[1])
+         self._env.define("equal", lambda args: args[0] == args[1])
+         self._env.define("less", lambda args: args[0] < args[1])
+         self._env.define("greater", lambda args: args[0] > args[1])
+         self._env.define("print", lambda args: print(*args))
+ 
+         self._env = Environment(self._env)
+ 
+     def scan(self, src):
+@@ -496,53 +488,56 @@
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(walk_or_run, filename):
+         with open(filename, "r") as f:
+             if walk_or_run == "walk":
+                 result = toil.walk(f.read())
+             else:
+                 result = toil.run(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl("walk")
+         case [_, "--rcepl"]: repl("run")
+         case [_, "--walk", filename]: from_file("walk", filename)
+         case [_, "--run", filename]: from_file("run", filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    print("While:")
++    # Built-in functions
++
++    print(toil.ast(r""" add(2, 3) """))
++    # -> ('add', [2, 3])
++    print_code(toil.code(r""" add(2, 3) """))
++    # ->   0: ('const', 2)
++    # ->   1: ('const', 3)
++    # ->   2: ('get', 'add')
++    # ->   3: ('call', 2)
++    # ->   4: ('halt',)
++    print(toil.run(r""" add(2, 3) """)) # -> 5
++
++    print(toil.run(r""" 2 + 3 """)) # -> 5
++    print(toil.run(r""" 3 - 2 """)) # -> 1
++    print(toil.run(r""" 2 * 3 """)) # -> 6
++    print(toil.run(r""" 6 / 3 """)) # -> 2
++    print(toil.run(r""" 7 % 3 """)) # -> 1
++
++    print(toil.run(r""" 2 == 2 """)) # -> True
++    print(toil.run(r""" 2 == 3 """)) # -> False
++
++    print(toil.run(r""" 2 < 2 """)) # -> False
++    print(toil.run(r""" 2 < 3 """)) # -> True
++
++    print(toil.run(r""" 2 > 2 """)) # -> False
++    print(toil.run(r""" 3 > 2 """)) # -> True
++
++    toil.run(r""" print() """) # -> (empty line)
++    toil.run(r""" print(2) """) # -> 2
++    toil.run(r""" print(2, 3) """) # -> 2 3
++
++    toil.run(r""" print(2 + 3 == 5) """) # -> True
+ 
+-    print(toil.ast(r""" while i < 3 do i = i + 1 end """))
+-    # -> ('while', [('less', ['i', 3]), ('assign', ['i', ('add', ['i', 1])])])
+-    print_code(toil.code(r""" while i < 3 do i = i + 1 end """))
+-    # ->   0: ('const', None)
+-    # ->   1: ('get', 'i')
+-    # ->   2: ('const', 3)
+-    # ->   3: ('less',)
+-    # ->   4: ('jump_if_false', 11)
+-    # ->   5: ('pop',)
+-    # ->   6: ('get', 'i')
+-    # ->   7: ('const', 1)
+-    # ->   8: ('add',)
+-    # ->   9: ('set', 'i')
+-    # ->  10: ('jump', 1)
+-    # ->  11: ('halt',)
+-    print(toil.run(r""" i := 1; while i < 3 do i = i + 1 end """)) # -> 3
+-
+-    print(toil.run(r"""
+-        sum := 0;
+-        i := 1; while i < 4 do sum = sum + i; i = i + 1 end;
+-        sum
+-    """))  # -> 6
+-
+-    toil.run(r"""
+-        i := 1; while i < 3 do
+-            j := 1; while j < 3 do print(i); print(j); j = j + 1 end;
+-            i = i + 1
+-        end
+-    """)  # -> 1\n1\n1\n2\n2\n1\n2\n2
++    print(toil.run(r""" myadd := add; myadd(2, 3) """)) # -> 5
+ 
+-    print(toil.run(r""" while False do 1/0 end """)) # -> None
++    # toil.run(r""" not_defined() """) # -> Undefined variable

@@ -1,0 +1,248 @@
+--- ./0218_examples/toil.py	2026-06-14 14:24:43.660000472 +0900
++++ ./0219_real_interpreter/toil.py	2026-06-14 14:26:48.940142753 +0900
+@@ -310,219 +310,51 @@
+ 
+         self._env = Environment(self._env)
+ 
+     def scan(self, src):
+         return Scanner(src).tokenize()
+ 
+     def parse(self, tokens):
+         return Parser(tokens).parse()
+ 
+     def ast(self, src):
+         return self.parse(self.scan(src))
+ 
+     def eval(self, expr):
+         return Evaluator().eval(expr, self._env)
+ 
+     def walk(self, src):
+         return self.eval(self.ast(src))
+ 
+ 
+ if __name__ == "__main__":
++    import sys
+ 
+     toil = Interpreter()
+ 
+-    # Example
++    def repl():
++        while True:
++            print("\nInput source and enter Ctrl+D (Linux/Mac) or Ctrl+Z (Windows):")
++            if (src := sys.stdin.read()) == "":
++                exit(0)
++            try:
++                expr = toil.ast(src)
++                print("AST:", expr, sep="\n")
++                print("Output:")
++                result = toil.eval(expr)
++                print("Result:", result, sep="\n")
++            except AssertionError as e:
++                print("Error:", e, sep="\n")
++
++    def from_file(filename):
++        with open(filename, "r") as f: result = toil.walk(f.read())
++        exit(result if isinstance(result, int) else 255)
++
++    match sys.argv:
++        case [_]: pass
++        case [_, "--repl"]: repl()
++        case [_, filename]: from_file(filename)
++        case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+-    print("Factorial:")
++    # Example
+ 
+-    toil.walk(r"""
+-        def factorial_iter(n) do
+-            result := 1;
+-            while n > 0 do
+-                result = result * n;
+-                n = n - 1
+-            end;
+-            result
+-        end
+-    """)
+-    print(toil.walk(r""" factorial_iter(0) """))
+-    # -> 1
+-    print(toil.walk(r""" factorial_iter(1) """))
+-    # -> 1
+-    print(toil.walk(r""" factorial_iter(4) """))
+-    # -> 24
+-
+-    toil.walk(r"""
+-        def factorial_rec(n) do
+-            if n == 0 then 1 else n * factorial_rec(n - 1) end
+-        end
+-    """)
+-    print(toil.walk(r""" factorial_rec(0) """))
+-    # -> 1
+-    print(toil.walk(r""" factorial_rec(1) """))
+-    # -> 1
+-    print(toil.walk(r""" factorial_rec(4) """))
+-    # -> 24
+-
+-    print("Fibonacci:")
+-
+-    toil.walk(r"""
+-        def fib_iter(n) do
+-            a := 0; b := 1;
+-            while n > 0 do
+-                tmp := b; b = a + b; a = tmp;
+-                n = n - 1
+-            end;
+-            a
+-        end
+-    """)
+-    print(toil.walk(r""" fib_iter(0) """))
+-    # -> 0
+-    print(toil.walk(r""" fib_iter(1) """))
+-    # -> 1
+-    print(toil.walk(r""" fib_iter(6) """))
+-    # -> 8
+-
+-    toil.walk(r"""
+-        def fib_rec(n) do
+-            if n == 0 then 0
+-            else if n == 1 then 1
+-            else fib_rec(n - 1) + fib_rec(n - 2) end end
+-        end
+-    """)
+-    print(toil.walk(r""" fib_rec(0) """))
+-    # -> 0
+-    print(toil.walk(r""" fib_rec(1) """))
+-    # -> 1
+-    print(toil.walk(r""" fib_rec(6) """))
+-    # -> 8
+-
+-    print("GCD:")
+-
+-    toil.walk(r"""
+-        def gcd_iter(a, b) do
+-            while b > 0 do
+-                tmp := b; b = a % b; a = tmp
+-            end;
+-            a
+-        end
+-    """)
+-    print(toil.walk(r""" gcd_iter(12, 18) """))
+-    # -> 6
+-
+-    toil.walk(r"""
+-        def gcd_rec(a, b) do
+-            if b == 0 then a else gcd_rec(b, a % b) end
+-        end
+-    """)
+-    print(toil.walk(r""" gcd_rec(12, 18) """))
+-    # -> 6
+-
+-    print("Even/Odd (Mutual Recursion):")
+-
+-    toil.walk(r"""
+-        def even(n) do if n == 0 then True else odd(n - 1) end end;
+-        def odd(n) do if n == 0 then False else even(n - 1) end end
+-    """)
+-    print(toil.walk(r""" even(2) """))
+-    # -> True
+-    print(toil.walk(r""" even(3) """))
+-    # -> False
+-    print(toil.walk(r""" odd(2) """))
+-    # -> False
+-    print(toil.walk(r""" odd(3) """))
+-    # -> True
+-
+-    print("Counter (Closure):")
+-
+-    toil.walk(r"""
+-        def make_counter() do
+-            count := 0;
+-            func do count = count + 1 end
+-        end
+-    """)
+-    toil.walk(r""" c1 := make_counter() """)
+-    toil.walk(r""" c2 := make_counter() """)
+-    print(toil.walk(r""" c1() """))
+-    # -> 1
+-    print(toil.walk(r""" c1() """))
+-    # -> 2
+-    print(toil.walk(r""" c2() """))
+-    # -> 1
+-    print(toil.walk(r""" c2() """))
+-    # -> 2
+-
+-    print("Binary search tree:")
+-    print("Building tree:")
+-
+-    toil.walk(r"""
+-        def node(val, left, right) do
+-            func op do
+-                if op == 1 then val
+-                else if op == 2 then left
+-                else right end end
+-            end
+-        end
+-    """)
+-
+-    toil.walk(r""" n1 := node(2, 3, 4) """)
+-    print(toil.walk(r""" n1(1) """))
+-    print(toil.walk(r""" n1(2) """))
+-    print(toil.walk(r""" n1(3) """))
+-    # -> 2\n3\n4
+-
+-    toil.walk(r"""
+-        def bst_put(bst, val) do
+-            if bst == None then node(val, None, None)
+-            else
+-                cur_val := bst(1);
+-                if val == cur_val then
+-                    bst
+-                else if val < cur_val then
+-                    node(cur_val, bst_put(bst(2), val), bst(3))
+-                else
+-                    node(cur_val, bst(2), bst_put(bst(3), val))
+-                end end
+-            end
+-        end
+-    """)
+-    toil.walk(r""" bst := None """)
+-    toil.walk(r""" bst = bst_put(bst, 7) """)
+-    toil.walk(r""" bst = bst_put(bst, 3) """)
+-    toil.walk(r""" bst = bst_put(bst, 1) """)
+-    toil.walk(r""" bst = bst_put(bst, 9) """)
+-    toil.walk(r""" bst = bst_put(bst, 5) """)
+-
+-    print("Walking tree:")
+-    toil.walk(r"""
+-        def bst_walk(bst) do
+-            if bst == None then None
+-            else
+-                bst_walk(bst(2)); print(bst(1)); bst_walk(bst(3))
+-            end
+-        end
+-    """)
+-    toil.walk(r"""
+-        def bst_find(bst, val) do
+-            if bst == None then False
+-            else
+-                cur_val := bst(1);
+-                if val == cur_val then val
+-                else if val < cur_val then bst_find(bst(2), val)
+-                else bst_find(bst(3), val)
+-                end end
+-            end
+-        end
+-    """)
+-
+-    toil.walk(r""" bst_walk(bst) """)
+-    # -> 1\n3\n5\n7\n9
+-
+-    print("Finding values:")
+-    toil.walk(r"""
+-        i := 0;
+-        while i < 10 do
+-            print(bst_find(bst, i));
+-            i = i + 1
+-        end
+-    """)
+-    # -> False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9
++    toil.walk(r""" print(2) """)

@@ -1,0 +1,163 @@
+--- ./0205_add_sub/toil.py	2026-06-14 08:10:50.877649503 +0900
++++ ./0206_mul_div_mod/toil.py	2026-06-14 08:10:50.877962061 +0900
+@@ -3,91 +3,98 @@
+         self._src = src
+         self._start_pos = 0
+         self._current_pos = 0
+         self._tokens = []
+ 
+     def tokenize(self):
+         while True:
+             while self._current_char().isspace(): self._advance()
+ 
+             if self._current_char() == "#":
+                 while self._current_char() not in ("\n", "$EOF"):
+                     self._advance()
+                 continue
+ 
+             self._start_pos = self._current_pos
+             match self._current_char():
+                 case "$EOF":
+                     self._tokens.append("$EOF")
+                     break
+                 case c if c.isdecimal(): self._number()
+-                case c if c in "+-":
++                case c if c in "+-*/%":
+                     self._tokens.append(c); self._advance()
+                 case invalid:
+                     assert False, f"Invalid character @ tokenize(): {invalid}"
+ 
+         return self._tokens
+ 
+     def _number(self):
+         while self._current_char().isdecimal(): self._advance()
+         self._tokens.append(int(self._lexeme()))
+ 
+     def _lexeme(self):
+         return self._src[self._start_pos:self._current_pos]
+ 
+     def _advance(self): self._current_pos += 1
+ 
+     def _current_char(self):
+         if self._current_pos < len(self._src):
+             return self._src[self._current_pos]
+         else:
+             return "$EOF"
+ 
+ 
+ class Parser:
+     def __init__(self, tokens):
+         self._tokens = tokens
+         self._pos = 0
+ 
+     def parse(self):
+         expr = self._expression()
+         assert self._current_token() == "$EOF", \
+             f"Extra token @ parse(): {self._current_token()}"
+         return expr
+ 
+     def _expression(self): return self._add_sub()
+ 
+     def _add_sub(self):
+-        ops = {"+": "add", "-": "sub"}
+-        left = self._primary()
+-        while type(op := self._current_token()) is str and op in ops:
+-            self._current_and_advance()
+-            right = self._primary()
+-            left = (ops[op], [left, right])
+-        return left
++        return self._binary_left({"+": "add", "-": "sub"}, self._mul_div_mod)
++
++    def _mul_div_mod(self):
++        return self._binary_left({
++            "*": "mul", "/": "div", "%": "mod"
++        }, self._primary)
+ 
+     def _primary(self):
+         match self._current_token():
+             case int(): return self._current_and_advance()
+             case invalid:
+                 assert False, f"Invalid token @ _primary(): {invalid}"
+ 
++    def _binary_left(self, ops, sub_elem):
++        left = sub_elem()
++        while type(op := self._current_token()) is str and op in ops:
++            self._current_and_advance()
++            right = sub_elem()
++            left = (ops[op], [left, right])
++        return left
++
+     def _current_token(self): return self._tokens[self._pos]
+ 
+     def _current_and_advance(self):
+         self._pos += 1
+         return self._tokens[self._pos - 1]
+ 
+ 
+ class Environment:
+     def __init__(self, parent=None):
+         self._parent = parent
+         self._vars = {}
+ 
+     def define(self, name, val):
+         self._vars[name] = val
+         return val
+ 
+     def assign(self, name, val):
+         if name in self._vars:
+             self._vars[name] = val
+             return val
+@@ -183,40 +190,38 @@
+ 
+     def parse(self, tokens):
+         return Parser(tokens).parse()
+ 
+     def ast(self, src):
+         return self.parse(self.scan(src))
+ 
+     def eval(self, expr):
+         return Evaluator().eval(expr, self._env)
+ 
+     def walk(self, src):
+         return self.eval(self.ast(src))
+ 
+ 
+ if __name__ == "__main__":
+ 
+     toil = Interpreter()
+ 
+     # Example
+ 
+-    print("Addition and subtraction:")
+-
+-    print(toil.ast(r""" 2+3 """))  # -> ('add', [2, 3])
+-    print(toil.walk(r""" 2+3 """))  # -> 5
++    print("Multiplication, division, and modulo:")
+ 
+-    print(toil.ast(r""" 5 - 3 """))  # -> ('sub', [5, 3])
+-    print(toil.walk(r""" 5 - 3 """))  # -> 2
++    print(toil.ast(r""" 2 * 3 """))  # -> ('mul', [2, 3])
++    print(toil.walk(r""" 2 * 3 """))  # -> 6
+ 
+-    print(toil.ast(r""" 2 + 3 + 4 """))  # -> ('add', [('add', [2, 3]), 4])
+-    print(toil.walk(r""" 2 + 3 + 4 """))  # -> 9
++    print(toil.ast(r""" 6 / 2 """))  # -> ('div', [6, 2])
++    print(toil.walk(r""" 6 / 2 """))  # -> 3
+ 
+-    print(toil.ast(r""" 9 - 4 - 3 """))  # -> ('sub', [('sub', [9, 4]), 3])
+-    print(toil.walk(r""" 9 - 4 - 3 """))  # -> 2
++    print(toil.ast(r""" 7 % 3 """))  # -> ('mod', [7, 3])
++    print(toil.walk(r""" 7 % 3 """))  # -> 1
+ 
+-    print(toil.ast(r""" 2 + 3 - 4 """))  # -> ('sub', [('add', [2, 3]), 4])
+-    print(toil.walk(r""" 2 + 3 - 4 """))  # -> 1
++    print(toil.walk(r""" 2 * 3 * 4 """))  # -> 24
++    print(toil.walk(r""" 24 / 4 / 2 """))  # -> 3
++    print(toil.walk(r""" 4 * 3 / 2 """))  # -> 6
+ 
+-    # print(toil.walk(r""" 2 + """))  # -> Invalid token
+-    # print(toil.walk(r""" 2 - + 3 """))  # -> Invalid token
+-    # print(toil.walk(r""" -2 """))  # -> Invalid token
++    print(toil.ast(r""" 2 + 3 * 4 """))  # -> ('add', [2, ('mul', [3, 4])])
++    print(toil.walk(r""" 2 + 3 * 4 """))  # -> 14
++    print(toil.walk(r""" 2 * 3 + 4 """))  # -> 10
