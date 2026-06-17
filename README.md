@@ -288,11 +288,11 @@ Toilは以下のアーキテクチャで構成されています。
 以下のようにして、章節ごとのディレクトリを作成し、その中に完全なソースコードを置く。
 ディレクトリ内でコードが実行できること。
 
-book
-  0101_constants   --- 「定数を実装する。」に対応。以下同様
+book/
+  0101_constants/   --- 「定数を実装する。」に対応。以下同様
     toil.py
     test_eval.py
-  0102_pseudo_func
+  0102_pseudo_func/
     toil.py
     test_eval.py
   ...
