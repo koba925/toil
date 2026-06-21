@@ -93,51 +93,24 @@ if __name__ == "__main__":
     print(toil.eval("add"))
     # -> <function Interpreter._builtins.<locals>.<lambda> at ....>
 
-    print(toil.eval(("add", [2, 3])))
-    # -> 5
+    print(toil.eval(("add", [2, 3]))) # -> 5
+    print(toil.eval(("sub", [3, 2]))) # -> 1
+    print(toil.eval(("mul", [2, 3]))) # -> 6
+    print(toil.eval(("div", [6, 3]))) # -> 2
+    print(toil.eval(("mod", [7, 3]))) # -> 1
+    print(toil.eval(("equal", [2, 2]))) # -> True
+    print(toil.eval(("equal", [2, 3]))) # -> False
+    print(toil.eval(("less", [2, 2]))) # -> False
+    print(toil.eval(("less", [2, 3]))) # -> True
+    print(toil.eval(("greater", [2, 2]))) # -> False
+    print(toil.eval(("greater", [3, 2]))) # -> True
+    print(toil.eval(("print", [2]))) # -> 2\nNone
+    print(toil.eval(("print", [2, 3]))) # -> 2 3\nNone
 
-    print(toil.eval(("sub", [3, 2])))
-    # -> 1
-
-    print(toil.eval(("mul", [2, 3])))
-    # -> 6
-
-    print(toil.eval(("div", [6, 3])))
-    # -> 2
-
-    print(toil.eval(("mod", [7, 3])))
-    # -> 1
-
-    print(toil.eval(("equal", [2, 2])))
-    # -> True
-
-    print(toil.eval(("equal", [2, 3])))
-    # -> False
-
-    print(toil.eval(("less", [2, 2])))
-    # -> False
-
-    print(toil.eval(("less", [2, 3])))
-    # -> True
-
-    print(toil.eval(("greater", [2, 2])))
-    # -> False
-
-    print(toil.eval(("greater", [3, 2])))
-    # -> True
-
-    print(toil.eval(("print", [2])))
-    # -> 2\nNone
-
-    print(toil.eval(("print", [2, 3])))
-    # -> 2 3\nNone
-
-    toil.eval(("print", [("equal", [("add", [2, 3]), 5])]))
-    # -> True
+    toil.eval(("print", [("equal", [("add", [2, 3]), 5])])) # -> True
 
     toil.eval(("define", ["myadd", "add"]))
-    print(toil.eval(("myadd", [2, 3])))
-    # -> 5
+    print(toil.eval(("myadd", [2, 3]))) # -> 5
 
     # toil.eval(("not_defined", []))
     # -> Undefined variable
