@@ -1819,11 +1819,9 @@ flowchart LR
 それがたくさんあるだけ。
 
 `lambda args: args[0] + args[1]`って何、という方へ。
-これは`lambda関数`と呼ばれるものです。
-
-普通の関数は`def myadd(a, b): return a + b`のように名前とセットで定義されます。
-`lambda関数`は名前がない関数です。ただ名前がついていないだけ。
-`lambda a, b: a + b`と書けば、これは`myadd`と同じ、`a`と`b`を引数に取って`a + b`を返す関数です。
+これは関数なのですが`def myadd(a, b): return a + b`のように定義される関数と違って名前がありません。
+そのため、無名関数（Anonymous function）と呼ばれます。ラムダ関数などとも呼ばれます。
+ただ名前がついていないだけで、`lambda a, b: a + b`と書けば、これは`myadd`と同じ、`a`と`b`を引数に取って`a + b`を返す関数です。
 なのでこのように引数をくっつけて呼び出してやることもできます。
 
 ```py
@@ -1832,8 +1830,8 @@ flowchart LR
 ```
 
 `lambda a, b: a + b`がカッコに入ってるのは、カッコがないと
-`lambda a, b: a + b (2, 3)`になり、`a + b(2, 3)`を計算して返す関数、という意味になってしまうから、
-というだけの理由です。`lambda`がどうこうという話ではありません。
+`lambda a, b: a + b (2, 3)`となり、`a + b(2, 3)`を計算して返す関数、という意味になってしまうから、というだけの理由です。
+`lambda`がどうこうという話ではありません。
 
 名前を付けてやれば普通の関数と同じように呼び出すこともできます。
 
@@ -1844,7 +1842,7 @@ flowchart LR
 ```
 
 まったく同じではないんですけど。
-高野って名前を付けてやっても、エラーが出たときのコールスタック表示には名前がでてこないとか。
+こうやって名前を付けてやっても、エラーが出たときのコールスタック表示には名前がでてこないとか。
 1行で書けて好きなんですけど、Pythonではおすすめされてないんですよね。
 
 `lambda args: args[0] + args[1]`についてはもうすこし説明が必要ですね。
@@ -1896,10 +1894,8 @@ flowchart LR
                  assert False, f"Unexpected expression @ eval(): {expr}"```
 ```
 
-ほかのどの`case`にも該当しなくて、とにかく要素がふたつであればきっと関数呼び出しに違いないと
-判断して`_op()`に処理を任せます。
-
-`_op()`では
+関数呼び出しの形はこれまでと同じく`(<関数名>, [<式>, <式>, <式>, ...])`です。
+ほかのどの`case`にも該当しなくて、とにかく要素がふたつであればきっと関数呼び出しに違いないと判断して`_op()`に処理を任せます。
 
 ``` diff py
      def _if(self, cond_expr, then_expr, else_expr, env):
@@ -1985,75 +1981,229 @@ for arg in args_expr: result.append(self.eval(arg, env))
 ソース：https://github.com/koba925/toil-book/blob/0107_builtin_func/toil.py
 差分：https://github.com/koba925/toil-book/compare/0106_scope_assign...0107_builtin_func
 
-### ユーザ定義関数 0108_user_func
+### ユーザ定義関数
 
-関数呼び出しというとなんかすごいことをしてそうだなと思ってる方もいるかもしれませんが
+Toilでは、関数の基礎を無名関数に置き、名前を付けるには変数を使います。
+無名関数について前節の説明をさらっと復習します。
 
-あたらしいスコープを作る
-仮引数に指定された名前の変数を、実引数の値で定義する
-関数の本体を評価する
+* `lambda a, b: a + b`は`a`と`b`を引数に取って`a + b`を返す関数
+*  `(lambda a, b: a + b) (2, 3)`のように、引数を渡して実行することができる（結果は5）
+* `myadd = lambda a, b: a + b`と変数に割り当てると`myadd(2, 3)`と呼び出せる
 
-これだけです。
+根っこは無名関数ですが`myadd(2, 3)`のように呼び出せるのでプログラムの書き方としては変わりありません。
 
-コード見た方がよくわかるでしょう。
+Toilでは無名関数を`("func", [<仮引数の配列>, <本体>])`という形で書くことにします。
+`<本体>`は式ですが`<仮引数の配列>`はただ仮引数の名前が含まれた配列であることに注意してください。
+`a`と`b`ふたつの引数を取ってその和を返す関数、Pythonで言えば`lambda a, b: a + b`となる関数は
+`("func", [["a", "b"], ("add", ["a", "b"])])`です。
 
+`("func", [<仮引数の配列>, <本体>])`を評価したときの「値」はそのまま`("func", [<仮引数の配列>, <本体>])`とします。
+`None`を評価した「値」が`None`であるのと同じようなものです。
 
-あたらしいスコープを作ったとき、外側の環境の変数も見えるのでした。
+```diff py
+ class Evaluator:
+     def eval(self, expr, env):
+         match expr:
+             case None | bool() | int(): return expr
++            case ("func", [params, body_expr]):
++                return expr
+             case str(name): return env.val(name)
+             ...
+```
+
+ユーザ定義関数の呼び出しは、組み込み関数の呼び出しと同じ形（`(<関数名>, [<式>, <式>, <式>, ...])`）です。
+`(lambda a, b: a + b) (2, 3)`に相当するものは`(("func", [["a", "b"], ("add", ["a", "b"])]), [2, 3])`となります。
+だいぶ見づらくなってきましたが・・・
+
+そのため`eval()`ではユーザ定義関数と組み込み関数を区別せずに`_op()`を呼び出します。
+
+`_op()`ではまず`op_expr`と`args_expr`を評価するところまでは同じですが、
+そのあと`op_val`の値が何なのかによって処理を変える必要があります。
+
+```diff py
+     def _op(self, op_expr, args_expr, env):
+         op_val = self.eval(op_expr, env)
+         args_val = [self.eval(arg, env) for arg in args_expr]
+-        return op_val(args_val)
++        match op_val:
++            case f if callable(f): return f(args_val)
+```
+
+`case f if callable(f):`は新しいパターンです。
+`case f`は`op_val`がなんでもマッチして、`f`には`op_val`が入ります。
+新しいのは`if callable(f)`の部分で、`callable(f)`が真の時だけこの`case`がマッチします。
+なんとなく読んだ感じでわかるかなと思います。
+`callable(f)`は`f`が関数のように呼び出せるものなら真、そうでなければ偽です。
+`op_val`が組み込み関数であればその値は`lambda args: ...`のような関数ですので真になり、この`case`がマッチします。
+マッチしたら`return f(args_val)`を実行します。
+
+`op_val`が`("func", [<仮引数の配列>, <本体>])`という形であれば、これはPythonにとってはただのタプルですので
+`callable`ではありませんのでこの`case`にはマッチせず、次の`case`に進みます。
+
+```diff py
++            case ("func", [params, body_expr]):
++                new_env = Environment(env)
++                for param, arg in zip(params, args_val):
++                    new_env.define(param, arg)
++                return self.eval(body_expr, new_env)
+
+```
+
+ユーザ定義関数（`("func", [<仮引数の配列>, <本体>])`）は`case ("func", [params, body_expr]):`にマッチし、
+`params`には`<仮引数の配列>`が、`body_expr`には`<本体>`が入って続くコードを実行します。
+
+ここでやっていることは以下の三つです。
+これがユーザ定義関数の実行のキモ。
+
+1. 関数のローカル変数のために新しいスコープを作る（`new_env = Environment(env)`）
+2. 仮引数に指定された名前の変数を、実引数の値で定義する
+3. 関数の本体を評価する（`self.eval(body_expr, new_env)`）
+
+`(("func", [["a", "b"], ("add", ["a", "b"])]), [2, 3])`でやってみましょう。
+`params`は`["a", "b"]`、`body_expr`は`("add", ["a", "b"])`、`args_val`は`[2, 3]`になっています。
+
+ステップ1でローカル変数用のスコープを作ったら、次にステップ2の引数の処理ですがその前に。
+
+`for param, arg in zip(params, args_val):`はふたつの配列から一つずつ取ってきては処理するときのイディオムのようなものです[^idiomatic-zip]。
+`zip(params, args_val)`は`params`の要素と`args_val`の要素を一組ずつペアにしたタプルの配列を作ります。
+`params`が`["a", "b"]`、`args_val`が`[2, 3]`なので`zip(params, args_val)`は`[("a", 2), ("b", 3)]`になります。
+`"a"`が`2`で`"b"`が`3`、と読めるでしょう。
+さきほどの`for`は`for param, arg in [("a", 2), ("b", 3)]`ということですね。
+繰り返しの1周目ではまず配列の先頭の要素`("a", 2)`を`params, arg`に割り当てます。
+`param`が`"a"`、`arg`が`2`になりますね。
+その状態で`for`の本体（`new_env.define(param, arg)`）を実行します。
+2周目では`params`が`"b"`、`arg`が`3`になって以下同様。
+
+[^idiomatic-zip]: よく使われるイディオムなんですが弱点がありまして、配列の長さが違っていると、短いほうが終わったところで`for`も終わってしまいます。ということはつまり、Toilでは仮引数と実引数の数が違っていると、長いほうは余ってしまうのです。その後どうなるかは神のみぞ知るです。まじめな言語を作るときはマネしないでちゃんと考慮しましょう。前節の注にも関連しますが、チェックしてエラーにするだけが対応方法ではありませんよ。
+
+`param`が`"a"`、`arg`が`2`の状態で`new_env.define(param, arg)`を実行すると、名前が`"a"`で値が`2`の変数ができます。
+同様に名前が`"b"`で値が`3`の変数ができます。
+
+その状態でステップ3を行います。
+`body_expr`つまり`("add", ["a", "b"])`を`eval()`するので`5`という値が返される、というわけです。
+
+関数の呼び出しと言ってもそれほど特殊なことをしているわけではなく、スコープと変数と`eval()`の組み合わせにすぎないことがわかったでしょうか？
+
+おっとまだ少し残ってました。
+
+```diff py
++            case _:
++                assert False, f"Invalid operator @ _op(): {op_val}"
+```
+
+組み込み関数でもなく、ユーザ定義の関数の形もしていなければエラーにします。
+
+実行例行きましょう！
+
+```py
+    print(toil.eval(("func", [["a", "b"], ("add", ["a", "b"])])))
+    # -> ('func', [['a', 'b'], ('add', ['a', 'b'])])
+```
+
+`("func", [["a", "b"], ("add", ["a", "b"])])`を評価した値は`("func", [["a", "b"], ("add", ["a", "b"])])`です。
+
+```py
+    toil.eval(("define", ["myadd", ("func", [["a", "b"], ("add", ["a", "b"])])]))
+    print(toil.eval(("myadd", [2, 3])))
+    # -> 5
+```
+
+さっき解説したやつですね。
+
+```py
+    print(toil.eval(("myadd", [("myadd", [2, 3]), ("add", [4, 5])])))
+    # -> 14
+```
+
+`args_val = [self.eval(arg, env) for arg in args_expr]`のように、関数の引数はまず評価されるので、
+関数の引数に関数呼び出しを書いてもちゃんと処理してくれます。
+
+```py
+    print(toil.eval((
+        ("func", [["a", "b"], ("add", ["a", "b"])]),
+        [2, 3]
+    )))
+    # -> 5
+```
+
+これは`(lambda a, b: a + b) (2, 3)`的な書き方をしたものです。
+無名関数に名前を付けず、作ってその場で呼び出すのは、JavaScript界隈ではIIFE[^iife]と呼ばれ、一時は必須テクニックでした。
+
+[^iife]: Immediately Invoked Function Expression（すぐに呼び出される関数式）。スコープを作るのに使われていました。今は`let`や`const`のおかげで（それほど）使わなくてもよくなっています。
+
+```py
+    print(toil.eval(("seq", [
+        ("define", ["twice", ("func", [["f", "x"], ("f", [("f", ["x"])])])]),
+        ("define", ["double", ("func", [["x"], ("mul", ["x", 2])])]),
+        ("twice", ["double", 3])
+    ])))
+    # -> 12
+```
+
+Toilの関数は「ファーストクラス」なので、関数の引数にすることもできます。
+
+```py
+    # toil.eval(("not_defined", []))
+    # -> Undefined variable
+    # toil.eval((2, [3, 4]))
+    # -> Invalid operator
+```
+
+エラーの例。
+
+次はちょっとややこしい例です。
+あたらしいスコープを作ったとき、外側の環境の変数も見えているというのを覚えていますか？
 だから関数の中からも外側の変数が見えています。
-（`("func", [[], "a"])` は引数なしでただ変数`a`の値を返すだけの関数です）
 
+そのため、以下のコードは2を返します。
+`("func", [[], "a"])` は引数なしでただ変数`a`の値を返すだけの関数です。
+関数の外で定義された`"a"`が見えています。
+
+```py
     print(toil.eval(("seq", [
         ("define", ["a", 2]),
         ("define", ["f", ("func", [[], "a"])]),
         ("f", [])
     ])))
     # -> 2
-
-ではこの実行結果は何になるでしょう？
-
-
-    print(toil.eval(("seq", [
-        ("define", ["a", 2]),
-        ("define", ["f", ("func", [[], "a"])]),
-        ("define", ["g", ("func", [[], ("seq", [
-            ("define", ["a", 3]),
-            ("f", [])
-        ])])]),
-        ("g", [])
-    ])))
-
-これは3になります。
-なぜだかわかりますか？
-
-さらに細かく分割して見てみましょう。
-
-    print(toil.eval(("seq", [
-        ("define", ["a", 2]),
-        ("define", ["f", ("func", [[], "a"])]),
-        ("f", [])
-    ])))
-    # -> 2
-
-これはさっきと同じコードです。
-当然2になりますね。
+```
 
 このあとこういうコードを実行したとします。
 
+```py
     print(toil.eval(("scope", [("seq", [
         ("define", ["a", 3]),
         ("f", [])
     ])])))
     # -> 3
+```
 
-・・・
+今度は同じ`("f", [])`を実行したのに値が3になります。
+なぜでしょうか？
+このとき環境はこうなっていて、現在のスコープ（g()のスコープ）で`"a"`が見つかるので3を返します。
 
-ここではエッセンスだけ取り出したとても短いコードを見ているので
-そんなに大変には思えないかもしれません。
+```mermaid
+flowchart LR
+    Env2["<div style='width: 150px;'><b>現在のスコープ</b><br><b>a: 3</b><br>見つかって値取得</div>"]
+    Env1["<div style='width: 150px;'><b>親のスコープ</b><br>a: 2, b: 3<br>&nbsp;</div>"]
+    Null["<div style='width: 50px;'>None<br>&nbsp;<br>&nbsp;</div>"]
 
-でももし`f`が、3か月前に書いた（またはほかの人が書いた）もっと複雑な関数で、今から`f`を呼び出したいとしたらどうでしょう？`f`を呼び出した時の`a`の値に影響を受ける、ということをちゃんと気にしながら使えるでしょうか？
+    Env2 -- "<div style='width: 60px;'>&nbsp;</div>" --> Env1
+    linkStyle 0 stroke:none, fill:none;
+    Env1 -- "<div style='width: 60px;'>&nbsp;</div>" --- Null
+    linkStyle 1 stroke:none, fill:none;
+```
+
+ここではエッセンスだけ取り出したとても短いコードを見ているのでそんなに大変には思えないかもしれませんが、
+ちょっと変数の値を変えたら自分の知らない関数の動きが変わってしまうと思うとちょっと怖くありませんか？
+もし`f`が、3か月前に書いた（またはほかの人が書いた）もっと複雑な関数で、今から`f`を呼び出したいとしたらどうでしょう？
+`f`を呼び出した時の`a`の値に影響を受ける、ということをちゃんと気にしながら使えるでしょうか？
 
 これは、動的スコープと呼ばれるしくみのせいなのです。
 以下次号！
+
+ソース：https://github.com/koba925/toil-book/blob/0108_user_func/toil.py
+差分：https://github.com/koba925/toil-book/compare/0107_builtin_func...0108_user_func
 
 ### 静的スコープとクロージャ 0109_static_scope
 

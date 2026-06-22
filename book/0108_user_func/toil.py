@@ -131,17 +131,6 @@ if __name__ == "__main__":
     print(toil.eval(("seq", [
         ("define", ["a", 2]),
         ("define", ["f", ("func", [[], "a"])]),
-        ("define", ["g", ("func", [[], ("seq", [
-            ("define", ["a", 3]),
-            ("f", [])
-        ])])]),
-        ("g", [])
-    ])))
-    # -> 3
-
-    print(toil.eval(("seq", [
-        ("define", ["a", 2]),
-        ("define", ["f", ("func", [[], "a"])]),
         ("f", [])
     ])))
     # -> 2
