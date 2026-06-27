@@ -116,35 +116,26 @@ if __name__ == "__main__":
             result = result * n
             n = n - 1
         return result
-    print(factorial_iter(0))
-    # -> 1
-    print(factorial_iter(1))
-    # -> 1
-    print(factorial_iter(4))
-    # -> 24
+    print(factorial_iter(0)) # -> 1
+    print(factorial_iter(1)) # -> 1
+    print(factorial_iter(4)) # -> 24
 
     toil.eval(("define", ["factorial_iter", ("func", [["n"], ("seq", [
-            ("define", ["result", 1]),
-            ("while", [("greater", ["n", 0]), ("seq", [
-                ("assign", ["result", ("mul", ["result", "n"])]),
-                ("assign", ["n", ("sub", ["n", 1])]),
-            ])]),
-            "result"
+        ("define", ["result", 1]),
+        ("while", [("greater", ["n", 0]), ("seq", [
+            ("assign", ["result", ("mul", ["result", "n"])]),
+            ("assign", ["n", ("sub", ["n", 1])]),
+        ])]),
+        "result"
     ])])]))
-    print(toil.eval(("factorial_iter", [0])))
-    # -> 1
-    print(toil.eval(("factorial_iter", [1])))
-    # -> 1
-    print(toil.eval(("factorial_iter", [4])))
-    # -> 24
+    print(toil.eval(("factorial_iter", [0]))) # -> 1
+    print(toil.eval(("factorial_iter", [1]))) # -> 1
+    print(toil.eval(("factorial_iter", [4]))) # -> 24
 
     factorial_rec = lambda n: 1 if n == 0 else n * factorial_rec(n - 1)
-    print(factorial_rec(0))
-    # -> 1
-    print(factorial_rec(1))
-    # -> 1
-    print(factorial_rec(4))
-    # -> 24
+    print(factorial_rec(0)) # -> 1
+    print(factorial_rec(1)) # -> 1
+    print(factorial_rec(4)) # -> 24
 
     toil.eval(("define", ["factorial_rec", ("func", [["n"],
         ("if", [("equal", ["n", 0]),
@@ -152,12 +143,9 @@ if __name__ == "__main__":
             ("mul", ["n", ("factorial_rec", [("sub", ["n", 1])])])
         ])
     ])]))
-    print(toil.eval(("factorial_rec", [0])))
-    # -> 1
-    print(toil.eval(("factorial_rec", [1])))
-    # -> 1
-    print(toil.eval(("factorial_rec", [4])))
-    # -> 24
+    print(toil.eval(("factorial_rec", [0]))) # -> 1
+    print(toil.eval(("factorial_rec", [1]))) # -> 1
+    print(toil.eval(("factorial_rec", [4]))) # -> 24
 
     print("Fibonacci:")
 
@@ -167,12 +155,9 @@ if __name__ == "__main__":
             tmp = b; b = a + b; a = tmp
             n = n - 1
         return a
-    print(fib_iter(0))
-    # -> 0
-    print(fib_iter(1))
-    # -> 1
-    print(fib_iter(6))
-    # -> 8
+    print(fib_iter(0)) # -> 0
+    print(fib_iter(1)) # -> 1
+    print(fib_iter(6)) # -> 8
 
     toil.eval(("define", ["fib_iter", ("func", [["n"], ("seq", [
         ("define", ["a", 0]),
@@ -185,20 +170,17 @@ if __name__ == "__main__":
         ])]),
         "a"
     ])])]))
-    print(toil.eval(("fib_iter", [0])))
-    # -> 0
-    print(toil.eval(("fib_iter", [1])))
-    # -> 1
-    print(toil.eval(("fib_iter", [6])))
-    # -> 8
+    print(toil.eval(("fib_iter", [0]))) # -> 0
+    print(toil.eval(("fib_iter", [1]))) # -> 1
+    print(toil.eval(("fib_iter", [6]))) # -> 8
 
-    fib_rec = lambda n: 0 if n == 0 else 1 if n == 1 else fib_rec(n - 1) + fib_rec(n - 2)
-    print(fib_rec(0))
-    # -> 0
-    print(fib_rec(1))
-    # -> 1
-    print(fib_rec(6))
-    # -> 8
+    def fib_rec(n):
+        if n == 0: return 0
+        elif n == 1: return 1
+        else: return fib_rec(n - 1) + fib_rec(n - 2)
+    print(fib_rec(0)) # -> 0
+    print(fib_rec(1)) # -> 1
+    print(fib_rec(6)) # -> 8
 
     toil.eval(("define", ["fib_rec", ("func", [["n"],
         ("if", [("equal", ["n", 0]), 0,
@@ -208,20 +190,16 @@ if __name__ == "__main__":
             ("fib_rec", [("sub", ["n", 2])])
         ])])])
     ])]))
-    print(toil.eval(("fib_rec", [0])))
-    # -> 0
-    print(toil.eval(("fib_rec", [1])))
-    # -> 1
-    print(toil.eval(("fib_rec", [6])))
-    # -> 8
+    print(toil.eval(("fib_rec", [0]))) # -> 0
+    print(toil.eval(("fib_rec", [1]))) # -> 1
+    print(toil.eval(("fib_rec", [6]))) # -> 8
 
     print("GCD:")
 
     def gcd_iter(a, b):
         while b > 0: tmp = b; b = a % b; a = tmp
         return a
-    print(gcd_iter(12, 18))
-    # -> 6
+    print(gcd_iter(12, 18)) # -> 6
 
     toil.eval(("define", ["gcd_iter", ("func", [["a", "b"],
         ("while", [("greater", ["b", 0]), ("seq", [
@@ -230,12 +208,10 @@ if __name__ == "__main__":
             ("assign", ["a", "tmp"])
         ])])
     ])]))
-    print(toil.eval(("gcd_iter", [12, 18])))
-    # -> 6
+    print(toil.eval(("gcd_iter", [12, 18]))) # -> 6
 
     gcd_rec = lambda a, b: a if b == 0 else gcd_rec(b, a % b)
-    print(gcd_rec(12, 18))
-    # -> 6
+    print(gcd_rec(12, 18)) # -> 6
 
     toil.eval(("define", ["gcd_rec", ("func", [["a", "b"],
         ("if", [("equal", ["b", 0]),
@@ -243,21 +219,16 @@ if __name__ == "__main__":
             ("gcd_rec", ["b", ("mod", ["a", "b"])])
         ])
     ])]))
-    print(toil.eval(("gcd_rec", [12, 18])))
-    # -> 6
+    print(toil.eval(("gcd_rec", [12, 18]))) # -> 6
 
     print("Even/Odd (Mutual Recursion):")
 
     even = lambda n: True if n == 0 else odd(n - 1)
     odd = lambda n: False if n == 0 else even(n - 1)
-    print(even(2))
-    # -> True
-    print(even(3))
-    # -> False
-    print(odd(2))
-    # -> False
-    print(odd(3))
-    # -> True
+    print(even(2)) # -> True
+    print(even(3)) # -> False
+    print(odd(2)) # -> False
+    print(odd(3)) # -> True
 
     toil.eval(("define", ["even", ("func", [["n"],
         ("if", [("equal", ["n", 0]), True, ("odd", [("sub", ["n", 1])])])
@@ -265,52 +236,24 @@ if __name__ == "__main__":
     toil.eval(("define", ["odd", ("func", [["n"],
         ("if", [("equal", ["n", 0]), False, ("even", [("sub", ["n", 1])])])
     ])]))
-    print(toil.eval(("even", [2])))
-    # -> True
-    print(toil.eval(("even", [3])))
-    # -> False
-    print(toil.eval(("odd", [2])))
-    # -> False
-    print(toil.eval(("odd", [3])))
-    # -> True
-
-    print("Counter (Closure):")
-
-    def make_counter():
-        count = 0
-        def counter():
-            nonlocal count
-            count = count + 1
-            return count
-        return counter
-    c1 = make_counter()
-    c2 = make_counter()
-    print(c1())
-    # -> 1
-    print(c1())
-    # -> 2
-    print(c2())
-    # -> 1
-    print(c2())
-    # -> 2
-
-    toil.eval(("define", ["make_counter", ("func", [[], ("seq", [
-        ("define", ["count", 0]),
-        ("func", [[], ("assign", ["count", ("add", ["count", 1])])])
-    ])])]))
-    toil.eval(("define", ["c1", ("make_counter", [])]))
-    toil.eval(("define", ["c2", ("make_counter", [])]))
-    print(toil.eval(("c1", [])))
-    # -> 1
-    print(toil.eval(("c1", [])))
-    # -> 2
-    print(toil.eval(("c2", [])))
-    # -> 1
-    print(toil.eval(("c2", [])))
-    # -> 2
+    print(toil.eval(("even", [2]))) # -> True
+    print(toil.eval(("even", [3]))) # -> False
+    print(toil.eval(("odd", [2]))) # -> False
+    print(toil.eval(("odd", [3]))) # -> True
 
     print("Binary search tree:")
     print("Building tree:")
+
+    class Node:
+        def __init__(self, val, left, right):
+            self.val = val
+            self.left = left
+            self.right = right
+    n1 = Node(2, 3, 4)
+    print(n1.val)
+    print(n1.left)
+    print(n1.right)
+    # -> 2\n3\n4
 
     toil.eval(("define", ["node", ("func", [["val", "left", "right"], ("seq", [
         ("func", [["op"],
@@ -358,13 +301,17 @@ if __name__ == "__main__":
             ])
         ])
     ])]))
+    toil.eval(("bst_walk", ["bst"]))
+    # -> 1\n3\n5\n7\n9
+
+    print("Finding values:")
     toil.eval(("define", ["bst_find", ("func", [["bst", "val"],
         ("if", [("equal", ["bst", None]),
             False,
             ("seq", [
                 ("define", ["cur_val", ("bst", [1])]),
                 ("if", [("equal", ["val", "cur_val"]),
-                    "val",
+                    True,
                 ("if", [("less", ["val", "cur_val"]),
                     ("bst_find", [("bst", [2]), "val"]),
                     ("bst_find", [("bst", [3]), "val"])
@@ -372,11 +319,6 @@ if __name__ == "__main__":
             ])
         ])
     ])]))
-
-    toil.eval(("bst_walk",["bst"]))
-    # -> 1\n3\n5\n7\n9
-
-    print("Finding values:")
     toil.eval(("seq", [
         ("define", ["i", 0]),
         ("while", [("less", ["i", 10]), ("seq", [
@@ -384,4 +326,4 @@ if __name__ == "__main__":
             ("assign", ["i", ("add", ["i", 1])])
         ])])
     ]))
-    # -> False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9
+    # -> False\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue

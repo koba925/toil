@@ -23,6 +23,10 @@ class Environment:
         else:
             assert False, f"Undefined variable @ val(): {name}"
 
+    def bind(self, params, args):
+        for param, arg in zip(params, args):
+            self.define(param, arg)
+
 
 class Evaluator:
     def eval(self, expr, env):
@@ -63,8 +67,7 @@ class Evaluator:
             case f if callable(f): return f(args_val)
             case ("func", [params, body_expr]):
                 new_env = Environment(env)
-                for param, arg in zip(params, args_val):
-                    new_env.define(param, arg)
+                new_env.bind(params, args_val)
                 return self.eval(body_expr, new_env)
             case _:
                 assert False, f"Invalid operator @ _op(): {op_val}"
@@ -138,4 +141,15 @@ if __name__ == "__main__":
         ("define", ["a", 3]),
         ("f", [])
     ])])))
+    # -> 3
+
+    print(toil.eval(("seq", [
+        ("define", ["a", 2]),
+        ("define", ["f", ("func", [[], "a"])]),
+        ("define", ["g", ("func", [[], ("seq", [
+            ("define", ["a", 3]),
+            ("f", [])
+        ])])]),
+        ("g", [])
+    ])))
     # -> 3

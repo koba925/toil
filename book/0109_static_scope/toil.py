@@ -153,3 +153,17 @@ if __name__ == "__main__":
     ])))
     # -> 2
 
+    print("Counter (Closure):")
+
+    toil.eval(("define", ["make_counter", ("func", [[], ("seq", [
+        ("define", ["count", 0]),
+        ("func", [[], ("assign", ["count", ("add", ["count", 1])])])
+    ])])]))
+
+    toil.eval(("define", ["c1", ("make_counter", [])]))
+    toil.eval(("define", ["c2", ("make_counter", [])]))
+
+    print(toil.eval(("c1", []))) # -> 1
+    print(toil.eval(("c1", []))) # -> 2
+    print(toil.eval(("c2", []))) # -> 1
+    print(toil.eval(("c2", []))) # -> 2

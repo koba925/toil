@@ -1,6 +1,6 @@
 --- ./0106_scope_assign/toil.py	2026-05-30 18:28:59.179236056 +0900
-+++ ./0107_builtin_func/toil.py	2026-05-30 22:22:29.386522144 +0900
-@@ -21,92 +21,123 @@
++++ ./0107_builtin_func/toil.py	2026-06-21 12:08:49.715170804 +0900
+@@ -21,92 +21,96 @@
          elif self._parent:
              return self._parent.val(name)
          else:
@@ -87,13 +87,23 @@
  
 -    # print(toil.eval(("assign", ["b", 2])))
 -    # -> Undefined variable
-+    print(toil.eval(("add", [2, 3])))
-+    # -> 5
++    print(toil.eval(("add", [2, 3]))) # -> 5
++    print(toil.eval(("sub", [3, 2]))) # -> 1
++    print(toil.eval(("mul", [2, 3]))) # -> 6
++    print(toil.eval(("div", [6, 3]))) # -> 2
++    print(toil.eval(("mod", [7, 3]))) # -> 1
++    print(toil.eval(("equal", [2, 2]))) # -> True
++    print(toil.eval(("equal", [2, 3]))) # -> False
++    print(toil.eval(("less", [2, 2]))) # -> False
++    print(toil.eval(("less", [2, 3]))) # -> True
++    print(toil.eval(("greater", [2, 2]))) # -> False
++    print(toil.eval(("greater", [3, 2]))) # -> True
++    print(toil.eval(("print", [2]))) # -> 2\nNone
++    print(toil.eval(("print", [2, 3]))) # -> 2 3\nNone
  
 -    print(toil.eval(("scope", ["a"])))
 -    # -> 3
-+    print(toil.eval(("sub", [3, 2])))
-+    # -> 1
++    toil.eval(("print", [("equal", [("add", [2, 3]), 5])])) # -> True
  
 -    toil.eval(("scope", [("seq", [
 -        ("define", ["a", 4]),
@@ -117,46 +127,10 @@
 -        ("define", ["b", 2]),
 -        ("print", ["b"])
 -    ])]))
-+    print(toil.eval(("mul", [2, 3])))
-+    # -> 6
-+
-+    print(toil.eval(("div", [6, 3])))
-     # -> 2
+-    # -> 2
++    toil.eval(("define", ["myadd", "add"]))
++    print(toil.eval(("myadd", [2, 3]))) # -> 5
  
 -    # print(toil.eval("b"))
-+    print(toil.eval(("mod", [7, 3])))
-+    # -> 1
-+
-+    print(toil.eval(("equal", [2, 2])))
-+    # -> True
-+
-+    print(toil.eval(("equal", [2, 3])))
-+    # -> False
-+
-+    print(toil.eval(("less", [2, 2])))
-+    # -> False
-+
-+    print(toil.eval(("less", [2, 3])))
-+    # -> True
-+
-+    print(toil.eval(("greater", [2, 2])))
-+    # -> False
-+
-+    print(toil.eval(("greater", [3, 2])))
-+    # -> True
-+
-+    print(toil.eval(("print", [2])))
-+    # -> 2\nNone
-+
-+    print(toil.eval(("print", [2, 3])))
-+    # -> 2 3\nNone
-+
-+    toil.eval(("print", [("equal", [("add", [2, 3]), 5])]))
-+    # -> True
-+
-+    toil.eval(("define", ["myadd", "add"]))
-+    print(toil.eval(("myadd", [2, 3])))
-+    # -> 5
-+
 +    # toil.eval(("not_defined", []))
      # -> Undefined variable

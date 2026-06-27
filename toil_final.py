@@ -1786,3 +1786,7 @@ if __name__ == "__main__":
         end;
         fib(6)
     """)) # -> 8
+
+    # Quote
+    print(toil.run(r""" a := 3; b := quote 2 + !a end; b """)) # -> (add, [2, 3])
+

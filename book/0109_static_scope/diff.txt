@@ -1,10 +1,6 @@
---- ./0108_user_func/toil.py	2026-06-14 08:10:50.875913755 +0900
-+++ ./0109_static_scope/toil.py	2026-06-14 08:10:50.876201219 +0900
-@@ -6,147 +6,150 @@
-     def define(self, name, val):
-         self._vars[name] = val
-         return val
- 
+--- ./0108_user_func/toil.py	2026-06-25 06:10:23.247145845 +0900
++++ ./0109_static_scope/toil.py	2026-06-26 07:06:02.732697776 +0900
+@@ -10,146 +10,160 @@
      def assign(self, name, val):
          if name in self._vars:
              self._vars[name] = val
@@ -21,10 +17,11 @@
          else:
              assert False, f"Undefined variable @ val(): {name}"
  
-+    def bind(self, params, args):
-+        for param, arg in zip(params, args):
-+            self.define(param, arg)
+     def bind(self, params, args):
+         for param, arg in zip(params, args):
+             self.define(param, arg)
  
+-
  class Evaluator:
      def eval(self, expr, env):
          match expr:
@@ -65,11 +62,9 @@
              case f if callable(f): return f(args_val)
 -            case ("func", [params, body_expr]):
 -                new_env = Environment(env)
--                for param, arg in zip(params, args_val):
--                    new_env.define(param, arg)
 +            case ("closure", [params, body_expr, closure_env]):
 +                new_env = Environment(closure_env)
-+                new_env.bind(params, args_val)
+                 new_env.bind(params, args_val)
                  return self.eval(body_expr, new_env)
              case _:
                  assert False, f"Invalid operator @ _op(): {op_val}"
@@ -137,17 +132,6 @@
      print(toil.eval(("seq", [
          ("define", ["a", 2]),
          ("define", ["f", ("func", [[], "a"])]),
--        ("define", ["g", ("func", [[], ("seq", [
--            ("define", ["a", 3]),
--            ("f", [])
--        ])])]),
--        ("g", [])
--    ])))
--    # -> 3
--
--    print(toil.eval(("seq", [
--        ("define", ["a", 2]),
--        ("define", ["f", ("func", [[], "a"])]),
          ("f", [])
      ])))
      # -> 2
@@ -157,15 +141,30 @@
      ])])))
 -    # -> 3
 +    # -> 2
-+
-+    print(toil.eval(("seq", [
-+        ("define", ["a", 2]),
-+        ("define", ["f", ("func", [[], "a"])]),
-+        ("define", ["g", ("func", [[], ("seq", [
-+            ("define", ["a", 3]),
-+            ("f", [])
-+        ])])]),
-+        ("g", [])
-+    ])))
+ 
+     print(toil.eval(("seq", [
+         ("define", ["a", 2]),
+         ("define", ["f", ("func", [[], "a"])]),
+         ("define", ["g", ("func", [[], ("seq", [
+             ("define", ["a", 3]),
+             ("f", [])
+         ])])]),
+         ("g", [])
+     ])))
+-    # -> 3
 +    # -> 2
 +
++    print("Counter (Closure):")
++
++    toil.eval(("define", ["make_counter", ("func", [[], ("seq", [
++        ("define", ["count", 0]),
++        ("func", [[], ("assign", ["count", ("add", ["count", 1])])])
++    ])])]))
++
++    toil.eval(("define", ["c1", ("make_counter", [])]))
++    toil.eval(("define", ["c2", ("make_counter", [])]))
++
++    print(toil.eval(("c1", []))) # -> 1
++    print(toil.eval(("c1", []))) # -> 2
++    print(toil.eval(("c2", []))) # -> 1
++    print(toil.eval(("c2", []))) # -> 2
