@@ -73,40 +73,32 @@ if __name__ == "__main__":
     print("Scope and assignment:")
 
     toil.eval(("define", ["a", 2]))
-    print(toil.eval(("assign", ["a", 3])))
-    # -> 3
-    print(toil.eval("a"))
-    # -> 3
+    print(toil.eval(("assign", ["a", 3]))) # -> 3
+    print(toil.eval("a")) # -> 3
 
     # print(toil.eval(("assign", ["b", 2])))
     # -> Undefined variable
 
-    print(toil.eval(("scope", ["a"])))
-    # -> 3
+    print(toil.eval(("scope", ["a"]))) # -> 3
 
     toil.eval(("scope", [("seq", [
         ("define", ["a", 4]),
         ("print", ["a"])
-    ])]))
-    # -> 4
+    ])])) # -> 4
 
-    print(toil.eval("a"))
-    # -> 3
+    print(toil.eval("a")) # -> 3
 
     toil.eval(("scope", [("seq", [
         ("assign", ["a", 4]),
         ("print", ["a"])
-    ])]))
-    # -> 4
+    ])])) # -> 4
 
-    print(toil.eval("a"))
-    # -> 4
+    print(toil.eval("a")) # -> 4
 
     toil.eval(("scope", [("seq", [
         ("define", ["b", 2]),
         ("print", ["b"])
-    ])]))
-    # -> 2
+    ])])) # -> 2
 
-    # print(toil.eval("b"))
-    # -> Undefined variable
+    # print(toil.eval("b")) # -> Undefined variable
+
