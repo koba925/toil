@@ -23,6 +23,7 @@ else
 fi
 
 git push -f origin main
-git push -f --tags origin main
+git push origin --prune 'refs/tags/*'
+
 
 echo "🎉 プッシュが完了しました！ URL: https://github.com/koba925/toil-book"
