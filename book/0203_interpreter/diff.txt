@@ -1,0 +1,71 @@
+--- ./0202_parse_numbers/toil.py	2026-06-14 08:10:50.877036192 +0900
++++ ./0203_interpreter/toil.py	2026-06-14 08:10:50.877226069 +0900
+@@ -149,47 +149,68 @@
+ 
+     def _builtins(self):
+         self._env.define("add", lambda args: args[0] + args[1])
+         self._env.define("sub", lambda args: args[0] - args[1])
+         self._env.define("mul", lambda args: args[0] * args[1])
+         self._env.define("div", lambda args: args[0] // args[1])
+         self._env.define("mod", lambda args: args[0] % args[1])
+         self._env.define("equal", lambda args: args[0] == args[1])
+         self._env.define("less", lambda args: args[0] < args[1])
+         self._env.define("greater", lambda args: args[0] > args[1])
+         self._env.define("print", lambda args: print(*args))
+ 
+         self._env = Environment(self._env)
+ 
+     def scan(self, src):
+         return Scanner(src).tokenize()
+ 
+     def parse(self, tokens):
+         return Parser(tokens).parse()
+ 
++    def ast(self, src):
++        return self.parse(self.scan(src))
++
+     def eval(self, expr):
+         return Evaluator().eval(expr, self._env)
+ 
++    def walk(self, src):
++        return self.eval(self.ast(src))
++
+ 
+ if __name__ == "__main__":
+ 
+     toil = Interpreter()
+ 
+     # Example
+ 
+     print("Scan numbers:")
+ 
+     print(toil.scan(r""""""))  # -> ['$EOF']
+     print(toil.scan(r"""2"""))  # -> [2, '$EOF']
+     print(toil.scan(r"""02"""))  # -> [2, '$EOF']
+     print(toil.scan(r"""23"""))  # -> [23, '$EOF']
+ 
+     # print(toil.scan(r"""$"""))  # -> Invalid character
+     # print(toil.scan(r"""2$"""))  # -> Invalid character
+ 
+     print("Parse numbers:")
+ 
+     print(toil.parse([2, "$EOF"])) # -> 2
+     print(toil.parse([23, "$EOF"])) # -> 23
+ 
+     # print(toil.parse([2, 34, "$EOF"])) # -> Extra token
+     # print(toil.parse(['$EOF'])) # -> Invalid token
++
++    print("AST:")
++
++    print(toil.ast(r"""2"""))  # -> 2
++    print(toil.ast(r"""23"""))  # -> 23
++
++    print("Interpret numbers:")
++
++    print(toil.walk(r"""2"""))  # -> 2
++    print(toil.walk(r"""02"""))  # -> 2
++    print(toil.walk(r"""23"""))  # -> 23
++
++    # print(toil.walk(r"""$"""))  # -> Invalid character
++    # print(toil.walk(r"""2$"""))  # -> Invalid character
++    # print(toil.walk(r""""""))  # -> Invalid token

@@ -1,6 +1,6 @@
---- ./0106_scope_assign/toil.py	2026-05-30 18:28:59.179236056 +0900
+--- ./0106_scope_assign/toil.py	2026-06-28 20:25:59.501638186 +0900
 +++ ./0107_builtin_func/toil.py	2026-06-21 12:08:49.715170804 +0900
-@@ -21,92 +21,96 @@
+@@ -21,84 +21,96 @@
          elif self._parent:
              return self._parent.val(name)
          else:
@@ -75,18 +75,30 @@
      # Example
  
 -    print("Scope and assignment:")
+-
+-    toil.eval(("define", ["a", 2]))
+-    print(toil.eval(("assign", ["a", 3]))) # -> 3
+-    print(toil.eval("a")) # -> 3
+-
+-    # print(toil.eval(("assign", ["b", 2])))
+-    # -> Undefined variable
+-
+-    print(toil.eval(("scope", ["a"]))) # -> 3
+-
+-    toil.eval(("scope", [("seq", [
+-        ("define", ["a", 4]),
+-        ("print", ["a"])
+-    ])])) # -> 4
 +    print("Built-in functions:")
  
--    toil.eval(("define", ["a", 2]))
--    print(toil.eval(("assign", ["a", 3])))
--    # -> 3
--    print(toil.eval("a"))
--    # -> 3
+-    print(toil.eval("a")) # -> 3
 +    print(toil.eval("add"))
 +    # -> <function Interpreter._builtins.<locals>.<lambda> at ....>
  
--    # print(toil.eval(("assign", ["b", 2])))
--    # -> Undefined variable
+-    toil.eval(("scope", [("seq", [
+-        ("assign", ["a", 4]),
+-        ("print", ["a"])
+-    ])])) # -> 4
 +    print(toil.eval(("add", [2, 3]))) # -> 5
 +    print(toil.eval(("sub", [3, 2]))) # -> 1
 +    print(toil.eval(("mul", [2, 3]))) # -> 6
@@ -101,36 +113,17 @@
 +    print(toil.eval(("print", [2]))) # -> 2\nNone
 +    print(toil.eval(("print", [2, 3]))) # -> 2 3\nNone
  
--    print(toil.eval(("scope", ["a"])))
--    # -> 3
+-    print(toil.eval("a")) # -> 4
 +    toil.eval(("print", [("equal", [("add", [2, 3]), 5])])) # -> True
  
 -    toil.eval(("scope", [("seq", [
--        ("define", ["a", 4]),
--        ("print", ["a"])
--    ])]))
--    # -> 4
--
--    print(toil.eval("a"))
--    # -> 3
--
--    toil.eval(("scope", [("seq", [
--        ("assign", ["a", 4]),
--        ("print", ["a"])
--    ])]))
--    # -> 4
--
--    print(toil.eval("a"))
--    # -> 4
--
--    toil.eval(("scope", [("seq", [
 -        ("define", ["b", 2]),
 -        ("print", ["b"])
--    ])]))
--    # -> 2
+-    ])])) # -> 2
+-
+-    # print(toil.eval("b")) # -> Undefined variable
 +    toil.eval(("define", ["myadd", "add"]))
 +    print(toil.eval(("myadd", [2, 3]))) # -> 5
  
--    # print(toil.eval("b"))
 +    # toil.eval(("not_defined", []))
-     # -> Undefined variable
++    # -> Undefined variable

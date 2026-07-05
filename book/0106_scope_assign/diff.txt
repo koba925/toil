@@ -1,6 +1,6 @@
 --- ./0105_var/toil.py	2026-05-30 22:24:37.418994487 +0900
-+++ ./0106_scope_assign/toil.py	2026-05-30 18:28:59.179236056 +0900
-@@ -1,71 +1,112 @@
++++ ./0106_scope_assign/toil.py	2026-06-28 20:25:59.501638186 +0900
+@@ -1,71 +1,104 @@
  class Environment:
 -    def __init__(self):
 +    def __init__(self, parent=None):
@@ -76,52 +76,45 @@
      # Example
  
 -    print("Variable:")
--
--    print(toil.eval(("define", ["a", ("add", [2, 3])])))
--    # -> 5
 +    print("Scope and assignment:")
- 
++
 +    toil.eval(("define", ["a", 2]))
-+    print(toil.eval(("assign", ["a", 3])))
-+    # -> 3
-     print(toil.eval("a"))
--    # -> 5
-+    # -> 3
- 
--    print(toil.eval(("if", [("equal", ["a", 5]), 2, 3])))
--    # -> 2
++    print(toil.eval(("assign", ["a", 3]))) # -> 3
++    print(toil.eval("a")) # -> 3
++
 +    # print(toil.eval(("assign", ["b", 2])))
 +    # -> Undefined variable
- 
--    print(toil.eval(("define", ["a", 6])))
--    # -> 6
-+    print(toil.eval(("scope", ["a"])))
-+    # -> 3
++
++    print(toil.eval(("scope", ["a"]))) # -> 3
 +
 +    toil.eval(("scope", [("seq", [
 +        ("define", ["a", 4]),
 +        ("print", ["a"])
-+    ])]))
-+    # -> 4
-+
-+    print(toil.eval("a"))
-+    # -> 3
-+
++    ])])) # -> 4
+ 
+-    print(toil.eval(("define", ["a", ("add", [2, 3])])))
+-    # -> 5
++    print(toil.eval("a")) # -> 3
+ 
+-    print(toil.eval("a"))
+-    # -> 5
 +    toil.eval(("scope", [("seq", [
 +        ("assign", ["a", 4]),
 +        ("print", ["a"])
-+    ])]))
-+    # -> 4
++    ])])) # -> 4
  
-     print(toil.eval("a"))
+-    print(toil.eval(("if", [("equal", ["a", 5]), 2, 3])))
+-    # -> 2
++    print(toil.eval("a")) # -> 4
+ 
+-    print(toil.eval(("define", ["a", 6])))
 -    # -> 6
-+    # -> 4
-+
 +    toil.eval(("scope", [("seq", [
 +        ("define", ["b", 2]),
 +        ("print", ["b"])
-+    ])]))
-+    # -> 2
++    ])])) # -> 2
  
-+    # print(toil.eval("b"))
-+    # -> Undefined variable
+-    print(toil.eval("a"))
+-    # -> 6
++    # print(toil.eval("b")) # -> Undefined variable
+ 

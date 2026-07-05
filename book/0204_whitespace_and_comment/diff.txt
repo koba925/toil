@@ -1,4 +1,4 @@
---- ./0203_real_interpreter/toil.py	2026-06-14 08:10:50.877226069 +0900
+--- ./0203_interpreter/toil.py	2026-06-14 08:10:50.877226069 +0900
 +++ ./0204_whitespace_and_comment/toil.py	2026-06-14 08:10:50.877458976 +0900
 @@ -1,29 +1,36 @@
  class Scanner:
