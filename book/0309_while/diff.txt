@@ -1,6 +1,4 @@
---- ./0308_if/toil.py	2026-06-14 14:27:04.065620034 +0900
-+++ ./0309_while/toil.py	2026-06-14 14:27:05.004602741 +0900
-@@ -299,72 +299,85 @@
+@@ -297,72 +297,85 @@
  
      def compile(self):
          self._expression(self._expr)
@@ -86,7 +84,7 @@
          self._ctrl_stack = []
  
      def execute(self):
-@@ -483,50 +496,53 @@
+@@ -481,50 +494,53 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):

@@ -1,5 +1,3 @@
---- ./0102_pseudo_func/toil.py	2026-05-31 19:07:36.302307565 +0900
-+++ ./0103_sequence/toil.py	2026-05-31 19:09:46.720185399 +0900
 @@ -1,27 +1,30 @@
  class Evaluator:
      def eval(self, expr):

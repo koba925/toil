@@ -1,6 +1,4 @@
---- ./0306_var/toil.py	2026-06-14 14:27:01.984208366 +0900
-+++ ./0307_assignment_scope/toil.py	2026-06-14 14:27:03.226327653 +0900
-@@ -292,93 +292,112 @@
+@@ -290,93 +290,112 @@
                  assert False, f"Invalid operator @ _op(): {op_val}"
  
  
@@ -114,7 +112,7 @@
          self._env.define("print", lambda args: print(*args))
  
          self._env = Environment(self._env)
-@@ -441,54 +460,58 @@
+@@ -439,54 +458,58 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):

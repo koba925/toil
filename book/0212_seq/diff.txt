@@ -1,5 +1,3 @@
---- ./0211_call/toil.py	2026-06-14 08:10:50.879005220 +0900
-+++ ./0212_seq/toil.py	2026-06-14 08:10:50.879178739 +0900
 @@ -12,41 +12,41 @@
      def tokenize(self):
          while True:
@@ -93,7 +91,7 @@
          }, self._call)
  
      def _call(self):
-@@ -257,42 +264,36 @@
+@@ -255,42 +262,36 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()

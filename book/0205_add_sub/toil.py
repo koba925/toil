@@ -61,8 +61,7 @@ class Parser:
         left = self._primary()
         while type(op := self._current_token()) is str and op in ops:
             self._current_and_advance()
-            right = self._primary()
-            left = (ops[op], [left, right])
+            left = (ops[op], [left, self._primary()])
         return left
 
     def _primary(self):

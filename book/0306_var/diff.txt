@@ -1,6 +1,4 @@
---- ./0305_seq/toil.py	2026-06-14 14:26:51.378011323 +0900
-+++ ./0306_var/toil.py	2026-06-14 14:27:01.984208366 +0900
-@@ -288,73 +288,80 @@
+@@ -286,73 +286,80 @@
                  new_env = Environment(closure_env)
                  new_env.bind(params, args_val)
                  return self.eval(body_expr, new_env)
@@ -82,7 +80,7 @@
          return self._stack.pop()
  
  
-@@ -381,41 +388,41 @@
+@@ -379,41 +386,41 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()
@@ -125,7 +123,7 @@
                  exit(0)
              try:
                  expr = toil.ast(src)
-@@ -434,45 +441,54 @@
+@@ -432,45 +439,54 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):

@@ -1,6 +1,4 @@
---- ./0301_stack_machine/toil.py	2026-06-14 14:26:49.652942753 +0900
-+++ ./0302_compiler/toil.py	2026-06-14 14:26:50.507314534 +0900
-@@ -275,40 +275,56 @@
+@@ -273,40 +273,56 @@
              return self.eval(else_expr, env)
  
      def _while(self, cond_expr, body_expr, env):
@@ -57,7 +55,7 @@
  class Interpreter:
      def __init__(self):
          self._env = Environment()
-@@ -325,64 +341,80 @@
+@@ -323,64 +339,80 @@
          self._env.define("greater", lambda args: args[0] > args[1])
          self._env.define("print", lambda args: print(*args))
  

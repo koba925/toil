@@ -1,5 +1,3 @@
---- ./0106_scope_assign/toil.py	2026-06-28 20:25:59.501638186 +0900
-+++ ./0107_builtin_func/toil.py	2026-06-21 12:08:49.715170804 +0900
 @@ -21,84 +21,96 @@
          elif self._parent:
              return self._parent.val(name)

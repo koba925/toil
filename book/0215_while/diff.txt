@@ -1,5 +1,3 @@
---- ./0214_if/toil.py	2026-06-14 08:10:50.879511929 +0900
-+++ ./0215_while/toil.py	2026-06-14 08:10:50.879704501 +0900
 @@ -96,66 +96,75 @@
  
      def _mul_div_mod(self):
@@ -60,23 +58,23 @@
          left = sub_elem()
          while type(op := self._current_token()) is str and op in ops:
              self._current_and_advance()
-             right = sub_elem()
-             left = (ops[op], [left, right])
+             left = (ops[op], [left, sub_elem()])
          return left
  
      def _binary_right(self, ops, sub_elem):
          left = sub_elem()
-         if type(self._current_token()) is str and \
-                 (op := self._current_token()) in ops:
+         if type(op := self._current_token()) is str and op in ops:
              self._current_and_advance()
-             right = self._binary_right(ops, sub_elem)
-             return (ops[op], [left, right])
-         return left
+             return (ops[op], [left, self._binary_right(ops, sub_elem)])
+         else:
+             return left
  
      def _comma_separated_exprs(self, terminator):
          cse = []
          if self._current_token() != terminator:
-@@ -282,44 +291,45 @@
+             cse.append(self._expression())
+             while self._current_token() == ",":
+@@ -280,44 +289,45 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()

@@ -1,5 +1,3 @@
---- ./0107_builtin_func/toil.py	2026-06-21 12:08:49.715170804 +0900
-+++ ./0108_user_func/toil.py	2026-06-25 06:10:23.247145845 +0900
 @@ -6,111 +6,150 @@
      def define(self, name, val):
          self._vars[name] = val

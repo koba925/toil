@@ -1,5 +1,3 @@
---- ./0110_while/toil.py	2026-06-14 08:10:50.876423438 +0900
-+++ ./0111_examples/toil.py	2026-06-27 11:17:47.992966399 +0900
 @@ -91,68 +91,239 @@
          self._env.define("mul", lambda args: args[0] * args[1])
          self._env.define("div", lambda args: args[0] // args[1])

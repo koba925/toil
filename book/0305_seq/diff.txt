@@ -1,6 +1,4 @@
---- ./0304_pseudo_func/toil.py	2026-06-14 14:26:51.318729839 +0900
-+++ ./0305_seq/toil.py	2026-06-14 14:26:51.378011323 +0900
-@@ -288,64 +288,73 @@
+@@ -286,64 +286,73 @@
                  new_env = Environment(closure_env)
                  new_env.bind(params, args_val)
                  return self.eval(body_expr, new_env)
@@ -74,7 +72,7 @@
          return self._stack.pop()
  
  
-@@ -425,57 +434,45 @@
+@@ -423,57 +432,45 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):

@@ -1,6 +1,4 @@
---- ./0309_while/toil.py	2026-06-14 14:27:05.004602741 +0900
-+++ ./0310_builtin_functions/toil.py	2026-06-14 14:27:06.038389255 +0900
-@@ -301,141 +301,133 @@
+@@ -299,141 +299,133 @@
          self._expression(self._expr)
          self._emit("halt")
          return self._code
@@ -155,7 +153,7 @@
          self._env = Environment(self._env)
  
      def scan(self, src):
-@@ -496,53 +488,56 @@
+@@ -494,53 +486,56 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):

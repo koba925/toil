@@ -16,7 +16,7 @@ for curr_dir in "${dirs[@]}"; do
             if [ -f "$prev_dir/toil.py" ] && [ -f "$curr_dir/toil.py" ]; then
                 echo "Generating diff: $prev_dir -> $curr_dir"
                 # diff exits with 1 when differences are found, so we add "|| true" to prevent the script from stopping
-                diff -U 20 "$prev_dir/toil.py" "$curr_dir/toil.py" > "$curr_dir/diff.txt" || true
+                diff -U 20 "$prev_dir/toil.py" "$curr_dir/toil.py" | tail -n +3 > "$curr_dir/diff.txt"
             else
                 echo "Skipping diff: toil.py not found in $prev_dir or $curr_dir"
             fi

@@ -74,8 +74,7 @@ class Parser:
         left = sub_elem()
         while type(op := self._current_token()) is str and op in ops:
             self._current_and_advance()
-            right = sub_elem()
-            left = (ops[op], [left, right])
+            left = (ops[op], [left, sub_elem()])
         return left
 
     def _current_token(self): return self._tokens[self._pos]

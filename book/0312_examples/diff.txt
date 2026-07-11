@@ -1,6 +1,4 @@
---- ./0311_user_function/toil.py	2026-06-14 14:27:06.119978747 +0900
-+++ ./0312_examples/toil.py	2026-06-14 14:27:06.327661090 +0900
-@@ -507,67 +507,214 @@
+@@ -505,67 +505,214 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):

@@ -1,6 +1,4 @@
---- ./0204_whitespace_and_comment/toil.py	2026-06-14 08:10:50.877458976 +0900
-+++ ./0205_add_sub/toil.py	2026-07-06 21:22:12.968803671 +0900
-@@ -3,73 +3,84 @@
+@@ -3,73 +3,83 @@
          self._src = src
          self._start_pos = 0
          self._current_pos = 0
@@ -63,8 +61,7 @@
 +        left = self._primary()
 +        while type(op := self._current_token()) is str and op in ops:
 +            self._current_and_advance()
-+            right = self._primary()
-+            left = (ops[op], [left, right])
++            left = (ops[op], [left, self._primary()])
 +        return left
  
      def _primary(self):
@@ -86,7 +83,7 @@
          self._vars = {}
  
      def define(self, name, val):
-@@ -172,37 +183,40 @@
+@@ -172,37 +182,40 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()

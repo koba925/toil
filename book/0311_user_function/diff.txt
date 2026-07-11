@@ -1,6 +1,4 @@
---- ./0310_builtin_functions/toil.py	2026-06-14 14:27:06.038389255 +0900
-+++ ./0311_user_function/toil.py	2026-06-14 14:27:06.119978747 +0900
-@@ -282,63 +282,68 @@
+@@ -280,63 +280,68 @@
      def _op(self, op_expr, args_expr, env):
          op_val = self.eval(op_expr, env)
          args_val = [self.eval(arg, env) for arg in args_expr]
@@ -70,7 +68,7 @@
          end_jump = self._current_addr()
          self._emit("jump", None)
          self._set_operand(else_jump, self._current_addr())
-@@ -361,73 +366,87 @@
+@@ -359,73 +364,87 @@
          self._expression(op_expr)
          self._emit("call", len(args_expr))
  
@@ -160,7 +158,7 @@
          self._env = Environment(self._env)
  
      def scan(self, src):
-@@ -488,56 +507,67 @@
+@@ -486,56 +505,67 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):

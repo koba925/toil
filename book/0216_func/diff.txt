@@ -1,5 +1,3 @@
---- ./0215_while/toil.py	2026-06-14 08:10:50.879704501 +0900
-+++ ./0216_func/toil.py	2026-06-14 08:10:50.879864915 +0900
 @@ -94,53 +94,62 @@
      def _add_sub(self):
          return self._binary_left({"+": "add", "-": "sub"}, self._mul_div_mod)
@@ -63,7 +61,7 @@
          self._current_and_advance()
          cond_expr = self._expression()
          self._consume("do")
-@@ -291,45 +300,61 @@
+@@ -289,45 +298,61 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()

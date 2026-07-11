@@ -1,6 +1,4 @@
---- ./0307_assignment_scope/toil.py	2026-06-14 14:27:03.226327653 +0900
-+++ ./0308_if/toil.py	2026-06-14 14:27:04.065620034 +0900
-@@ -297,87 +297,110 @@
+@@ -295,87 +295,110 @@
          self._expr = expr
          self._code = []
  
@@ -111,7 +109,7 @@
              f"Invalid control stack state @ execute(): {self._ctrl_stack}"
          assert len(self._stack) == 1, \
              f"Invalid stack state @ execute(): {self._stack}"
-@@ -460,58 +483,50 @@
+@@ -458,58 +481,50 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):

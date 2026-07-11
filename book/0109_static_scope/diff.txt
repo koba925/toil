@@ -1,5 +1,3 @@
---- ./0108_user_func/toil.py	2026-06-25 06:10:23.247145845 +0900
-+++ ./0109_static_scope/toil.py	2026-06-26 07:06:02.732697776 +0900
 @@ -10,146 +10,160 @@
      def assign(self, name, val):
          if name in self._vars:

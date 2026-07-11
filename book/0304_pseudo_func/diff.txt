@@ -1,6 +1,4 @@
---- ./0303_ici/toil.py	2026-06-14 14:26:51.255743263 +0900
-+++ ./0304_pseudo_func/toil.py	2026-06-14 14:26:51.318729839 +0900
-@@ -282,60 +282,84 @@
+@@ -280,60 +280,84 @@
      def _op(self, op_expr, args_expr, env):
          op_val = self.eval(op_expr, env)
          args_val = [self.eval(arg, env) for arg in args_expr]
@@ -87,7 +85,7 @@
          self._env.define("equal", lambda args: args[0] == args[1])
          self._env.define("less", lambda args: args[0] < args[1])
          self._env.define("greater", lambda args: args[0] > args[1])
-@@ -401,42 +425,57 @@
+@@ -399,42 +423,57 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):

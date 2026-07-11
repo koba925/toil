@@ -1,6 +1,4 @@
---- ./0219_real_interpreter/toil.py	2026-06-14 14:26:48.940142753 +0900
-+++ ./0301_stack_machine/toil.py	2026-06-14 14:26:49.652942753 +0900
-@@ -275,86 +275,114 @@
+@@ -273,86 +273,114 @@
              return self.eval(else_expr, env)
  
      def _while(self, cond_expr, body_expr, env):

@@ -143,18 +143,16 @@ class Parser:
         left = sub_elem()
         while type(op := self._current_token()) is str and op in ops:
             self._current_and_advance()
-            right = sub_elem()
-            left = (ops[op], [left, right])
+            left = (ops[op], [left, sub_elem()])
         return left
 
     def _binary_right(self, ops, sub_elem):
         left = sub_elem()
-        if type(self._current_token()) is str and \
-                (op := self._current_token()) in ops:
+        if type(op := self._current_token()) is str and op in ops:
             self._current_and_advance()
-            right = self._binary_right(ops, sub_elem)
-            return (ops[op], [left, right])
-        return left
+            return (ops[op], [left, self._binary_right(ops, sub_elem)])
+        else:
+            return left
 
     def _comma_separated_exprs(self, terminator):
         cse = []

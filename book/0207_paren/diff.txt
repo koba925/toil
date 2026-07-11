@@ -1,5 +1,3 @@
---- ./0206_mul_div_mod/toil.py	2026-06-14 08:10:50.877962061 +0900
-+++ ./0207_paren/toil.py	2026-06-14 08:10:50.878123591 +0900
 @@ -3,41 +3,41 @@
          self._src = src
          self._start_pos = 0
@@ -43,7 +41,7 @@
              return self._src[self._current_pos]
          else:
              return "$EOF"
-@@ -50,51 +50,63 @@
+@@ -50,50 +50,62 @@
  
      def parse(self):
          expr = self._expression()
@@ -78,8 +76,7 @@
          left = sub_elem()
          while type(op := self._current_token()) is str and op in ops:
              self._current_and_advance()
-             right = sub_elem()
-             left = (ops[op], [left, right])
+             left = (ops[op], [left, sub_elem()])
          return left
  
 +    def _consume(self, expected):
@@ -107,7 +104,7 @@
          if name in self._vars:
              self._vars[name] = val
              return val
-@@ -190,38 +202,36 @@
+@@ -189,38 +201,36 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()
