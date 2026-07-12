@@ -287,6 +287,8 @@ if __name__ == "__main__":
     toil.walk(r""" print(2) """)  # -> 2
     toil.walk(r""" print(2, 3) """)  # -> 2 3
 
+    print(toil.ast(r""" foo(2)(3, 4) """)) # -> (('foo', [2]), [3, 4])
+
     # toil.walk(r""" print( """)  # -> Invalid token
     # toil.walk(r""" print(2 """)  # -> Expected )
     # toil.walk(r""" print(2 3) """)  # -> Expected )
