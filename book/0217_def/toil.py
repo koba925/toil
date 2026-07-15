@@ -330,7 +330,7 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Function:")
+    print("Function Definition:")
 
     print(toil.ast(r""" def f do 2 end """))
     # -> ('define', ['f', ('func', [[], 2])])
