@@ -335,8 +335,8 @@ if __name__ == "__main__":
     print(toil.walk(r""" func a, b do a + b end (2, 3) """)) # -> 5
 
     # toil.walk(r""" func a, b a + b end """) # -> Expected do
-    # toil.walk(r""" func a, b do end """) # -> Expected End
-    # toil.walk(r""" func a, b do a + b """) # -> Expected End
+    # toil.walk(r""" func a, b do end """) # -> Expected end
+    # toil.walk(r""" func a, b do a + b """) # -> Expected end
     # toil.walk(r""" func a, do a + b end """) # -> Expected do
     # toil.walk(r""" func , b do a + b end """) # -> Invalid token
 
@@ -355,4 +355,12 @@ if __name__ == "__main__":
 
     print(toil.walk(r"""
         func a do func b do a + b end end (2)(3)
+    """)) # -> 5
+
+    print(toil.walk(r"""
+        f := func a do
+            g := func b do a + b end;
+            g
+        end;
+        f(2)(3)
     """)) # -> 5

@@ -288,6 +288,9 @@ if __name__ == "__main__":
 
     print("Scope:")
 
+    print(toil.ast(r""" a := 2; scope a end """))
+    # -> ('seq', [('define', ['a', 2]), ('scope', ['a'])])
+
     print(toil.walk(r""" a := 2; scope a end """)) # -> 2
     print(toil.walk(r""" a := 2; scope scope a end end """)) # -> 2
 
