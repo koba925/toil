@@ -376,6 +376,7 @@ if __name__ == "__main__":
     # Example
 
     print("Stack machine:")
+
     print(toil.execute([('const', 2), ('halt',)])) # -> 2
     print(toil.execute([('const', None), ('halt',)])) # -> None
     print(toil.execute([('const', True), ('halt',)])) # -> True
