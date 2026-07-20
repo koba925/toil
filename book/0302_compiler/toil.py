@@ -401,6 +401,7 @@ if __name__ == "__main__":
     # Example
 
     print("Stack machine:")
+
     print(toil.execute([('const', 2), ('halt',)])) # -> 2
     print(toil.execute([('const', None), ('halt',)])) # -> None
     print(toil.execute([('const', True), ('halt',)])) # -> True
@@ -411,6 +412,7 @@ if __name__ == "__main__":
     # toil.execute([('not_op',), ('halt',)]) # -> Invalid instruction
 
     print("Compile:")
+
     print_code(toil.code(r""" 2 """))
     # ->   0: ('const', 2)
     # ->   1: ('halt',)

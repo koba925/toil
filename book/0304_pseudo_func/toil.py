@@ -328,18 +328,18 @@ class VM:
             match inst:
                 case ("const", val): self._stack.append(val)
                 case ("print",):
-                    val = print(self._stack.pop()); self._stack.append(None)
+                    print(self._stack.pop()); self._stack.append(None)
                 case ("add",):
-                    r = self._stack.pop(); l = self._stack.pop();
+                    r = self._stack.pop(); l = self._stack.pop()
                     self._stack.append(l + r)
                 case ("mul",):
-                    r = self._stack.pop(); l = self._stack.pop();
+                    r = self._stack.pop(); l = self._stack.pop()
                     self._stack.append(l * r)
                 case ("equal",):
-                    r = self._stack.pop(); l = self._stack.pop();
+                    r = self._stack.pop(); l = self._stack.pop()
                     self._stack.append(l == r)
                 case ("less",):
-                    r = self._stack.pop(); l = self._stack.pop();
+                    r = self._stack.pop(); l = self._stack.pop()
                     self._stack.append(l < r)
                 case _:
                     assert False, f"Invalid instruction @ execute(): {inst}"

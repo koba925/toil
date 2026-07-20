@@ -344,18 +344,18 @@ class VM:
                 case ("def", name): self._env.define(name, self._stack[-1])
                 case ("get", name): self._stack.append(self._env.val(name))
                 case ("print",):
-                    val = print(self._stack.pop()); self._stack.append(None)
+                    print(self._stack.pop()); self._stack.append(None)
                 case ("add",):
-                    r = self._stack.pop(); l = self._stack.pop();
+                    r = self._stack.pop(); l = self._stack.pop()
                     self._stack.append(l + r)
                 case ("mul",):
-                    r = self._stack.pop(); l = self._stack.pop();
+                    r = self._stack.pop(); l = self._stack.pop()
                     self._stack.append(l * r)
                 case ("equal",):
-                    r = self._stack.pop(); l = self._stack.pop();
+                    r = self._stack.pop(); l = self._stack.pop()
                     self._stack.append(l == r)
                 case ("less",):
-                    r = self._stack.pop(); l = self._stack.pop();
+                    r = self._stack.pop(); l = self._stack.pop()
                     self._stack.append(l < r)
                 case _:
                     assert False, f"Invalid instruction @ execute(): {inst}"

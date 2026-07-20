@@ -1,12 +1,12 @@
 @@ -295,87 +295,110 @@
          self._expr = expr
          self._code = []
- 
+
      def compile(self):
          self._expression(self._expr)
          self._emit("halt")
          return self._code
- 
+
      def _expression(self, expr):
          match expr:
              case None | bool() | int(): self._emit("const", expr)
@@ -29,19 +29,19 @@
                  self._expression(right_expr)
                  self._emit(op)
              case _: assert False, f"Unsupported expression @ compile(): {expr}"
- 
+
      def _scope(self, body_expr):
          self._emit("enter_scope")
          self._expression(body_expr)
          self._emit("leave_scope")
- 
+
      def _seq(self, exprs):
          assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
          for expr in exprs[:-1]:
              self._expression(expr)
              self._emit("pop")
          self._expression(exprs[-1])
- 
+
 +    def _if(self, cond_expr, then_expr, else_expr):
 +        self._expression(cond_expr)
 +        else_jump = self._current_addr()
@@ -59,11 +59,11 @@
 +
      def _emit(self, *inst):
          self._code.append(inst)
- 
+
 +    def _current_addr(self):
 +        return len(self._code)
 +
- 
+
  class VM:
      def __init__(self, code, env):
          self._code = code
@@ -71,7 +71,7 @@
          self._ip = 0
          self._stack = []
          self._ctrl_stack = []
- 
+
      def execute(self):
          while (inst := self._code[self._ip]) != ("halt",):
              self._ip += 1
@@ -90,18 +90,18 @@
 +                case ("jump_if_false", addr):
 +                    if not self._stack.pop(): self._ip = addr
                  case ("print",):
-                     val = print(self._stack.pop()); self._stack.append(None)
+                     print(self._stack.pop()); self._stack.append(None)
                  case ("add",):
-                     r = self._stack.pop(); l = self._stack.pop();
+                     r = self._stack.pop(); l = self._stack.pop()
                      self._stack.append(l + r)
                  case ("mul",):
-                     r = self._stack.pop(); l = self._stack.pop();
+                     r = self._stack.pop(); l = self._stack.pop()
                      self._stack.append(l * r)
                  case ("equal",):
-                     r = self._stack.pop(); l = self._stack.pop();
+                     r = self._stack.pop(); l = self._stack.pop()
                      self._stack.append(l == r)
                  case ("less",):
-                     r = self._stack.pop(); l = self._stack.pop();
+                     r = self._stack.pop(); l = self._stack.pop()
                      self._stack.append(l < r)
                  case _:
                      assert False, f"Invalid instruction @ execute(): {inst}"
@@ -111,7 +111,7 @@
              f"Invalid stack state @ execute(): {self._stack}"
 @@ -458,58 +481,50 @@
                  print("Error:", e, sep="\n")
- 
+
      def from_file(walk_or_run, filename):
          with open(filename, "r") as f:
              if walk_or_run == "walk":
@@ -119,7 +119,7 @@
              else:
                  result = toil.run(f.read())
          exit(result if isinstance(result, int) else 255)
- 
+
      match sys.argv:
          case [_]: pass
          case [_, "--repl"]: repl("walk")
@@ -127,9 +127,9 @@
          case [_, "--walk", filename]: from_file("walk", filename)
          case [_, "--run", filename]: from_file("run", filename)
          case _: assert False, f"Invalid command line: {sys.argv}"
- 
+
      # Example
- 
+
 -    print("Assignment and Scope:")
 -
 -    print(toil.ast(r""" a = 3 + 4 """))
@@ -166,7 +166,7 @@
 -    print(toil.run(r""" a := 2; scope a = 3 end """)) # -> 3
 -    print(toil.run(r""" a """)) # -> 3
 +    print("If:")
- 
+
 -    # toil.run(r""" scope d = 3 end """)  # -> Undefined variable
 -    # toil.run(r""" scope c := 2 end; c """) # -> Undefined variable
 \ No newline at end of file
