@@ -359,7 +359,8 @@ class VM:
                     self._stack.append(l < r)
                 case _:
                     assert False, f"Invalid instruction @ execute(): {inst}"
-        assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
+        assert len(self._stack) == 1, \
+            f"Invalid stack state @ execute(): {self._stack}"
         return self._stack.pop()
 
 

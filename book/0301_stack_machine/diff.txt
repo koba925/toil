@@ -1,4 +1,4 @@
-@@ -273,86 +273,114 @@
+@@ -273,86 +273,116 @@
              return self.eval(else_expr, env)
  
      def _while(self, cond_expr, body_expr, env):
@@ -32,7 +32,8 @@
 +                case ("const", val): self._stack.append(val)
 +                case _:
 +                    assert False, f"Invalid instruction @ execute(): {inst}"
-+        assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
++        assert len(self._stack) == 1, \
++            f"Invalid stack state @ execute(): {self._stack}"
 +        return self._stack.pop()
 +
 +
@@ -106,6 +107,7 @@
  
 -    toil.walk(r""" print(2) """)
 +    print("Stack machine:")
++
 +    print(toil.execute([('const', 2), ('halt',)])) # -> 2
 +    print(toil.execute([('const', None), ('halt',)])) # -> None
 +    print(toil.execute([('const', True), ('halt',)])) # -> True

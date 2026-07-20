@@ -66,7 +66,7 @@
          if self._current_token() != terminator:
              cse.append(self._expression())
              while self._current_token() == ",":
-@@ -269,35 +280,44 @@
+@@ -269,38 +280,44 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()
@@ -88,6 +88,9 @@
      # Example
  
 -    print("Scope:")
+-
+-    print(toil.ast(r""" a := 2; scope a end """))
+-    # -> ('seq', [('define', ['a', 2]), ('scope', ['a'])])
 -
 -    print(toil.walk(r""" a := 2; scope a end """)) # -> 2
 -    print(toil.walk(r""" a := 2; scope scope a end end """)) # -> 2

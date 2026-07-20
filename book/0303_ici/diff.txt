@@ -1,4 +1,46 @@
-@@ -348,71 +348,93 @@
+@@ -304,41 +304,40 @@
+         match expr:
+             case None | bool() | int(): self._code.append(("const", expr))
+             case _: assert False, f"Unsupported expression @ compile(): {expr}"
+ 
+ 
+ class VM:
+     def __init__(self, code):
+         self._code = code
+         self._ip = 0
+         self._stack = []
+ 
+     def execute(self):
+         while (inst := self._code[self._ip]) != ("halt",):
+             self._ip += 1
+             match inst:
+                 case ("const", val): self._stack.append(val)
+                 case _:
+                     assert False, f"Invalid instruction @ execute(): {inst}"
+         assert len(self._stack) == 1, \
+             f"Invalid stack state @ execute(): {self._stack}"
+-
+         return self._stack.pop()
+ 
+ 
+ class Interpreter:
+     def __init__(self):
+         self._env = Environment()
+         self._builtins()
+ 
+     def _builtins(self):
+         self._env.define("add", lambda args: args[0] + args[1])
+         self._env.define("sub", lambda args: args[0] - args[1])
+         self._env.define("mul", lambda args: args[0] * args[1])
+         self._env.define("div", lambda args: args[0] // args[1])
+         self._env.define("mod", lambda args: args[0] % args[1])
+         self._env.define("equal", lambda args: args[0] == args[1])
+         self._env.define("less", lambda args: args[0] < args[1])
+         self._env.define("greater", lambda args: args[0] > args[1])
+         self._env.define("print", lambda args: print(*args))
+ 
+         self._env = Environment(self._env)
+@@ -350,73 +349,93 @@
          return Parser(tokens).parse()
  
      def ast(self, src):
@@ -78,6 +120,7 @@
      # Example
  
      print("Stack machine:")
+-
      print(toil.execute([('const', 2), ('halt',)])) # -> 2
      print(toil.execute([('const', None), ('halt',)])) # -> None
      print(toil.execute([('const', True), ('halt',)])) # -> True
@@ -88,6 +131,7 @@
      # toil.execute([('not_op',), ('halt',)]) # -> Invalid instruction
  
      print("Compile:")
+-
      print_code(toil.code(r""" 2 """))
      # ->   0: ('const', 2)
      # ->   1: ('halt',)

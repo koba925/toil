@@ -495,11 +495,11 @@ if __name__ == "__main__":
     print(toil.ast(r""" scope a + 3 end """))
     # -> ('scope', [('add', ['a', 3])])
     print_code(toil.code(r""" scope a + 3 end """))
-    # ->   0: ('push_env',)
+    # ->   0: ('enter_scope',)
     # ->   1: ('get', 'a')
     # ->   2: ('const', 3)
     # ->   3: ('add',)
-    # ->   4: ('pop_env',)
+    # ->   4: ('leave_scope',)
     # ->   5: ('halt',)
     print(toil.run(r""" a := 2; scope a + 3 end """)) # -> 5
 

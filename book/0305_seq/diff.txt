@@ -4,18 +4,18 @@
                  return self.eval(body_expr, new_env)
              case _:
                  assert False, f"Invalid operator @ _op(): {op_val}"
-
-
+ 
+ 
  class Compiler:
      def __init__(self, expr):
          self._expr = expr
          self._code = []
-
+ 
      def compile(self):
          self._expression(self._expr)
          self._emit("halt")
          return self._code
-
+ 
      def _expression(self, expr):
          match expr:
              case None | bool() | int(): self._emit("const", expr)
@@ -28,7 +28,7 @@
                  self._expression(right_expr)
                  self._emit(op)
              case _: assert False, f"Unsupported expression @ compile(): {expr}"
-
+ 
 +    def _seq(self, exprs):
 +        assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
 +        for expr in exprs[:-1]:
@@ -38,14 +38,14 @@
 +
      def _emit(self, *inst):
          self._code.append(inst)
-
-
+ 
+ 
  class VM:
      def __init__(self, code):
          self._code = code
          self._ip = 0
          self._stack = []
-
+ 
      def execute(self):
          while (inst := self._code[self._ip]) != ("halt",):
              self._ip += 1
@@ -68,13 +68,13 @@
                      self._stack.append(l < r)
                  case _:
                      assert False, f"Invalid instruction @ execute(): {inst}"
-         assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
+         assert len(self._stack) == 1, \
+             f"Invalid stack state @ execute(): {self._stack}"
          return self._stack.pop()
-
-
-@@ -423,57 +432,45 @@
+ 
+@@ -424,57 +433,45 @@
                  print("Error:", e, sep="\n")
-
+ 
      def from_file(walk_or_run, filename):
          with open(filename, "r") as f:
              if walk_or_run == "walk":
@@ -82,7 +82,7 @@
              else:
                  result = toil.run(f.read())
          exit(result if isinstance(result, int) else 255)
-
+ 
      match sys.argv:
          case [_]: pass
          case [_, "--repl"]: repl("walk")
@@ -90,12 +90,12 @@
          case [_, "--walk", filename]: from_file("walk", filename)
          case [_, "--run", filename]: from_file("run", filename)
          case _: assert False, f"Invalid command line: {sys.argv}"
-
+ 
      # Example
-
+ 
 -    print("Pseudo functions:")
 +    print("Sequence:")
-
+ 
 -    print(toil.ast(r""" 2 + 3 """))
 -    # -> ('add', [2, 3])
 -    print_code(toil.code(r""" 2 + 3 """))
@@ -123,7 +123,7 @@
      # ->   5: ('halt',)
 -    print(toil.run(r""" 2 + 3 * 4 """)) # -> 14
 +    print(toil.run(r""" 2; 3; 4 """)) # -> 4
-
+ 
 -    print(toil.ast(r""" (2 + 3) * 4 """))
 -    # -> ('mul', [('add', [2, 3]), 4])
 -    print_code(toil.code(r""" (2 + 3) * 4"""))
@@ -146,5 +146,5 @@
 -    print(toil.run(r""" 2 + 3 < 2 * 3 """)) # -> True
 -    print(toil.run(r""" print(2 + 3) """)) # -> 5\nNone
 +    print(toil.run(r""" print(2); print(3) """)) # -> 2\n3\nNone
-
+ 
 +    # toil.compile(("seq", [])) # -> Empty sequence

@@ -1,17 +1,17 @@
-@@ -290,93 +290,112 @@
+@@ -290,92 +290,110 @@
                  assert False, f"Invalid operator @ _op(): {op_val}"
-
-
+ 
+ 
  class Compiler:
      def __init__(self, expr):
          self._expr = expr
          self._code = []
-
+ 
      def compile(self):
          self._expression(self._expr)
          self._emit("halt")
          return self._code
-
+ 
      def _expression(self, expr):
          match expr:
              case None | bool() | int(): self._emit("const", expr)
@@ -32,7 +32,7 @@
                  self._expression(right_expr)
                  self._emit(op)
              case _: assert False, f"Unsupported expression @ compile(): {expr}"
-
+ 
 +    def _scope(self, body_expr):
 +        self._emit("enter_scope")
 +        self._expression(body_expr)
@@ -44,11 +44,11 @@
              self._expression(expr)
              self._emit("pop")
          self._expression(exprs[-1])
-
+ 
      def _emit(self, *inst):
          self._code.append(inst)
-
-
+ 
+ 
  class VM:
      def __init__(self, code, env):
          self._code = code
@@ -56,7 +56,7 @@
          self._ip = 0
          self._stack = []
 +        self._ctrl_stack = []
-
+ 
      def execute(self):
          while (inst := self._code[self._ip]) != ("halt",):
              self._ip += 1
@@ -87,19 +87,18 @@
                      self._stack.append(l < r)
                  case _:
                      assert False, f"Invalid instruction @ execute(): {inst}"
--        assert len(self._stack) == 1, f"Invalid stack state @ execute(): {self._stack}"
 +        assert len(self._ctrl_stack) == 0, \
 +            f"Invalid control stack state @ execute(): {self._ctrl_stack}"
-+        assert len(self._stack) == 1, \
-+            f"Invalid stack state @ execute(): {self._stack}"
+         assert len(self._stack) == 1, \
+             f"Invalid stack state @ execute(): {self._stack}"
          return self._stack.pop()
-
-
+ 
+ 
  class Interpreter:
      def __init__(self):
          self._env = Environment()
          self._builtins()
-
+ 
      def _builtins(self):
          self._env.define("add", lambda args: args[0] + args[1])
          self._env.define("sub", lambda args: args[0] - args[1])
@@ -110,11 +109,9 @@
          self._env.define("less", lambda args: args[0] < args[1])
          self._env.define("greater", lambda args: args[0] > args[1])
          self._env.define("print", lambda args: print(*args))
-
-         self._env = Environment(self._env)
-@@ -439,54 +458,58 @@
+@@ -440,54 +458,58 @@
                  print("Error:", e, sep="\n")
-
+ 
      def from_file(walk_or_run, filename):
          with open(filename, "r") as f:
              if walk_or_run == "walk":
@@ -122,7 +119,7 @@
              else:
                  result = toil.run(f.read())
          exit(result if isinstance(result, int) else 255)
-
+ 
      match sys.argv:
          case [_]: pass
          case [_, "--repl"]: repl("walk")
@@ -130,9 +127,9 @@
          case [_, "--walk", filename]: from_file("walk", filename)
          case [_, "--run", filename]: from_file("run", filename)
          case _: assert False, f"Invalid command line: {sys.argv}"
-
+ 
      # Example
-
+ 
 -    print("Variable and definition:")
 -
 -    print(toil.ast(r""" a := 2 """))
@@ -150,7 +147,7 @@
 -    # ->   1: ('halt',)
 -    print(toil.run(r""" a """)) # -> 2
 +    print("Assignment and Scope:")
-
+ 
 -    print(toil.ast(r""" a := b := 2 == 2 """))
 -    # -> ('define', ['a', ('define', ['b', ('equal', [2, 2])])])
 -    print_code(toil.code(r""" a := b := 2 == 2  """))
@@ -189,15 +186,15 @@
 +    print(toil.run(r""" a := 2; scope a + 3 end """)) # -> 5
 +
 +    print(toil.run(r""" a := 2; scope scope a + 3 end end """)) # -> 5
-
+ 
 -    print(toil.run(r""" a := 2; b := 3; a * b """)) # -> 6
 +    print(toil.run(r""" a := 2; scope a := 3 end """)) # -> 3
 +    print(toil.run(r""" a """)) # -> 2
-
+ 
 -    # toil.run(r""" c """) # -> Undefined variable
 +    print(toil.run(r""" a := 2; scope a = 3 end """)) # -> 3
 +    print(toil.run(r""" a """)) # -> 3
-
+ 
 +    # toil.run(r""" scope d = 3 end """)  # -> Undefined variable
 +    # toil.run(r""" scope c := 2 end; c """) # -> Undefined variable
 \ No newline at end of file

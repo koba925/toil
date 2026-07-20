@@ -19,7 +19,7 @@
  
      # Example
  
--    print("Function:")
+-    print("Function Definition:")
 +    print("Factorial:")
  
 -    print(toil.ast(r""" def f do 2 end """))
