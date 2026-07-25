@@ -179,7 +179,7 @@
  
      # Example
  
--    # Built-in functions
+-    print("Built-in functions:")
 +    print("Functions:")
  
 -    print(toil.ast(r""" add(2, 3) """))

@@ -503,7 +503,7 @@ if __name__ == "__main__":
 
     # Example
 
-    # Built-in functions
+    print("Built-in functions:")
 
     print(toil.ast(r""" add(2, 3) """))
     # -> ('add', [2, 3])

@@ -711,13 +711,13 @@ class Compiler:
     def __init__(self, expr: Expr):
         self._expr = expr
         self._code = []
-        self._control_stack = []
+        self._ctrl_stack = []
 
     def compile(self) -> Code:
         self._expression(self._expr)
         self._code.append(("ret",))
-        assert self._control_stack == [], \
-            f"Invalid control stack state @ compile(): {self._control_stack}"
+        assert self._ctrl_stack == [], \
+            f"Invalid control stack state @ compile(): {self._ctrl_stack}"
         return self._code
 
     def _expression(self, expr):
@@ -791,11 +791,11 @@ class Compiler:
                 assert False, f"Invalid assign target @ compile(): {unexpected}"
 
     def _scope(self, body_expr):
-        self._control_stack.append(("scope",))
+        self._ctrl_stack.append(("scope",))
         self._code.append(("enter_scope",))
         self._expression(body_expr)
         self._code.append(("leave_scope",))
-        self._control_stack.pop()
+        self._ctrl_stack.pop()
 
     def _seq(self, exprs):
         assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
@@ -818,7 +818,7 @@ class Compiler:
     def _while(self, cond_expr, body_expr, then_expr, else_expr):
         loop_jump = self._current_addr()
         break_addrs = []
-        self._control_stack.append(("while", loop_jump, break_addrs))
+        self._ctrl_stack.append(("while", loop_jump, break_addrs))
         self._expression(cond_expr)
         cond_jump = self._current_addr()
         self._code.append(("jump_if_false", None))
@@ -827,7 +827,7 @@ class Compiler:
         self._code.append(("jump", loop_jump))
         self._set_operand(cond_jump, self._current_addr())
 
-        self._control_stack.pop()
+        self._ctrl_stack.pop()
         self._expression(then_expr[0] if then_expr else None)
         then_jump = self._current_addr()
         self._code.append(("jump", None))
@@ -859,9 +859,9 @@ class Compiler:
     def _try(self, body_expr, clauses):
         handler_jump = self._current_addr()
         self._code.append(("enter_try", None))
-        self._control_stack.append(("try",))
+        self._ctrl_stack.append(("try",))
         self._expression(body_expr)
-        self._control_stack.pop()
+        self._ctrl_stack.pop()
         self._code.append(("leave_try",))
 
         end_jump = self._current_addr()
@@ -893,7 +893,7 @@ class Compiler:
         self._code.append(("raise",))
 
     def _continue(self):
-        for ctrl in reversed(self._control_stack):
+        for ctrl in reversed(self._ctrl_stack):
             match ctrl:
                 case ("scope",):
                     self._code.append(("leave_scope",))
@@ -905,7 +905,7 @@ class Compiler:
         assert False, "Continue outside of loop @ _continue()"
 
     def _break(self):
-        for ctrl in reversed(self._control_stack):
+        for ctrl in reversed(self._ctrl_stack):
             match ctrl:
                 case ("scope",):
                     self._code.append(("leave_scope",))
