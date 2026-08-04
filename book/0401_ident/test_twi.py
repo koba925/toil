@@ -530,7 +530,7 @@ class TestCommandLine:
             runpy.run_path(toil_script, run_name="__main__")
 
         out = capsys.readouterr().out
-        assert "AST:\n('print', [('add', [2, 3])])" in out
+        assert "AST:\n(print, [(add, [2, 3])])" in out
         assert "Output:\n5\n" in out
         assert "Result:\nNone\n" in out
         assert e.value.code == 0

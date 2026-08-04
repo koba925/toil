@@ -1,5 +1,5 @@
 import pytest
-from toil import Interpreter
+from toil import Interpreter, Ident
 
 @pytest.fixture(autouse=True)
 def setup_toil():
@@ -40,7 +40,7 @@ class TestIntermediateCodeInterpreter:
         assert capsys.readouterr().out == "2\n3\n"
 
         with pytest.raises(Exception, match="Empty sequence"):
-            toil.compile(("seq", []))
+            toil.compile((Ident("seq"), []))
 
     def test_assignment_scope(self):
         assert toil.run(r""" a := 2; a = 3 + 4 """) == 7
