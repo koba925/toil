@@ -1,4 +1,4 @@
-@@ -290,92 +290,110 @@
+@@ -287,92 +287,110 @@
                  assert False, f"Invalid operator @ _op(): {op_val}"
  
  
@@ -109,7 +109,7 @@
          self._env.define("less", lambda args: args[0] < args[1])
          self._env.define("greater", lambda args: args[0] > args[1])
          self._env.define("print", lambda args: print(*args))
-@@ -440,54 +458,58 @@
+@@ -437,54 +455,58 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):

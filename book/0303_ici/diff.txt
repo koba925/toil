@@ -1,4 +1,4 @@
-@@ -304,41 +304,40 @@
+@@ -301,41 +301,40 @@
          match expr:
              case None | bool() | int(): self._code.append(("const", expr))
              case _: assert False, f"Unsupported expression @ compile(): {expr}"
@@ -40,7 +40,7 @@
          self._env.define("print", lambda args: print(*args))
  
          self._env = Environment(self._env)
-@@ -350,73 +349,93 @@
+@@ -347,73 +346,93 @@
          return Parser(tokens).parse()
  
      def ast(self, src):

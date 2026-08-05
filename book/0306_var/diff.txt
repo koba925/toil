@@ -1,4 +1,4 @@
-@@ -286,73 +286,80 @@
+@@ -283,73 +283,80 @@
                  new_env = Environment(closure_env)
                  new_env.bind(params, args_val)
                  return self.eval(body_expr, new_env)
@@ -80,7 +80,7 @@
              f"Invalid stack state @ execute(): {self._stack}"
          return self._stack.pop()
  
-@@ -380,41 +387,41 @@
+@@ -377,41 +384,41 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()
@@ -123,7 +123,7 @@
                  exit(0)
              try:
                  expr = toil.ast(src)
-@@ -433,45 +440,54 @@
+@@ -430,45 +437,54 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):

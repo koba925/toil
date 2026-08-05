@@ -1,4 +1,4 @@
-@@ -1,214 +1,227 @@
+@@ -1,211 +1,224 @@
 +class Ident:
 +    __match_args__ = ("name",)
 +
@@ -21,20 +21,11 @@
          self._tokens = []
  
      def tokenize(self):
-         while True:
-             while self._current_char().isspace(): self._advance()
- 
-             if self._current_char() == "#":
-                 while self._current_char() not in ("\n", "$EOF"):
-                     self._advance()
-                 continue
- 
+         while (c := self._current_char()) != "$EOF":
              self._start_pos = self._current_pos
-             match self._current_char():
-                 case "$EOF":
--                    self._tokens.append("$EOF")
-+                    self._tokens.append(Ident("$EOF"))
-                     break
+             match c:
+                 case c if c.isspace(): self._advance()
+                 case "#": self._comment()
                  case c if c.isdecimal(): self._number()
                  case c if is_ident_first(c): self._ident()
                  case c if c in "=:":
@@ -48,7 +39,13 @@
                  case invalid:
                      assert False, f"Invalid character @ tokenize(): {invalid}"
  
+-        self._tokens.append("$EOF")
++        self._tokens.append(Ident("$EOF"))
          return self._tokens
+ 
+     def _comment(self):
+         while self._current_char() not in ("\n", "$EOF"):
+             self._advance()
  
      def _number(self):
          while self._current_char().isdecimal(): self._advance()
@@ -269,7 +266,7 @@
      def __init__(self, parent=None):
          self._parent = parent
          self._vars = {}
-@@ -218,121 +231,121 @@
+@@ -215,121 +228,121 @@
          return val
  
      def assign(self, name, val):
@@ -410,7 +407,7 @@
              self._expression(expr)
              self._emit("pop")
          self._expression(exprs[-1])
-@@ -384,57 +397,58 @@
+@@ -381,57 +394,58 @@
          self._ctrl_stack: list = [("call", [("halt",)], 0, env)]
  
      def execute(self):

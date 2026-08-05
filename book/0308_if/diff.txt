@@ -1,4 +1,4 @@
-@@ -295,87 +295,110 @@
+@@ -292,87 +292,110 @@
          self._expr = expr
          self._code = []
  
@@ -109,7 +109,7 @@
              f"Invalid control stack state @ execute(): {self._ctrl_stack}"
          assert len(self._stack) == 1, \
              f"Invalid stack state @ execute(): {self._stack}"
-@@ -458,58 +481,50 @@
+@@ -455,58 +478,50 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):

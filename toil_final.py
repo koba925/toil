@@ -36,17 +36,12 @@ class Scanner:
         self._tokens: list[Token] = []
 
     def tokenize(self) -> list[Token]:
-        while self._current_char() != "$EOF":
-            if self._current_char().isspace():
-                self._advance()
-                continue
-
-            if self._current_char() == "#":
-                while self._current_char() not in ("\n", "$EOF"):
+        while (c := self._current_char()) != "$EOF":
+            match c:
+                case c if c.isspace():
                     self._advance()
-                continue
-
-            match self._current_char():
+                case "#":
+                    self._comment()
                 case c if c.isnumeric(): self._number()
                 case "'": self._raw_string()
                 case "\"": self._string()
@@ -62,6 +57,10 @@ class Scanner:
 
         self._tokens.append(Ident("$EOF"))
         return self._tokens
+
+    def _comment(self):
+        while self._current_char() not in ("\n", "$EOF"):
+            self._advance()
 
     def _number(self):
         start = self._pos

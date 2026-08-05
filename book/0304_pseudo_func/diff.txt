@@ -1,4 +1,4 @@
-@@ -280,60 +280,84 @@
+@@ -277,60 +277,84 @@
      def _op(self, op_expr, args_expr, env):
          op_val = self.eval(op_expr, env)
          args_val = [self.eval(arg, env) for arg in args_expr]
@@ -85,7 +85,7 @@
          self._env.define("mod", lambda args: args[0] % args[1])
          self._env.define("equal", lambda args: args[0] == args[1])
          self._env.define("less", lambda args: args[0] < args[1])
-@@ -400,42 +424,57 @@
+@@ -397,42 +421,57 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):

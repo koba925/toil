@@ -1,4 +1,4 @@
-@@ -297,72 +297,85 @@
+@@ -294,72 +294,85 @@
  
      def compile(self):
          self._expression(self._expr)
@@ -84,7 +84,7 @@
          self._ctrl_stack = []
  
      def execute(self):
-@@ -481,50 +494,53 @@
+@@ -478,50 +491,53 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):
