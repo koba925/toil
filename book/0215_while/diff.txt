@@ -1,4 +1,4 @@
-@@ -96,66 +96,75 @@
+@@ -93,66 +93,75 @@
  
      def _mul_div_mod(self):
          return self._binary_left({
@@ -74,7 +74,7 @@
          if self._current_token() != terminator:
              cse.append(self._expression())
              while self._current_token() == ",":
-@@ -280,44 +289,45 @@
+@@ -277,44 +286,45 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()

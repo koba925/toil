@@ -1,4 +1,4 @@
-@@ -95,61 +95,76 @@
+@@ -92,61 +92,76 @@
          return self._binary_left({"+": "add", "-": "sub"}, self._mul_div_mod)
  
      def _mul_div_mod(self):
@@ -75,7 +75,7 @@
          self._current_and_advance()
          cond_expr = self._expression()
          self._consume("do")
-@@ -298,69 +313,54 @@
+@@ -295,69 +310,54 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()

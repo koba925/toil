@@ -1,4 +1,4 @@
-@@ -95,56 +95,67 @@
+@@ -92,56 +92,67 @@
          return self._binary_left({"+": "add", "-": "sub"}, self._mul_div_mod)
  
      def _mul_div_mod(self):
@@ -66,7 +66,7 @@
          if self._current_token() != terminator:
              cse.append(self._expression())
              while self._current_token() == ",":
-@@ -269,38 +280,44 @@
+@@ -266,38 +277,44 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()

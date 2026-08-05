@@ -36,8 +36,10 @@ class Scanner:
         self._tokens: list[Token] = []
 
     def tokenize(self) -> list[Token]:
-        while True:
-            while self._current_char().isspace(): self._advance()
+        while self._current_char() != "$EOF":
+            if self._current_char().isspace():
+                self._advance()
+                continue
 
             if self._current_char() == "#":
                 while self._current_char() not in ("\n", "$EOF"):
@@ -45,9 +47,6 @@ class Scanner:
                 continue
 
             match self._current_char():
-                case "$EOF":
-                    self._tokens.append(Ident("$EOF"))
-                    break
                 case c if c.isnumeric(): self._number()
                 case "'": self._raw_string()
                 case "\"": self._string()
@@ -61,6 +60,7 @@ class Scanner:
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
 
+        self._tokens.append(Ident("$EOF"))
         return self._tokens
 
     def _number(self):

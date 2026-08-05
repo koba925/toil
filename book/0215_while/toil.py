@@ -10,19 +10,11 @@ class Scanner:
         self._tokens = []
 
     def tokenize(self):
-        while True:
-            while self._current_char().isspace(): self._advance()
-
-            if self._current_char() == "#":
-                while self._current_char() not in ("\n", "$EOF"):
-                    self._advance()
-                continue
-
+        while (c := self._current_char()) != "$EOF":
             self._start_pos = self._current_pos
-            match self._current_char():
-                case "$EOF":
-                    self._tokens.append("$EOF")
-                    break
+            match c:
+                case c if c.isspace(): self._advance()
+                case "#": self._comment()
                 case c if c.isdecimal(): self._number()
                 case c if is_ident_first(c): self._ident()
                 case c if c in "=:":
@@ -34,7 +26,12 @@ class Scanner:
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
 
+        self._tokens.append("$EOF")
         return self._tokens
+
+    def _comment(self):
+        while self._current_char() not in ("\n", "$EOF"):
+            self._advance()
 
     def _number(self):
         while self._current_char().isdecimal(): self._advance()

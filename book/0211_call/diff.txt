@@ -1,18 +1,18 @@
-@@ -12,41 +12,41 @@
+@@ -4,41 +4,41 @@
+ 
+ class Scanner:
+     def __init__(self, src):
+         self._src = src
+         self._start_pos = 0
+         self._current_pos = 0
+         self._tokens = []
+ 
      def tokenize(self):
-         while True:
-             while self._current_char().isspace(): self._advance()
- 
-             if self._current_char() == "#":
-                 while self._current_char() not in ("\n", "$EOF"):
-                     self._advance()
-                 continue
- 
+         while (c := self._current_char()) != "$EOF":
              self._start_pos = self._current_pos
-             match self._current_char():
-                 case "$EOF":
-                     self._tokens.append("$EOF")
-                     break
+             match c:
+                 case c if c.isspace(): self._advance()
+                 case "#": self._comment()
                  case c if c.isdecimal(): self._number()
                  case c if is_ident_first(c): self._ident()
                  case c if c in "=:":
@@ -25,7 +25,12 @@
                  case invalid:
                      assert False, f"Invalid character @ tokenize(): {invalid}"
  
+         self._tokens.append("$EOF")
          return self._tokens
+ 
+     def _comment(self):
+         while self._current_char() not in ("\n", "$EOF"):
+             self._advance()
  
      def _number(self):
          while self._current_char().isdecimal(): self._advance()
@@ -36,12 +41,7 @@
          while is_ident_rest(self._current_char()): self._advance()
          match self._lexeme():
              case "None": self._tokens.append(None)
-             case "True": self._tokens.append(True)
-             case "False": self._tokens.append(False)
-             case ident: self._tokens.append(ident)
- 
-     def _lexeme(self):
-@@ -73,71 +73,88 @@
+@@ -70,71 +70,88 @@
          return expr
  
      def _expression(self): return self._define_assign()
@@ -131,7 +131,7 @@
      def define(self, name, val):
          self._vars[name] = val
          return val
-@@ -238,46 +255,44 @@
+@@ -235,46 +252,44 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()

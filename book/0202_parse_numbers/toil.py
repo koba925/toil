@@ -6,16 +6,14 @@ class Scanner:
         self._tokens = []
 
     def tokenize(self):
-        while True:
+        while (c := self._current_char()) != "$EOF":
             self._start_pos = self._current_pos
-            match self._current_char():
-                case "$EOF":
-                    self._tokens.append("$EOF")
-                    break
+            match c:
                 case c if c.isdecimal(): self._number()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
 
+        self._tokens.append("$EOF")
         return self._tokens
 
     def _number(self):

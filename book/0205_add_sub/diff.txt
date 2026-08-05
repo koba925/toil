@@ -1,30 +1,29 @@
-@@ -3,73 +3,83 @@
+@@ -1,72 +1,82 @@
+ class Scanner:
+     def __init__(self, src):
          self._src = src
          self._start_pos = 0
          self._current_pos = 0
          self._tokens = []
  
      def tokenize(self):
-         while True:
-             while self._current_char().isspace(): self._advance()
- 
-             if self._current_char() == "#":
-                 while self._current_char() not in ("\n", "$EOF"):
-                     self._advance()
-                 continue
- 
+         while (c := self._current_char()) != "$EOF":
              self._start_pos = self._current_pos
-             match self._current_char():
-                 case "$EOF":
-                     self._tokens.append("$EOF")
-                     break
+             match c:
+                 case c if c.isspace(): self._advance()
+                 case "#": self._comment()
                  case c if c.isdecimal(): self._number()
 +                case c if c in "+-":
 +                    self._tokens.append(c); self._advance()
                  case invalid:
                      assert False, f"Invalid character @ tokenize(): {invalid}"
  
+         self._tokens.append("$EOF")
          return self._tokens
+ 
+     def _comment(self):
+         while self._current_char() not in ("\n", "$EOF"):
+             self._advance()
  
      def _number(self):
          while self._current_char().isdecimal(): self._advance()
@@ -83,7 +82,7 @@
          self._vars = {}
  
      def define(self, name, val):
-@@ -172,37 +182,40 @@
+@@ -169,37 +179,40 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()

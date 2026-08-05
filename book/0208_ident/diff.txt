@@ -1,4 +1,4 @@
-@@ -1,90 +1,105 @@
+@@ -1,87 +1,102 @@
 +def is_ident_first(c): return c.isalpha() or c == "_"
 +def is_ident_rest(c): return c.isalnum() or c == "_"
 +def is_ident(s): return is_ident_first(s[0])
@@ -11,19 +11,11 @@
          self._tokens = []
  
      def tokenize(self):
-         while True:
-             while self._current_char().isspace(): self._advance()
- 
-             if self._current_char() == "#":
-                 while self._current_char() not in ("\n", "$EOF"):
-                     self._advance()
-                 continue
- 
+         while (c := self._current_char()) != "$EOF":
              self._start_pos = self._current_pos
-             match self._current_char():
-                 case "$EOF":
-                     self._tokens.append("$EOF")
-                     break
+             match c:
+                 case c if c.isspace(): self._advance()
+                 case "#": self._comment()
                  case c if c.isdecimal(): self._number()
 +                case c if is_ident_first(c): self._ident()
                  case c if c in "+-*/%()":
@@ -31,7 +23,12 @@
                  case invalid:
                      assert False, f"Invalid character @ tokenize(): {invalid}"
  
+         self._tokens.append("$EOF")
          return self._tokens
+ 
+     def _comment(self):
+         while self._current_char() not in ("\n", "$EOF"):
+             self._advance()
  
      def _number(self):
          while self._current_char().isdecimal(): self._advance()
@@ -105,7 +102,7 @@
          assert self._current_token() == expected, \
              f"Expected {expected} @ _consume(): {self._current_token()}"
          return self._current_and_advance()
-@@ -201,36 +216,32 @@
+@@ -198,36 +213,32 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()

@@ -1,22 +1,21 @@
-@@ -8,41 +8,41 @@
+@@ -1,40 +1,40 @@
+ def is_ident_first(c): return c.isalpha() or c == "_"
+ def is_ident_rest(c): return c.isalnum() or c == "_"
+ def is_ident(s): return is_ident_first(s[0])
+ 
+ class Scanner:
+     def __init__(self, src):
+         self._src = src
          self._start_pos = 0
          self._current_pos = 0
          self._tokens = []
  
      def tokenize(self):
-         while True:
-             while self._current_char().isspace(): self._advance()
- 
-             if self._current_char() == "#":
-                 while self._current_char() not in ("\n", "$EOF"):
-                     self._advance()
-                 continue
- 
+         while (c := self._current_char()) != "$EOF":
              self._start_pos = self._current_pos
-             match self._current_char():
-                 case "$EOF":
-                     self._tokens.append("$EOF")
-                     break
+             match c:
+                 case c if c.isspace(): self._advance()
+                 case "#": self._comment()
                  case c if c.isdecimal(): self._number()
                  case c if is_ident_first(c): self._ident()
 -                case "=":
@@ -29,19 +28,19 @@
                  case invalid:
                      assert False, f"Invalid character @ tokenize(): {invalid}"
  
+         self._tokens.append("$EOF")
          return self._tokens
+ 
+     def _comment(self):
+         while self._current_char() not in ("\n", "$EOF"):
+             self._advance()
  
      def _number(self):
          while self._current_char().isdecimal(): self._advance()
          self._tokens.append(int(self._lexeme()))
  
      def _ident(self):
-         self._advance()
-         while is_ident_rest(self._current_char()): self._advance()
-         match self._lexeme():
-             case "None": self._tokens.append(None)
-             case "True": self._tokens.append(True)
-@@ -55,76 +55,89 @@
+@@ -52,76 +52,89 @@
      def _advance(self): self._current_pos += 1
  
      def _current_char(self):
@@ -132,7 +131,7 @@
      def define(self, name, val):
          self._vars[name] = val
          return val
-@@ -225,46 +238,46 @@
+@@ -222,46 +235,46 @@
  
      def parse(self, tokens):
          return Parser(tokens).parse()
