@@ -1,6 +1,14 @@
 #!/bin/bash
 set -e
 
+if [ "$#" -ne 1 ] || ! [[ "$1" =~ ^[0-9]{4}$ ]]; then
+    echo "使用法: $0 <4桁の数字>"
+    echo "例: $0 0312"
+    exit 1
+fi
+
+TARGET_PREFIX="$1"
+
 # スクリプトのあるディレクトリを基準に絶対パスを取得
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="$SCRIPT_DIR"
@@ -26,6 +34,13 @@ cd - > /dev/null
 # bookディレクトリ内の章フォルダを取得（名前が数字から始まるフォルダを辞書順に処理）
 for CHAP_DIR in $(find "$SOURCE_DIR" -mindepth 1 -maxdepth 1 -type d -name "[0-9]*" | sort); do
     TAG_NAME=$(basename "$CHAP_DIR")
+    DIR_PREFIX="${TAG_NAME:0:4}"
+
+    if [[ "$DIR_PREFIX" > "$TARGET_PREFIX" ]]; then
+        echo "指定された章 ($TARGET_PREFIX) まで完了したため、処理を終了します。"
+        break
+    fi
+
     echo "処理中: $TAG_NAME"
 
     # rsyncを使って同期（不要なキャッシュファイルなどは除外）
