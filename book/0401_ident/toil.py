@@ -245,7 +245,7 @@ class Environment:
 
     def bind(self, params, args):
         for param, arg in zip(params, args):
-            self.define(param.name if isinstance(param, Ident) else param, arg)
+            self.define(param.name, arg)
 
 
 class Evaluator:
