@@ -1,7 +1,7 @@
 class Ident:
     __match_args__ = ("name",)
 
-    def __init__(self, name: str) -> None: self.name = name
+    def __init__(self, name): self.name = name
     def __hash__(self): return hash(self.name)
     def __repr__(self): return self.name
     def __str__(self): return self.name
@@ -106,7 +106,8 @@ class Parser:
 
     def _mul_div_mod(self):
         return self._binary_left({
-            Ident("*"): Ident("mul"), Ident("/"): Ident("div"), Ident("%"): Ident("mod")
+            Ident("*"): Ident("mul"), Ident("/"): Ident("div"),
+            Ident("%"): Ident("mod")
         }, self._call)
 
     def _call(self):
@@ -151,10 +152,10 @@ class Parser:
         body_expr = self._expression()
         self._consume(Ident("end"))
         match call_expr:
-            case (name, params):
-                return (Ident("define"), [name, (Ident("func"), [params, body_expr])])
-            case Ident(name):
-                return (Ident("define"), [call_expr, (Ident("func"), [[], body_expr])])
+            case (Ident() as ident, params):
+                return (Ident("define"), [ident, (Ident("func"), [params, body_expr])])
+            case Ident() as ident:
+                return (Ident("define"), [ident, (Ident("func"), [[], body_expr])])
             case _:
                 assert False, f"Invalid def syntax @ _def(): {call_expr}"
 
@@ -223,29 +224,29 @@ class Environment:
         self._parent = parent
         self._vars = {}
 
-    def define(self, name, val):
-        self._vars[name] = val
+    def define(self, ident, val):
+        self._vars[ident] = val
         return val
 
-    def assign(self, name, val):
-        if name in self._vars:
-            self._vars[name] = val
+    def assign(self, ident, val):
+        if ident in self._vars:
+            self._vars[ident] = val
             return val
         elif self._parent:
-            return self._parent.assign(name, val)
+            return self._parent.assign(ident, val)
         else:
-            assert False, f"Undefined variable @ assign(): {name}"
+            assert False, f"Undefined variable @ assign(): {ident}"
 
-    def val(self, name):
-        if name in self._vars: return self._vars[name]
+    def val(self, ident):
+        if ident in self._vars: return self._vars[ident]
         elif self._parent:
-            return self._parent.val(name)
+            return self._parent.val(ident)
         else:
-            assert False, f"Undefined variable @ val(): {name}"
+            assert False, f"Undefined variable @ val(): {ident}"
 
     def bind(self, params, args):
         for param, arg in zip(params, args):
-            self.define(param.name, arg)
+            self.define(param, arg)
 
 
 class Evaluator:
@@ -254,13 +255,13 @@ class Evaluator:
             case None | bool() | int(): return expr
             case (Ident("func"), [params, body_expr]):
                 return (Ident("closure"), [params, body_expr, env])
-            case Ident(name): return env.val(name)
+            case Ident() as ident: return env.val(ident)
             case (Ident("scope"), [body_expr]):
                 return self.eval(body_expr, Environment(env))
-            case (Ident("define"), [Ident(name), expr]):
-                return env.define(name, self.eval(expr, env))
-            case (Ident("assign"), [Ident(name), expr]):
-                return env.assign(name, self.eval(expr, env))
+            case (Ident("define"), [Ident() as ident, expr]):
+                return env.define(ident, self.eval(expr, env))
+            case (Ident("assign"), [Ident() as ident, expr]):
+                return env.assign(ident, self.eval(expr, env))
             case (Ident("seq"), exprs): return self._seq(exprs, env)
             case (Ident("if"), [cond_expr, then_expr, else_expr]):
                 return self._if(cond_expr, then_expr, else_expr, env)
@@ -313,14 +314,14 @@ class Compiler:
     def _expression(self, expr):
         match expr:
             case None | bool() | int(): self._emit("const", expr)
-            case Ident(name): self._emit("get", name)
+            case Ident() as ident: self._emit("get", ident)
             case (Ident("func"), [params, body_expr]): self._func(params, body_expr)
-            case (Ident("define"), [Ident(name), expr]):
+            case (Ident("define"), [Ident() as ident, expr]):
                 self._expression(expr)
-                self._emit("def", name)
-            case (Ident("assign"), [Ident(name), expr]):
+                self._emit("def", ident)
+            case (Ident("assign"), [Ident() as ident, expr]):
                 self._expression(expr)
-                self._emit("set", name)
+                self._emit("set", ident)
             case (Ident("scope"), [body_expr]): self._scope(body_expr)
             case (Ident("seq"), exprs): self._seq(exprs)
             case (Ident("if"), [cond_expr, then_expr, else_expr]):
@@ -404,9 +405,9 @@ class VM:
                     self._env = Environment(self._env)
                 case ("leave_scope",):
                     _, self._env = self._ctrl_stack.pop()
-                case ("def", name): self._env.define(name, self._stack[-1])
-                case ("set", name): self._env.assign(name, self._stack[-1])
-                case ("get", name): self._stack.append(self._env.val(name))
+                case ("def", ident): self._env.define(ident, self._stack[-1])
+                case ("set", ident): self._env.assign(ident, self._stack[-1])
+                case ("get", ident): self._stack.append(self._env.val(ident))
                 case ("jump", addr): self._ip = addr
                 case ("jump_if_false", addr):
                     if not self._stack.pop(): self._ip = addr
@@ -446,15 +447,15 @@ class Interpreter:
         self._builtins()
 
     def _builtins(self):
-        self._env.define("add", lambda args: args[0] + args[1])
-        self._env.define("sub", lambda args: args[0] - args[1])
-        self._env.define("mul", lambda args: args[0] * args[1])
-        self._env.define("div", lambda args: args[0] // args[1])
-        self._env.define("mod", lambda args: args[0] % args[1])
-        self._env.define("equal", lambda args: args[0] == args[1])
-        self._env.define("less", lambda args: args[0] < args[1])
-        self._env.define("greater", lambda args: args[0] > args[1])
-        self._env.define("print", lambda args: print(*args))
+        self._env.define(Ident("add"), lambda args: args[0] + args[1])
+        self._env.define(Ident("sub"), lambda args: args[0] - args[1])
+        self._env.define(Ident("mul"), lambda args: args[0] * args[1])
+        self._env.define(Ident("div"), lambda args: args[0] // args[1])
+        self._env.define(Ident("mod"), lambda args: args[0] % args[1])
+        self._env.define(Ident("equal"), lambda args: args[0] == args[1])
+        self._env.define(Ident("less"), lambda args: args[0] < args[1])
+        self._env.define(Ident("greater"), lambda args: args[0] > args[1])
+        self._env.define(Ident("print"), lambda args: print(*args))
 
         self._env = Environment(self._env)
 
