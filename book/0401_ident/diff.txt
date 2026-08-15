@@ -425,7 +425,14 @@
              self._expression(expr)
              self._emit("pop")
          self._expression(exprs[-1])
-@@ -381,83 +395,84 @@
+@@ -374,90 +388,91 @@
+ 
+ class VM:
+     def __init__(self, code, env):
+         self._code = code
+         self._env = env
+         self._ip = 0
+         self._stack = []
          self._ctrl_stack: list = [("call", [("halt",)], 0, env)]
  
      def execute(self):
@@ -439,9 +446,12 @@
                      self._env = Environment(self._env)
                  case ("leave_scope",):
                      _, self._env = self._ctrl_stack.pop()
-                 case ("def", name): self._env.define(name, self._stack[-1])
-                 case ("set", name): self._env.assign(name, self._stack[-1])
-                 case ("get", name): self._stack.append(self._env.val(name))
+-                case ("def", name): self._env.define(name, self._stack[-1])
+-                case ("set", name): self._env.assign(name, self._stack[-1])
+-                case ("get", name): self._stack.append(self._env.val(name))
++                case ("def", ident): self._env.define(ident, self._stack[-1])
++                case ("set", ident): self._env.assign(ident, self._stack[-1])
++                case ("get", ident): self._stack.append(self._env.val(ident))
                  case ("jump", addr): self._ip = addr
                  case ("jump_if_false", addr):
                      if not self._stack.pop(): self._ip = addr
