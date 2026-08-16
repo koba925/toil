@@ -1,7 +1,7 @@
 class Ident:
     __match_args__ = ("name",)
 
-    def __init__(self, name): self.name = name
+    def __init__(self, name: str) -> None: self.name = name
     def __hash__(self): return hash(self.name)
     def __repr__(self): return self.name
     def __str__(self): return self.name
@@ -12,14 +12,21 @@ def is_ident_first(c): return c.isalpha() or c == "_"
 def is_ident_rest(c): return c.isalnum() or c == "_"
 def is_ident(s): return is_ident_first(s[0])
 
+from typing import Callable
+
+type Token = None | bool | int | Ident
+type Expr = None | bool | int | Ident | tuple
+type Value = None | bool | int | Callable | tuple
+type Instruction = tuple
+
 class Scanner:
-    def __init__(self, src):
+    def __init__(self, src: str) -> None:
         self._src = src
         self._start_pos = 0
         self._current_pos = 0
-        self._tokens = []
+        self._tokens: list[Token] = []
 
-    def tokenize(self):
+    def tokenize(self) -> list[Token]:
         while (c := self._current_char()) != "$EOF":
             self._start_pos = self._current_pos
             match c:
@@ -27,11 +34,11 @@ class Scanner:
                 case "#": self._comment()
                 case c if c.isdecimal(): self._number()
                 case c if is_ident_first(c): self._ident()
-                case c if c in "=:":
+                case c if c in "=<>!:":
                     self._advance()
                     if self._current_char() == "=": self._advance()
                     self._tokens.append(Ident(self._lexeme()))
-                case c if c in "+-*/%()<>,;":
+                case c if c in "+-*/%(),;":
                     self._tokens.append(Ident(c)); self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
@@ -69,11 +76,11 @@ class Scanner:
 
 
 class Parser:
-    def __init__(self, tokens):
+    def __init__(self, tokens: list[Token]) -> None:
         self._tokens = tokens
         self._pos = 0
 
-    def parse(self):
+    def parse(self) -> Expr:
         expr = self._expression()
         assert self._current_token() == Ident("$EOF"), \
             f"Extra token @ parse(): {self._current_token()}"
@@ -91,12 +98,16 @@ class Parser:
     def _define_assign(self):
         return self._binary_right({
             Ident(":="): Ident("define"), Ident("="): Ident("assign")
-        }, self._comparison)
+        }, self._not)
+
+    def _not(self):
+        return self._unary({ Ident("not"): Ident("not") }, self._comparison)
 
     def _comparison(self):
         return self._binary_left({
-            Ident("=="): Ident("equal"),
-            Ident("<"): Ident("less"), Ident(">"): Ident("greater")
+            Ident("=="): Ident("equal"), Ident("!="): Ident("not_equal"),
+            Ident("<"): Ident("less"), Ident(">"): Ident("greater"),
+            Ident("<="): Ident("less_equal"), Ident(">="): Ident("greater_equal"),
         }, self._add_sub)
 
     def _add_sub(self):
@@ -108,7 +119,10 @@ class Parser:
         return self._binary_left({
             Ident("*"): Ident("mul"), Ident("/"): Ident("div"),
             Ident("%"): Ident("mod")
-        }, self._call)
+        }, self._unaries)
+
+    def _unaries(self):
+        return self._unary({Ident("-"): Ident("neg")}, self._call)
 
     def _call(self):
         target = self._primary()
@@ -198,6 +212,13 @@ class Parser:
         else:
             return left
 
+    def _unary(self, ops, sub_elem):
+        if type(op := self._current_token()) is Ident and op in ops:
+            self._current_and_advance()
+            return (ops[op], [self._unary(ops, sub_elem)])
+        else:
+            return sub_elem()
+
     def _comma_separated_exprs(self, terminator):
         cse = []
         if self._current_token() != terminator:
@@ -220,15 +241,15 @@ class Parser:
 
 
 class Environment:
-    def __init__(self, parent=None):
+    def __init__(self, parent: "Environment | None" = None) -> None:
         self._parent = parent
-        self._vars = {}
+        self._vars: dict[Ident, Value] = {}
 
-    def define(self, ident, val):
+    def define(self, ident: Ident, val: Value) -> Value:
         self._vars[ident] = val
         return val
 
-    def assign(self, ident, val):
+    def assign(self, ident: Ident, val: Value) -> Value:
         if ident in self._vars:
             self._vars[ident] = val
             return val
@@ -237,20 +258,20 @@ class Environment:
         else:
             assert False, f"Undefined variable @ assign(): {ident}"
 
-    def val(self, ident):
+    def val(self, ident: Ident) -> Value:
         if ident in self._vars: return self._vars[ident]
         elif self._parent:
             return self._parent.val(ident)
         else:
             assert False, f"Undefined variable @ val(): {ident}"
 
-    def bind(self, params, args):
+    def bind(self, params: list[Ident], args: list[Value]) -> None:
         for param, arg in zip(params, args):
             self.define(param, arg)
 
 
 class Evaluator:
-    def eval(self, expr, env):
+    def eval(self, expr: Expr, env: Environment) -> Value:
         match expr:
             case None | bool() | int(): return expr
             case (Ident("func"), [params, body_expr]):
@@ -302,11 +323,11 @@ class Evaluator:
 
 
 class Compiler:
-    def __init__(self, expr):
+    def __init__(self, expr: Expr) -> None:
         self._expr = expr
-        self._code = []
+        self._code: list[Instruction] = []
 
-    def compile(self):
+    def compile(self) -> list[Instruction]:
         self._expression(self._expr)
         self._emit("ret")
         return self._code
@@ -387,14 +408,14 @@ class Compiler:
 
 
 class VM:
-    def __init__(self, code, env):
+    def __init__(self, code: list[Instruction], env: Environment) -> None:
         self._code = code
         self._env = env
         self._ip = 0
-        self._stack = []
-        self._ctrl_stack: list = [("call", [("halt",)], 0, env)]
+        self._stack: list[Value] = []
+        self._ctrl_stack: list[tuple] = [("call", [("halt",)], 0, env)]
 
-    def execute(self):
+    def execute(self) -> Value:
         while (inst := self._code[self._ip]) != ("halt",):
             self._ip += 1
             match inst:
@@ -442,7 +463,7 @@ class VM:
         _, self._code, self._ip, self._env = self._ctrl_stack.pop()
 
 class Interpreter:
-    def __init__(self):
+    def __init__(self) -> None:
         self._env = Environment()
         self._builtins()
 
@@ -452,38 +473,46 @@ class Interpreter:
         self._env.define(Ident("mul"), lambda args: args[0] * args[1])
         self._env.define(Ident("div"), lambda args: args[0] // args[1])
         self._env.define(Ident("mod"), lambda args: args[0] % args[1])
+        self._env.define(Ident("neg"), lambda args: -args[0])
+
         self._env.define(Ident("equal"), lambda args: args[0] == args[1])
+        self._env.define(Ident("not_equal"), lambda args: args[0] != args[1])
         self._env.define(Ident("less"), lambda args: args[0] < args[1])
         self._env.define(Ident("greater"), lambda args: args[0] > args[1])
+        self._env.define(Ident("less_equal"), lambda args: args[0] <= args[1])
+        self._env.define(Ident("greater_equal"), lambda args: args[0] >= args[1])
+
+        self._env.define(Ident("not"), lambda args: not args[0])
+
         self._env.define(Ident("print"), lambda args: print(*args))
 
         self._env = Environment(self._env)
 
-    def scan(self, src):
+    def scan(self, src: str) -> list[Token]:
         return Scanner(src).tokenize()
 
-    def parse(self, tokens):
+    def parse(self, tokens: list[Token]) -> Expr:
         return Parser(tokens).parse()
 
-    def ast(self, src):
+    def ast(self, src: str) -> Expr:
         return self.parse(self.scan(src))
 
-    def eval(self, expr):
+    def eval(self, expr: Expr) -> Value:
         return Evaluator().eval(expr, self._env)
 
-    def walk(self, src):
+    def walk(self, src: str) -> Value:
         return self.eval(self.ast(src))
 
-    def compile(self, ast):
+    def compile(self, ast: Expr) -> list[Instruction]:
         return Compiler(ast).compile()
 
-    def code(self, src):
+    def code(self, src: str) -> list[Instruction]:
         return self.compile(self.ast(src))
 
-    def execute(self, code):
+    def execute(self, code: list[Instruction]) -> Value:
         return VM(code, self._env).execute()
 
-    def run(self, src):
+    def run(self, src: str) -> Value:
         return self.execute(self.code(src))
 
 
@@ -534,23 +563,32 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Ident class:")
-    print(Ident("aaa") == Ident("aaa")) # -> True
-    print(Ident("aaa") == Ident("bbb")) # -> False
-    print(Ident("aaa") == "aaa") # -> False
+    print("Unary operators:")
 
-    print({Ident("aaa"): 2}[Ident("aaa")]) # -> 2
-    print(Ident("aaa") in {Ident("aaa"): 2}) # -> True
-    print(Ident("bbb") in {Ident("aaa"): 2}) # -> False
-    print("aaa" in {Ident("aaa"): 2}) # -> False
+    print(toil.ast(r""" -2 """)) # -> (neg, [2])
+    print(toil.walk(r""" -2 """)) # -> -2
+    print(toil.run(r""" -2 """)) # -> -2
 
-    print(toil.ast(r""" a := 2 """)) # -> (define, [a, 2])
+    print(toil.ast(r""" --2 """)) # -> (neg, [(neg, [2])])
+    print(toil.walk(r""" --2 """)) # -> 2
+    print(toil.run(r""" --2 """)) # -> 2
 
-    print(Ident("aaa")) # -> aaa
-    print("aaa") # -> aaa
+    print(toil.ast(r""" 3--2 """)) # -> (sub, [3, (neg, [2])])
+    print(toil.walk(r""" 3--2 """)) # -> 5
+    print(toil.run(r""" 3--2 """)) # -> 5
 
-    print(repr(Ident("aaa"))) # -> aaa
-    print(repr("aaa")) # -> 'aaa'
+    print(toil.ast(r""" -add(2, 3) * 4 """)) # -> (mul, [(neg, [(add, [2, 3])]), 4])
+    print(toil.walk(r""" -add(2, 3) * 4 """)) # -> -20
+    print(toil.run(r""" -add(2, 3) * 4 """)) # -> -20
 
-    print([Ident("aaa")]) # -> aaa
-    print(["aaa"]) # -> aaa
+    print(toil.ast(r""" not 2 == 2 """)) # -> (not, [(equal, [2, 2])])
+    print(toil.walk(r""" not 2 == 2 """)) # -> False
+    print(toil.run(r""" not 2 == 2 """)) # -> False
+
+    print(toil.ast(r""" not not 2 == 2 """)) # -> (not, [(not, [(equal, [2, 2])])])
+    print(toil.walk(r""" not not 2 == 2 """)) # -> True
+    print(toil.run(r""" not not 2 == 2 """)) # -> True
+
+    print(toil.ast(r""" a := not 2 == 2 """)) # -> (define, [a, (not, [(equal, [2, 2])])])
+    print(toil.walk(r""" a := not 2 == 2 """)) # -> False
+    print(toil.run(r""" a := not 2 == 2 """)) # -> False
