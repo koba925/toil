@@ -110,22 +110,11 @@ class TestIntermediateCodeInterpreter:
         assert toil.run(r""" 2 == 2 """) is True
         assert toil.run(r""" 2 == 3 """) is False
 
-        assert toil.run(r""" 2 != 2 """) is False
-        assert toil.run(r""" 2 != 3 """) is True
-
         assert toil.run(r""" 2 < 2 """) is False
         assert toil.run(r""" 2 < 3 """) is True
 
         assert toil.run(r""" 2 > 2 """) is False
         assert toil.run(r""" 3 > 2 """) is True
-
-        assert toil.run(r""" 3 <= 2 """) is False
-        assert toil.run(r""" 2 <= 2 """) is True
-        assert toil.run(r""" 2 <= 3 """) is True
-
-        assert toil.run(r""" 2 >= 3 """) is False
-        assert toil.run(r""" 2 >= 2 """) is True
-        assert toil.run(r""" 3 >= 2 """) is True
 
         assert toil.run(r""" print() """) is None
         assert capsys.readouterr().out == "\n"
@@ -143,17 +132,6 @@ class TestIntermediateCodeInterpreter:
 
         with pytest.raises(AssertionError, match="Undefined variable"):
             toil.run(r""" not_defined() """)
-
-    def test_not(self):
-        assert toil.run(r""" not 2 == 2 """) is False
-        assert toil.run(r""" not not 2 == 2 """) is True
-        assert toil.run(r""" a := not 2 == 2 """) is False
-
-    def test_unary_minus(self):
-        assert toil.run(r""" -2 """) == -2
-        assert toil.run(r""" --2 """) == 2
-        assert toil.run(r""" 3--2 """) == 5
-        assert toil.run(r""" -add(2, 3) * 4 """) == -20
 
     def test_func(self):
         assert toil.run(r""" func do 2 end () """) == 2

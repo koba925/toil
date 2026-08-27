@@ -110,22 +110,11 @@ class TestIntermediateCodeInterpreter:
         assert toil.run(r""" 2 == 2 """) is True
         assert toil.run(r""" 2 == 3 """) is False
 
-        assert toil.run(r""" 2 != 2 """) is False
-        assert toil.run(r""" 2 != 3 """) is True
-
         assert toil.run(r""" 2 < 2 """) is False
         assert toil.run(r""" 2 < 3 """) is True
 
         assert toil.run(r""" 2 > 2 """) is False
         assert toil.run(r""" 3 > 2 """) is True
-
-        assert toil.run(r""" 3 <= 2 """) is False
-        assert toil.run(r""" 2 <= 2 """) is True
-        assert toil.run(r""" 2 <= 3 """) is True
-
-        assert toil.run(r""" 2 >= 3 """) is False
-        assert toil.run(r""" 2 >= 2 """) is True
-        assert toil.run(r""" 3 >= 2 """) is True
 
         assert toil.run(r""" print() """) is None
         assert capsys.readouterr().out == "\n"

@@ -567,28 +567,21 @@ if __name__ == "__main__":
 
     print(toil.ast(r""" -2 """)) # -> (neg, [2])
     print(toil.walk(r""" -2 """)) # -> -2
-    print(toil.run(r""" -2 """)) # -> -2
 
     print(toil.ast(r""" --2 """)) # -> (neg, [(neg, [2])])
     print(toil.walk(r""" --2 """)) # -> 2
-    print(toil.run(r""" --2 """)) # -> 2
 
     print(toil.ast(r""" 3--2 """)) # -> (sub, [3, (neg, [2])])
     print(toil.walk(r""" 3--2 """)) # -> 5
-    print(toil.run(r""" 3--2 """)) # -> 5
 
     print(toil.ast(r""" -add(2, 3) * 4 """)) # -> (mul, [(neg, [(add, [2, 3])]), 4])
     print(toil.walk(r""" -add(2, 3) * 4 """)) # -> -20
-    print(toil.run(r""" -add(2, 3) * 4 """)) # -> -20
 
     print(toil.ast(r""" not 2 == 2 """)) # -> (not, [(equal, [2, 2])])
     print(toil.walk(r""" not 2 == 2 """)) # -> False
-    print(toil.run(r""" not 2 == 2 """)) # -> False
 
     print(toil.ast(r""" not not 2 == 2 """)) # -> (not, [(not, [(equal, [2, 2])])])
     print(toil.walk(r""" not not 2 == 2 """)) # -> True
-    print(toil.run(r""" not not 2 == 2 """)) # -> True
 
     print(toil.ast(r""" a := not 2 == 2 """)) # -> (define, [a, (not, [(equal, [2, 2])])])
     print(toil.walk(r""" a := not 2 == 2 """)) # -> False
-    print(toil.run(r""" a := not 2 == 2 """)) # -> False

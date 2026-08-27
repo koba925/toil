@@ -3969,6 +3969,111 @@ defmacro_ のような名前で標準機能相当のマクロを定義する
 ## 第5部 中間コードインタプリタの拡張
 中間コードインタプリタ (Intermediate Code Interpreter:ICI)を機能拡張する。
 
+### そのまま動くもの
+
+    print(toil.run(r""" 2 != 2 """)) # -> False
+    print(toil.run(r""" 2 != 3 """)) # -> True
+
+    print(toil.run(r""" 3 <= 2 """)) # -> False
+    print(toil.run(r""" 2 <= 2 """)) # -> True
+    print(toil.run(r""" 2 <= 3 """)) # -> True
+
+    print(toil.run(r""" 2 >= 3 """)) # -> False
+    print(toil.run(r""" 2 >= 2 """)) # -> True
+    print(toil.run(r""" 3 >= 2 """)) # -> True
+
+    def test_builtins(self, capsys):
+        assert toil.run(r""" add(2, 3) """) == 5
+
+        assert toil.run(r""" 2 + 3 """) == 5
+        assert toil.run(r""" 3 - 2 """) == 1
+        assert toil.run(r""" 2 * 3 """) == 6
+        assert toil.run(r""" 6 / 3 """) == 2
+        assert toil.run(r""" 7 % 3 """) == 1
+
+        assert toil.run(r""" 2 + 3 * 4 """) == 14
+        assert toil.run(r""" (2 + 3) * 4 """) == 20
+        assert toil.run(r""" 2 + 3 == 2 * 3 """) is False
+        assert toil.run(r""" 2 + 3 < 2 * 3 """) is True
+
+        assert toil.run(r""" 2 == 2 """) is True
+        assert toil.run(r""" 2 == 3 """) is False
+
+        assert toil.run(r""" 2 != 2 """) is False
+        assert toil.run(r""" 2 != 3 """) is True
+
+        assert toil.run(r""" 2 < 2 """) is False
+        assert toil.run(r""" 2 < 3 """) is True
+
+        assert toil.run(r""" 2 > 2 """) is False
+        assert toil.run(r""" 3 > 2 """) is True
+
+        assert toil.run(r""" 3 <= 2 """) is False
+        assert toil.run(r""" 2 <= 2 """) is True
+        assert toil.run(r""" 2 <= 3 """) is True
+
+        assert toil.run(r""" 2 >= 3 """) is False
+        assert toil.run(r""" 2 >= 2 """) is True
+        assert toil.run(r""" 3 >= 2 """) is True
+
+        assert toil.run(r""" print() """) is None
+        assert capsys.readouterr().out == "\n"
+
+        assert toil.run(r""" print(2) """) is None
+        assert capsys.readouterr().out == "2\n"
+
+        assert toil.run(r""" print(2, 3) """) is None
+        assert capsys.readouterr().out == "2 3\n"
+
+        assert toil.run(r""" print(2 + 3 == 5) """) is None
+        assert capsys.readouterr().out == "True\n"
+
+        assert toil.run(r""" myadd := add; myadd(2, 3) """) == 5
+
+        with pytest.raises(AssertionError, match="Undefined variable"):
+            toil.run(r""" not_defined() """)
+
+    def test_not(self):
+        assert toil.run(r""" not 2 == 2 """) is False
+        assert toil.run(r""" not not 2 == 2 """) is True
+        assert toil.run(r""" a := not 2 == 2 """) is False
+
+    def test_unary_minus(self):
+        assert toil.run(r""" -2 """) == -2
+        assert toil.run(r""" --2 """) == 2
+        assert toil.run(r""" 3--2 """) == 5
+        assert toil.run(r""" -add(2, 3) * 4 """) == -20
+
+    print("Unary operators:")
+
+    print(toil.ast(r""" -2 """)) # -> (neg, [2])
+    print(toil.walk(r""" -2 """)) # -> -2
+    print(toil.run(r""" -2 """)) # -> -2
+
+    print(toil.ast(r""" --2 """)) # -> (neg, [(neg, [2])])
+    print(toil.walk(r""" --2 """)) # -> 2
+    print(toil.run(r""" --2 """)) # -> 2
+
+    print(toil.ast(r""" 3--2 """)) # -> (sub, [3, (neg, [2])])
+    print(toil.walk(r""" 3--2 """)) # -> 5
+    print(toil.run(r""" 3--2 """)) # -> 5
+
+    print(toil.ast(r""" -add(2, 3) * 4 """)) # -> (mul, [(neg, [(add, [2, 3])]), 4])
+    print(toil.walk(r""" -add(2, 3) * 4 """)) # -> -20
+    print(toil.run(r""" -add(2, 3) * 4 """)) # -> -20
+
+    print(toil.ast(r""" not 2 == 2 """)) # -> (not, [(equal, [2, 2])])
+    print(toil.walk(r""" not 2 == 2 """)) # -> False
+    print(toil.run(r""" not 2 == 2 """)) # -> False
+
+    print(toil.ast(r""" not not 2 == 2 """)) # -> (not, [(not, [(equal, [2, 2])])])
+    print(toil.walk(r""" not not 2 == 2 """)) # -> True
+    print(toil.run(r""" not not 2 == 2 """)) # -> True
+
+    print(toil.ast(r""" a := not 2 == 2 """)) # -> (define, [a, (not, [(equal, [2, 2])])])
+    print(toil.walk(r""" a := not 2 == 2 """)) # -> False
+    print(toil.run(r""" a := not 2 == 2 """)) # -> False
+
 ### 配列
 listを実装する。要素参照は組み込み関数で実装済みになっている。
 

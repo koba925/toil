@@ -559,14 +559,3 @@ if __name__ == "__main__":
     print(toil.walk(r""" 2 >= 3 """)) # -> False
     print(toil.walk(r""" 2 >= 2 """)) # -> True
     print(toil.walk(r""" 3 >= 2 """)) # -> True
-
-    print(toil.run(r""" 2 != 2 """)) # -> False
-    print(toil.run(r""" 2 != 3 """)) # -> True
-
-    print(toil.run(r""" 3 <= 2 """)) # -> False
-    print(toil.run(r""" 2 <= 2 """)) # -> True
-    print(toil.run(r""" 2 <= 3 """)) # -> True
-
-    print(toil.run(r""" 2 >= 3 """)) # -> False
-    print(toil.run(r""" 2 >= 2 """)) # -> True
-    print(toil.run(r""" 3 >= 2 """)) # -> True
