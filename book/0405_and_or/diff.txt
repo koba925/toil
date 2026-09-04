@@ -1,4 +1,4 @@
-@@ -81,40 +81,45 @@
+@@ -83,40 +83,45 @@
          self._pos = 0
  
      def parse(self) -> Expr:
@@ -27,7 +27,7 @@
          }, self._not)
  
      def _not(self):
-         return self._unary({ Ident("not"): Ident("not") }, self._comparison)
+         return self._unary({Ident("not"): Ident("not")}, self._comparison)
  
      def _comparison(self):
          return self._binary_left({
@@ -44,7 +44,7 @@
      def _mul_div_mod(self):
          return self._binary_left({
              Ident("*"): Ident("mul"), Ident("/"): Ident("div"),
-@@ -269,40 +274,44 @@
+@@ -271,40 +276,44 @@
          for param, arg in zip(params, args):
              self.define(param, arg)
  
@@ -89,7 +89,7 @@
  
      def _while(self, cond_expr, body_expr, env):
          val = None
-@@ -546,49 +555,42 @@
+@@ -548,42 +557,42 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):
@@ -111,35 +111,28 @@
      # Example
  
 -    print("Unary operators:")
-+    print("And and or:")
- 
+-
 -    print(toil.ast(r""" -2 """)) # -> (neg, [2])
 -    print(toil.walk(r""" -2 """)) # -> -2
--    print(toil.run(r""" -2 """)) # -> -2
 -
 -    print(toil.ast(r""" --2 """)) # -> (neg, [(neg, [2])])
 -    print(toil.walk(r""" --2 """)) # -> 2
--    print(toil.run(r""" --2 """)) # -> 2
 -
 -    print(toil.ast(r""" 3--2 """)) # -> (sub, [3, (neg, [2])])
 -    print(toil.walk(r""" 3--2 """)) # -> 5
--    print(toil.run(r""" 3--2 """)) # -> 5
 -
 -    print(toil.ast(r""" -add(2, 3) * 4 """)) # -> (mul, [(neg, [(add, [2, 3])]), 4])
 -    print(toil.walk(r""" -add(2, 3) * 4 """)) # -> -20
--    print(toil.run(r""" -add(2, 3) * 4 """)) # -> -20
 -
 -    print(toil.ast(r""" not 2 == 2 """)) # -> (not, [(equal, [2, 2])])
 -    print(toil.walk(r""" not 2 == 2 """)) # -> False
--    print(toil.run(r""" not 2 == 2 """)) # -> False
 -
 -    print(toil.ast(r""" not not 2 == 2 """)) # -> (not, [(not, [(equal, [2, 2])])])
 -    print(toil.walk(r""" not not 2 == 2 """)) # -> True
--    print(toil.run(r""" not not 2 == 2 """)) # -> True
--
++    print("And and or:")
+ 
 -    print(toil.ast(r""" a := not 2 == 2 """)) # -> (define, [a, (not, [(equal, [2, 2])])])
 -    print(toil.walk(r""" a := not 2 == 2 """)) # -> False
--    print(toil.run(r""" a := not 2 == 2 """)) # -> False
 +    print(toil.walk(r""" True and False """)) # -> False
 +    print(toil.walk(r""" False and True """)) # -> False
 +    print(toil.walk(r""" True or False """)) # -> True

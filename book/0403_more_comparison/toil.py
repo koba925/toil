@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 class Ident:
     __match_args__ = ("name",)
 
@@ -228,7 +230,7 @@ class Parser:
 
 
 class Environment:
-    def __init__(self, parent: "Environment | None" = None) -> None:
+    def __init__(self, parent: Environment | None = None) -> None:
         self._parent = parent
         self._vars: dict[Ident, Value] = {}
 
