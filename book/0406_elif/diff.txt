@@ -51,7 +51,7 @@
      def _binary_right(self, ops, sub_elem):
          left = sub_elem()
          if type(op := self._current_token()) is Ident and op in ops:
-@@ -557,42 +563,106 @@
+@@ -557,42 +563,117 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):
@@ -172,6 +172,17 @@
 +            5
 +        end
 +    """)) # -> 4
++
++    toil.walk(r"""
++        def fib_rec(n) do
++            if n == 0 then 0
++            elif n == 1 then 1
++            else fib_rec(n - 1) + fib_rec(n - 2) end
++        end
++    """)
++    print(toil.walk(r""" fib_rec(0) """)) # -> 0
++    print(toil.walk(r""" fib_rec(1) """)) # -> 1
++    print(toil.walk(r""" fib_rec(6) """)) # -> 8
 +
 +    # print(toil.walk(r""" if True 2 end """)) # -> Expected then
 +    # print(toil.walk(r""" if True then 2 """)) # -> Expected end

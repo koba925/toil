@@ -389,6 +389,22 @@ class TestTreeWalkInterpreter:
         with pytest.raises(AssertionError, match="Invalid def syntax"):
             toil.walk(r""" def 2 do a end """)
 
+    def test_return(self):
+        toil.walk(r"""
+            def f(a) do
+                if a == 2 then return end;
+                if a == 3 then return(4) end;
+                5
+            end
+        """)
+        assert toil.walk(r""" f(2) """) is None
+        assert toil.walk(r""" f(3) """) == 4
+        assert toil.walk(r""" f(4) """) == 5
+
+        assert toil.walk(r""" return(2) """) == 2
+        assert toil.walk(r""" return; 3 """) is None
+        assert toil.walk(r""" return(2); 3 """) == 2
+
     def test_empty_source(self):
         with pytest.raises(AssertionError, match="Invalid token"):
             toil.walk(r"""""")
@@ -448,9 +464,9 @@ class TestExamples:
 
         toil.walk(r"""
             def fib_rec(n) do
-                if n == 0 then 0
-                elif n == 1 then 1
-                else fib_rec(n - 1) + fib_rec(n - 2) end
+                if n == 0 then return(0) end;
+                if n == 1 then return(1) end;
+                fib_rec(n - 1) + fib_rec(n - 2)
             end
         """)
         assert toil.walk(r""" fib_rec(0) """) == 0
@@ -568,6 +584,24 @@ class TestExamples:
             end
         """)
         assert capsys.readouterr().out == "False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9\n"
+
+    def test_is_prime(self):
+        toil.walk(r"""
+            def is_prime(n) do
+                if n < 2 then return(False) end;
+                i := 2;
+                while i * i <= n do
+                    if n % i == 0 then return(False) end;
+                    i = i + 1
+                end;
+                True
+            end
+        """)
+        assert toil.walk(r""" is_prime(1) """) is False
+        assert toil.walk(r""" is_prime(2) """) is True
+        assert toil.walk(r""" is_prime(4) """) is False
+        assert toil.walk(r""" is_prime(7) """) is True
+        assert toil.walk(r""" is_prime(15) """) is False
 
 
 import os, sys, io, runpy

@@ -283,13 +283,19 @@ class Environment:
             self.define(param, arg)
 
 
+class ReturnException(Exception):
+    def __init__(self, val: Value = None) -> None: self.val = val
+
 class Evaluator:
     def eval(self, expr: Expr, env: Environment) -> Value:
         match expr:
             case None | bool() | int(): return expr
+            case Ident("return"): raise ReturnException(None)
+            case Ident() as ident: return env.val(ident)
             case (Ident("func"), [params, body_expr]):
                 return (Ident("closure"), [params, body_expr, env])
-            case Ident() as ident: return env.val(ident)
+            case (Ident("return"), args):
+                raise ReturnException(self.eval(args[0], env))
             case (Ident("scope"), [body_expr]):
                 return self.eval(body_expr, Environment(env))
             case (Ident("define"), [Ident() as ident, expr]):
@@ -334,7 +340,9 @@ class Evaluator:
             case (Ident("closure"), [params, body_expr, closure_env]):
                 new_env = Environment(closure_env)
                 new_env.bind(params, args_val)
-                return self.eval(body_expr, new_env)
+                try:
+                    return self.eval(body_expr, new_env)
+                except ReturnException as e: return e.val
             case _:
                 assert False, f"Invalid operator @ _op(): {op_val}"
 
@@ -515,7 +523,9 @@ class Interpreter:
         return self.parse(self.scan(src))
 
     def eval(self, expr: Expr) -> Value:
-        return Evaluator().eval(expr, self._env)
+        try:
+            return Evaluator().eval(expr, self._env)
+        except ReturnException as e: return e.val
 
     def walk(self, src: str) -> Value:
         return self.eval(self.ast(src))
@@ -580,100 +590,38 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Elif and omitting else clauses:")
+    print("Return:")
 
-    print(toil.ast(r""" if True then 2 end """))
-    # -> (if, [True, 2, None])
-    print(toil.walk(r""" if True then 2 end """))
-    # -> 2
-
-    print(toil.ast(r""" if False then 2 end """))
-    # -> (if, [False, 2, None])
-    print(toil.walk(r""" if False then 2 end """))
-    # -> None
-
-    print(toil.ast(r""" if True then 2 else 3 end """))
-    # -> (if, [True, 2, 3])
-    print(toil.walk(r""" if True then 2 else 3 end """))
-    # -> 2
-
-    print(toil.ast(r""" if False then 2 else 3 end """))
-    # -> (if, [False, 2, 3])
-    print(toil.walk(r""" if False then 2 else 3 end """))
-    # -> 3
-
-    print(toil.ast(r""" if True then 2 elif True then 3 end """))
-    # -> (if, [True, 2, (if, [True, 3, None])])
-    print(toil.walk(r""" if True then 2 elif True then 3 end """))
-    # -> 2
-
-    print(toil.ast(r""" if True then 2 else if True then 3 else None end end"""))
-    # -> (if, [True, 2, (if, [True, 3, None])])
-    print(toil.walk(r""" if True then 2 else if True then 3 else None end end"""))
-    # -> 2
-
-    print(toil.ast(r""" if False then 2 elif True then 3 end """))
-    # -> (if, [False, 2, (if, [True, 3, None])])
-    print(toil.walk(r""" if False then 2 elif True then 3 end """))
-    # -> 3
-
-    print(toil.ast(r""" if False then 2 elif False then 3 end """))
-    # -> (if, [False, 2, (if, [False, 3, None])])
-    print(toil.walk(r""" if False then 2 elif False then 3 end """))
-    # -> None
-
-    print(toil.ast(r""" if False then 2 elif True then 3 else 4 end """))
-    # -> (if, [False, 2, (if, [True, 3, 4])])
-    print(toil.walk(r""" if False then 2 elif True then 3 else 4 end """))
-    # -> 3
-
-    print(toil.ast(r""" if True then 2 elif True then 3 else 4 end """))
-    # -> (if, [True, 2, (if, [True, 3, 4])])
-    print(toil.walk(r""" if True then 2 elif True then 3 else 4 end """))
-    # -> 2
-
-    print(toil.ast(r""" if False then 2 elif False then 3 else 4 end """))
-    # -> (if, [False, 2, (if, [False, 3, 4])])
-    print(toil.walk(r""" if False then 2 elif False then 3 else 4 end """))
-    # -> 4
-
-    print(toil.ast(r"""
-        if False then
-            2
-        elif False then
-            3
-        elif True then
-            4
-        else
-            5
-        end
-    """)) # -> (if, [False, 2, (if, [False, 3, (if, [True, 4, 5])])])
-    print(toil.walk(r"""
-        if False then
-            2
-        elif False then
-            3
-        elif True then
-            4
-        else
-            5
-        end
-    """)) # -> 4
+    print(toil.ast(r""" return """)) # -> return
+    print(toil.walk(r""" return; 3 """)) # -> None
+    print(toil.ast(r""" return(2) """)) # -> (return, [2])
+    print(toil.walk(r""" return(2); 3 """)) # -> 2
 
     toil.walk(r"""
         def fib_rec(n) do
-            if n == 0 then 0
-            elif n == 1 then 1
-            else fib_rec(n - 1) + fib_rec(n - 2) end
+            if n == 0 then return(0) end;
+            if n == 1 then return(1) end;
+            fib_rec(n - 1) + fib_rec(n - 2)
         end
     """)
     print(toil.walk(r""" fib_rec(0) """)) # -> 0
     print(toil.walk(r""" fib_rec(1) """)) # -> 1
     print(toil.walk(r""" fib_rec(6) """)) # -> 8
 
-    # print(toil.walk(r""" if True 2 end """)) # -> Expected then
-    # print(toil.walk(r""" if True then 2 """)) # -> Expected end
-    # print(toil.walk(r""" if True then 2 3 end """)) # -> Expected end
-    # print(toil.walk(r""" if True then 2 else 3 """)) # -> Expected end
-    # print(toil.walk(r""" if False then 2 elif True 3 end """)) # -> Expected then
-    # print(toil.walk(r""" if False then 2 elif True then 3 """)) # -> Expected end
+    toil.walk(r"""
+        def is_prime(n) do
+            if n < 2 then return(False) end;
+            i := 2;
+            while i * i <= n do
+                if n % i == 0 then return(False) end;
+                i = i + 1
+            end;
+            True
+        end
+    """)
+    print(toil.walk(r""" is_prime(1) """)) # -> False
+    print(toil.walk(r""" is_prime(2) """)) # -> True
+    print(toil.walk(r""" is_prime(4) """)) # -> False
+    print(toil.walk(r""" is_prime(7) """)) # -> True
+    print(toil.walk(r""" is_prime(15) """)) # -> False
+
