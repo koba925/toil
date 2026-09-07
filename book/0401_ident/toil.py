@@ -253,9 +253,9 @@ class Evaluator:
     def eval(self, expr, env):
         match expr:
             case None | bool() | int(): return expr
+            case Ident() as ident: return env.val(ident)
             case (Ident("func"), [params, body_expr]):
                 return (Ident("closure"), [params, body_expr, env])
-            case Ident() as ident: return env.val(ident)
             case (Ident("scope"), [body_expr]):
                 return self.eval(body_expr, Environment(env))
             case (Ident("define"), [Ident() as ident, expr]):

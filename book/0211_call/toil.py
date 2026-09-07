@@ -181,9 +181,9 @@ class Evaluator:
     def eval(self, expr, env):
         match expr:
             case None | bool() | int(): return expr
+            case str(name): return env.val(name)
             case ("func", [params, body_expr]):
                 return ("closure", [params, body_expr, env])
-            case str(name): return env.val(name)
             case ("scope", [body_expr]):
                 return self.eval(body_expr, Environment(env))
             case ("define", [name, expr]):

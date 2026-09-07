@@ -27,10 +27,9 @@
          match expr:
              case None | bool() | int(): return expr
 +            case Ident("return"): raise ReturnException(None)
-+            case Ident() as ident: return env.val(ident)
+             case Ident() as ident: return env.val(ident)
              case (Ident("func"), [params, body_expr]):
                  return (Ident("closure"), [params, body_expr, env])
--            case Ident() as ident: return env.val(ident)
 +            case (Ident("return"), args):
 +                raise ReturnException(self.eval(args[0], env))
              case (Ident("scope"), [body_expr]):
