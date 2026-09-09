@@ -1,0 +1,246 @@
+@@ -269,84 +269,93 @@
+         elif self._parent:
+             return self._parent.assign(ident, val)
+         else:
+             assert False, f"Undefined variable @ assign(): {ident}"
+ 
+     def val(self, ident: Ident) -> Value:
+         if ident in self._vars: return self._vars[ident]
+         elif self._parent:
+             return self._parent.val(ident)
+         else:
+             assert False, f"Undefined variable @ val(): {ident}"
+ 
+     def bind(self, params: list[Ident], args: list[Value]) -> None:
+         for param, arg in zip(params, args):
+             self.define(param, arg)
+ 
+ 
+ class ReturnException(Exception):
+     def __init__(self, val: Value = None) -> None: self.val = val
+ 
++class BreakException(Exception): pass
++class ContinueException(Exception): pass
++
+ class Evaluator:
+     def eval(self, expr: Expr, env: Environment) -> Value:
+         match expr:
+             case None | bool() | int(): return expr
+             case Ident("return"): raise ReturnException(None)
++            case Ident("break"): raise BreakException()
++            case Ident("continue"): raise ContinueException()
+             case Ident() as ident: return env.val(ident)
+             case (Ident("func"), [params, body_expr]):
+                 return (Ident("closure"), [params, body_expr, env])
+             case (Ident("return"), args):
+                 raise ReturnException(self.eval(args[0], env))
+             case (Ident("scope"), [body_expr]):
+                 return self.eval(body_expr, Environment(env))
+             case (Ident("define"), [Ident() as ident, expr]):
+                 return env.define(ident, self.eval(expr, env))
+             case (Ident("assign"), [Ident() as ident, expr]):
+                 return env.assign(ident, self.eval(expr, env))
+             case (Ident("seq"), exprs): return self._seq(exprs, env)
+             case (Ident("if"), [cond_expr, then_expr, else_expr]):
+                 return self._if(cond_expr, then_expr, else_expr, env)
+             case (Ident("and"), [left_expr, right_expr]):
+                 return self.eval(left_expr, env) and self.eval(right_expr, env)
+             case (Ident("or"), [left_expr, right_expr]):
+                 return self.eval(left_expr, env) or self.eval(right_expr, env)
+             case (Ident("while"), [cond_expr, body_expr]):
+                 return self._while(cond_expr, body_expr, env)
+             case (op_expr, args_expr):
+                 return self._op(op_expr, args_expr, env)
+             case _:
+                 assert False, f"Unexpected expression @ eval(): {expr}"
+ 
+     def _seq(self, exprs, env):
+         val = None
+         for expr in exprs: val = self.eval(expr, env)
+         return val
+ 
+     def _if(self, cond_expr, then_expr, else_expr, env):
+         if self.eval(cond_expr, env):
+             return self.eval(then_expr, env)
+         else:
+             return self.eval(else_expr, env)
+ 
+     def _while(self, cond_expr, body_expr, env):
+         val = None
+-        while self.eval(cond_expr, env): val = self.eval(body_expr, env)
++        while self.eval(cond_expr, env):
++            try:
++                val = self.eval(body_expr, env)
++            except ContinueException: continue
++            except BreakException: return None
+         return val
+ 
+     def _op(self, op_expr, args_expr, env):
+         op_val = self.eval(op_expr, env)
+         args_val = [self.eval(arg, env) for arg in args_expr]
+         match op_val:
+             case f if callable(f): return f(args_val)
+             case (Ident("closure"), [params, body_expr, closure_env]):
+                 new_env = Environment(closure_env)
+                 new_env.bind(params, args_val)
+                 try:
+                     return self.eval(body_expr, new_env)
+                 except ReturnException as e: return e.val
+             case _:
+                 assert False, f"Invalid operator @ _op(): {op_val}"
+ 
+ 
+ class Compiler:
+     def __init__(self, expr: Expr) -> None:
+         self._expr = expr
+@@ -509,40 +518,42 @@
+ 
+         self._env.define(Ident("not"), lambda args: not args[0])
+ 
+         self._env.define(Ident("print"), lambda args: print(*args))
+ 
+         self._env = Environment(self._env)
+ 
+     def scan(self, src: str) -> list[Token]:
+         return Scanner(src).tokenize()
+ 
+     def parse(self, tokens: list[Token]) -> Expr:
+         return Parser(tokens).parse()
+ 
+     def ast(self, src: str) -> Expr:
+         return self.parse(self.scan(src))
+ 
+     def eval(self, expr: Expr) -> Value:
+         try:
+             return Evaluator().eval(expr, self._env)
+         except ReturnException as e: return e.val
++        except ContinueException: assert False, "Continue at top level @ eval()"
++        except BreakException: assert False, "Break at top level @ eval()"
+ 
+     def walk(self, src: str) -> Value:
+         return self.eval(self.ast(src))
+ 
+     def compile(self, ast: Expr) -> list[Instruction]:
+         return Compiler(ast).compile()
+ 
+     def code(self, src: str) -> list[Instruction]:
+         return self.compile(self.ast(src))
+ 
+     def execute(self, code: list[Instruction]) -> Value:
+         return VM(code, self._env).execute()
+ 
+     def run(self, src: str) -> Value:
+         return self.execute(self.code(src))
+ 
+ 
+ if __name__ == "__main__":
+     import sys
+ 
+@@ -573,55 +584,77 @@
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(walk_or_run, filename):
+         with open(filename, "r") as f:
+             if walk_or_run == "walk":
+                 result = toil.walk(f.read())
+             else:
+                 result = toil.run(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl("walk")
+         case [_, "--rcepl"]: repl("run")
+         case [_, "--walk", filename]: from_file("walk", filename)
+         case [_, "--run", filename]: from_file("run", filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    print("Return:")
++    print("Break and continue:")
++
++    print(toil.ast(r""" break """)) # -> break
++    print(toil.ast(r""" continue """)) # -> continue
++
++    print(toil.walk(r""" while True do break end """)) # -> None
++
++    print(toil.walk(r"""
++        i := 0; while i < 4 do
++            print(i);
++            i = i + 1
++        end
++    """)) # -> 0\n1\n2\n3\n4
++
++    print(toil.walk(r"""
++        i := 0; while i < 4 do
++            if i == 1 then i = 2; continue end;
++            print(i);
++            if i == 3 then break end;
++            i = i + 1
++        end
++    """)) # -> 0\n2\n3\nNone
+ 
+-    print(toil.ast(r""" return """)) # -> return
+-    print(toil.walk(r""" return; 3 """)) # -> None
+-    print(toil.ast(r""" return(2) """)) # -> (return, [2])
+-    print(toil.walk(r""" return(2); 3 """)) # -> 2
+-
+-    toil.walk(r"""
+-        def fib_rec(n) do
+-            if n == 0 then return(0) end;
+-            if n == 1 then return(1) end;
+-            fib_rec(n - 1) + fib_rec(n - 2)
++    print(toil.walk(r"""
++        i := 0; while i < 2 do
++            j := 0; while j < 3 do
++                print(i, j);
++                j = j + 1
++            end;
++            i = i + 1
+         end
+-    """)
+-    print(toil.walk(r""" fib_rec(0) """)) # -> 0
+-    print(toil.walk(r""" fib_rec(1) """)) # -> 1
+-    print(toil.walk(r""" fib_rec(6) """)) # -> 8
+-
+-    toil.walk(r"""
+-        def is_prime(n) do
+-            if n < 2 then return(False) end;
+-            i := 2;
+-            while i * i <= n do
+-                if n % i == 0 then return(False) end;
+-                i = i + 1
++    """)) # -> 0 0\n0 1\n0 2\n1 0\n1 1\n1 2\n2
++
++    print(toil.walk(r"""
++        i := 0; while i < 2 do
++            j := 0; while j < 3 do
++                print(i, j);
++                if i == 0 and j == 1 then break end;
++                j = j + 1
+             end;
+-            True
++            i = i + 1
++        end
++    """)) # -> 0 0\n0 1\n1 0\n1 1\n1 2\n2
++
++    print(toil.walk(r"""
++        def check_and_quit(i) do
++            if i == 2 then break end
++        end;
++        i := 0; while True do
++            check_and_quit(i);
++            print(i);
++            i := i + 1
+         end
+-    """)
+-    print(toil.walk(r""" is_prime(1) """)) # -> False
+-    print(toil.walk(r""" is_prime(2) """)) # -> True
+-    print(toil.walk(r""" is_prime(4) """)) # -> False
+-    print(toil.walk(r""" is_prime(7) """)) # -> True
+-    print(toil.walk(r""" is_prime(15) """)) # -> False
++    """)) # -> 0\n1\nNone
+ 
++    # print(toil.walk(r""" break """)) # -> Break at top level
++    # print(toil.walk(r""" continue """)) # -> Continue at top level
