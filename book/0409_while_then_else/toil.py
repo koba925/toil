@@ -207,8 +207,15 @@ class Parser:
         cond_expr = self._expression()
         self._consume(Ident("do"))
         body_expr = self._expression()
+        then_expr = else_expr = None
+        if self._current_token() == Ident("then"):
+            self._current_and_advance()
+            then_expr = self._expression()
+        if self._current_token() == Ident("else"):
+            self._current_and_advance()
+            else_expr = self._expression()
         self._consume(Ident("end"))
-        return (Ident("while"), [cond_expr, body_expr])
+        return (Ident("while"), [cond_expr, body_expr, then_expr, else_expr])
 
     def _binary_left(self, ops, sub_elem):
         left = sub_elem()
@@ -314,8 +321,8 @@ class Evaluator:
                 return self.eval(left_expr, env) and self.eval(right_expr, env)
             case (Ident("or"), [left_expr, right_expr]):
                 return self.eval(left_expr, env) or self.eval(right_expr, env)
-            case (Ident("while"), [cond_expr, body_expr]):
-                return self._while(cond_expr, body_expr, env)
+            case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
+                return self._while(cond_expr, body_expr, then_expr, else_expr, env)
             case (op_expr, args_expr):
                 return self._op(op_expr, args_expr, env)
             case _:
@@ -332,14 +339,13 @@ class Evaluator:
         else:
             return self.eval(else_expr, env)
 
-    def _while(self, cond_expr, body_expr, env):
-        val = None
+    def _while(self, cond_expr, body_expr, then_expr, else_expr, env):
         while self.eval(cond_expr, env):
             try:
-                val = self.eval(body_expr, env)
+                self.eval(body_expr, env)
             except ContinueException: continue
-            except BreakException: return None
-        return val
+            except BreakException: return self.eval(else_expr, env)
+        return self.eval(then_expr, env)
 
     def _op(self, op_expr, args_expr, env):
         op_val = self.eval(op_expr, env)
@@ -601,60 +607,68 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Break and continue:")
+    print("While-then-else:")
 
-    print(toil.ast(r""" break """)) # -> break
-    print(toil.ast(r""" continue """)) # -> continue
+    print(toil.ast(r""" while i < 3 do i = i + 1 end """))
+    # -> (while, [(less, [i, 3]), (assign, [i, (add, [i, 1])]), None, None])
+    print(toil.walk(r""" i := 1; while i < 3 do i = i + 1 end """))
+    # -> None
+    print(toil.walk(r""" i := 1; while i < 3 do break end """))
+    # -> None
 
-    print(toil.walk(r""" while True do break end """)) # -> None
+    print(toil.ast(r""" while i < 3 do i = i + 1 then i else 0 end """))
+    # -> (while, [(less, [i, 3]), (assign, [i, (add, [i, 1])]), i, 0])
+    print(toil.walk(r""" i := 1; while i < 3 do i = i + 1 then i else 0 end """))
+    # -> 3
+    print(toil.walk(r""" i := 1; while i < 3 do break then i else 0 end """))
+    # -> 0
+
+    print(toil.walk(r""" i := 1; while i < 3 do i = i + 1 then i end """))
+    # -> 3
+    print(toil.walk(r""" i := 1; while i < 3 do break then i end """))
+    # -> None
+
+    print(toil.walk(r""" i := 1; while i < 3 do i = i + 1 else 0 end """))
+    # -> None
+    print(toil.walk(r""" i := 1; while i < 3 do break else 0 end """))
+    # -> 0
 
     print(toil.walk(r"""
-        i := 0; while i < 5 do
-            print(i);
+        sum := 0; i := 1;
+        while i < 4 do
+            sum = sum + i;
             i = i + 1
-        end
-    """)) # -> 0\n1\n2\n3\n4\n5
+        then sum end
+    """)) # -> 6
 
     print(toil.walk(r"""
-        i := 0; while i < 5 do
+        i := 0; while i < 4 do
             if i == 1 then i = 2; continue end;
             print(i);
-            if i == 3 then break end;
             i = i + 1
-        end
-    """)) # -> 0\n2\n3\nNone
+        then i end
+    """)) # -> 0\n2\n3\n4
 
-    print(toil.walk(r"""
-        i := 0; while i < 2 do
-            j := 0; while j < 3 do
+    toil.walk(r"""
+        i := 1; while i < 4 do
+            j := 1; while j < 4 do
+                if i == 2 and j == 2 then break end;
                 print(i, j);
                 j = j + 1
-            end;
+            else break end;
             i = i + 1
         end
-    """)) # -> 0 0\n0 1\n0 2\n1 0\n1 1\n1 2\n2
+    """)
+    # -> "1 1\n1 2\n1 3\n2 1\n"
 
-    print(toil.walk(r"""
-        i := 0; while i < 2 do
-            j := 0; while j < 3 do
-                print(i, j);
-                if i == 0 and j == 1 then break end;
-                j = j + 1
-            end;
-            i = i + 1
-        end
-    """)) # -> 0 0\n0 1\n1 0\n1 1\n1 2\n2
+    print(toil.walk(r""" while False do 1/0 then 3 else 4 end """)) # -> 3
 
-    print(toil.walk(r"""
-        def check_and_quit(i) do
-            if i == 2 then break end
-        end;
-        i := 0; while True do
-            check_and_quit(i);
-            print(i);
-            i := i + 1
-        end
-    """)) # -> 0\n1\nNone
+    # toil.walk(r""" while do 2 then 3 else 4 end """) # -> Expected do
+    # toil.walk(r""" while True 2 then 3 else 4 end """) # -> Expected do
+    # toil.walk(r""" while True do then 3 else 4 end """) # -> Expected end
+    # toil.walk(r""" while True do 2 3 else 4 end """) # -> Expected end
+    # toil.walk(r""" while True do 2 then else 4 end """) # -> Expected end
+    # toil.walk(r""" while True do 2 then 3 4 end """) # -> Expected end
+    # toil.walk(r""" while True do 2 then 3 else end """) # -> Expected end
+    # toil.walk(r""" while True do 2 then 3 else 4 """) # -> Expected end
 
-    # print(toil.walk(r""" break """)) # -> Break at top level
-    # print(toil.walk(r""" continue """)) # -> Continue at top level

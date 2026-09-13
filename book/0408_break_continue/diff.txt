@@ -166,14 +166,14 @@
 +    print(toil.walk(r""" while True do break end """)) # -> None
 +
 +    print(toil.walk(r"""
-+        i := 0; while i < 4 do
++        i := 0; while i < 5 do
 +            print(i);
 +            i = i + 1
 +        end
-+    """)) # -> 0\n1\n2\n3\n4
++    """)) # -> 0\n1\n2\n3\n4\n5
 +
 +    print(toil.walk(r"""
-+        i := 0; while i < 4 do
++        i := 0; while i < 5 do
 +            if i == 1 then i = 2; continue end;
 +            print(i);
 +            if i == 3 then break end;
