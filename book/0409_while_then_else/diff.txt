@@ -49,7 +49,7 @@
          if type(op := self._current_token()) is Ident and op in ops:
              self._current_and_advance()
              return (ops[op], [self._unary(ops, sub_elem)])
-@@ -297,66 +304,66 @@
+@@ -297,66 +304,65 @@
              case Ident("break"): raise BreakException()
              case Ident("continue"): raise ContinueException()
              case Ident() as ident: return env.val(ident)
@@ -100,8 +100,7 @@
              except ContinueException: continue
 -            except BreakException: return None
 -        return val
-+            except BreakException:
-+                return self.eval(else_expr, env)
++            except BreakException: return self.eval(else_expr, env)
 +        return self.eval(then_expr, env)
  
      def _op(self, op_expr, args_expr, env):
@@ -123,7 +122,7 @@
      def __init__(self, expr: Expr) -> None:
          self._expr = expr
          self._code: list[Instruction] = []
-@@ -584,77 +591,85 @@
+@@ -584,77 +590,85 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):
