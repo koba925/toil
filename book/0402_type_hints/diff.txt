@@ -54,7 +54,7 @@
          return self._tokens
  
      def _comment(self):
-@@ -52,45 +61,45 @@
+@@ -52,90 +61,90 @@
          while is_ident_rest(self._current_char()): self._advance()
          match self._lexeme():
              case "None": self._tokens.append(None)
@@ -87,7 +87,8 @@
              f"Extra token @ parse(): {self._current_token()}"
          return expr
  
-     def _expression(self): return self._sequence()
+-    def _expression(self): return self._sequence()
++    def _expression(self) -> Expr: return self._sequence()
  
      def _sequence(self):
          exprs = [self._define_assign()]
@@ -102,7 +103,53 @@
          }, self._comparison)
  
      def _comparison(self):
-@@ -203,71 +212,71 @@
+         return self._binary_left({
+             Ident("=="): Ident("equal"),
+             Ident("<"): Ident("less"), Ident(">"): Ident("greater")
+         }, self._add_sub)
+ 
+     def _add_sub(self):
+         return self._binary_left({
+             Ident("+"): Ident("add"), Ident("-"): Ident("sub")
+         }, self._mul_div_mod)
+ 
+     def _mul_div_mod(self):
+         return self._binary_left({
+             Ident("*"): Ident("mul"), Ident("/"): Ident("div"),
+             Ident("%"): Ident("mod")
+         }, self._call)
+ 
+     def _call(self):
+         target = self._primary()
+         while self._current_token() == Ident("("):
+             self._current_and_advance()
+             target = (target, self._comma_separated_exprs(Ident(")")))
+             self._consume(Ident(")"))
+         return target
+ 
+-    def _primary(self):
++    def _primary(self) -> Expr:
+         match self._current_token():
+             case None | bool() | int(): return self._current_and_advance()
+             case Ident("("): return self._group()
+             case Ident("func"): return self._func()
+             case Ident("def"): return self._def()
+             case Ident("scope"): return self._scope()
+             case Ident("if"): return self._if()
+             case Ident("while"): return self._while()
+             case Ident(name) if is_ident(name): return self._current_and_advance()
+             case invalid:
+                 assert False, f"Invalid token @ _primary(): {invalid}"
+ 
+     def _group(self):
+         self._current_and_advance()
+         expr = self._expression()
+         self._consume(Ident(")"))
+         return expr
+ 
+     def _func(self):
+         self._current_and_advance()
+@@ -203,132 +212,132 @@
          if self._current_token() != terminator:
              cse.append(self._expression())
              while self._current_token() == Ident(","):
@@ -181,14 +228,25 @@
                  return self._op(op_expr, args_expr, env)
              case _:
                  assert False, f"Unexpected expression @ eval(): {expr}"
-@@ -285,45 +294,45 @@
+ 
+     def _seq(self, exprs, env):
+         val = None
+         for expr in exprs: val = self.eval(expr, env)
+         return val
+ 
+     def _if(self, cond_expr, then_expr, else_expr, env):
+         if self.eval(cond_expr, env):
+             return self.eval(then_expr, env)
+         else:
+             return self.eval(else_expr, env)
  
      def _while(self, cond_expr, body_expr, env):
          val = None
          while self.eval(cond_expr, env): val = self.eval(body_expr, env)
          return val
  
-     def _op(self, op_expr, args_expr, env):
+-    def _op(self, op_expr, args_expr, env):
++    def _op(self, op_expr, args_expr, env) -> Value:
          op_val = self.eval(op_expr, env)
          args_val = [self.eval(arg, env) for arg in args_expr]
          match op_val:
@@ -214,7 +272,8 @@
          self._emit("ret")
          return self._code
  
-     def _expression(self, expr):
+-    def _expression(self, expr):
++    def _expression(self, expr: Expr):
          match expr:
              case None | bool() | int(): self._emit("const", expr)
              case Ident() as ident: self._emit("get", ident)
@@ -230,6 +289,11 @@
              case (Ident("if"), [cond_expr, then_expr, else_expr]):
                  self._if(cond_expr, then_expr, else_expr)
              case (Ident("while"), [cond_expr, body_expr]):
+                 self._while(cond_expr, body_expr)
+             case (op_expr, args_expr):
+                 self._op(op_expr, args_expr)
+             case _: assert False, f"Unsupported expression @ compile(): {expr}"
+ 
 @@ -370,48 +379,48 @@
          self._emit("jump", loop_jump)
          self._set_operand(cond_jump, self._current_addr())

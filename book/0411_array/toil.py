@@ -17,8 +17,8 @@ def is_ident(s): return is_ident_first(s[0])
 from typing import Callable
 
 type Token = None | bool | int | Ident
-type Expr = None | bool | int | Ident | tuple
-type Value = None | bool | int | Callable | tuple
+type Expr = None | bool | int | Ident | tuple | list
+type Value = None | bool | int | Callable | tuple | list
 type Instruction = tuple
 
 class Scanner:
@@ -40,7 +40,7 @@ class Scanner:
                     self._advance()
                     if self._current_char() == "=": self._advance()
                     self._tokens.append(Ident(self._lexeme()))
-                case c if c in "+-*/%(),;":
+                case c if c in "+-*/%()[],;":
                     self._tokens.append(Ident(c)); self._advance()
                 case invalid:
                     assert False, f"Invalid character @ tokenize(): {invalid}"
@@ -129,20 +129,27 @@ class Parser:
         }, self._unaries)
 
     def _unaries(self):
-        return self._unary({Ident("-"): Ident("neg")}, self._call)
+        return self._unary({Ident("-"): Ident("neg")}, self._call_index)
 
-    def _call(self):
+    def _call_index(self):
         target = self._primary()
-        while self._current_token() == Ident("("):
+        while (op := self._current_token()) in (Ident("("), Ident("[")):
             self._current_and_advance()
-            target = (target, self._comma_separated_exprs(Ident(")")))
-            self._consume(Ident(")"))
+            match op:
+                case Ident("("):
+                    target = (target, self._comma_separated_exprs(Ident(")")))
+                    self._consume(Ident(")"))
+                case Ident("["):
+                    index = self._expression()
+                    self._consume(Ident("]"))
+                    target = (Ident("index"), [target, index])
         return target
 
     def _primary(self) -> Expr:
         match self._current_token():
             case None | bool() | int(): return self._current_and_advance()
             case Ident("("): return self._group()
+            case Ident("["): return self._list()
             case Ident("func"): return self._func()
             case Ident("def"): return self._def()
             case Ident("scope"): return self._scope()
@@ -157,6 +164,12 @@ class Parser:
         expr = self._expression()
         self._consume(Ident(")"))
         return expr
+
+    def _list(self):
+        self._current_and_advance()
+        exprs = self._comma_separated_exprs(Ident("]"))
+        self._consume(Ident("]"))
+        return exprs
 
     def _func(self):
         self._current_and_advance()
@@ -300,6 +313,8 @@ class Evaluator:
     def eval(self, expr: Expr, env: Environment) -> Value:
         match expr:
             case None | bool() | int(): return expr
+            case list() as exprs:
+                return [self.eval(expr, env) for expr in exprs]
             case Ident("return"): raise ReturnException(None)
             case Ident("break"): raise BreakException()
             case Ident("continue"): raise ContinueException()
@@ -524,6 +539,15 @@ class Interpreter:
 
         self._env.define(Ident("not"), lambda args: not args[0])
 
+        self._env.define(Ident("tuple"), lambda args: tuple(args))
+        self._env.define(Ident("list"), lambda args: args)
+
+        self._env.define(Ident("index"), lambda args: args[0][args[1]])
+        self._env.define(Ident("len"), lambda args: len(args[0]))
+        self._env.define(Ident("slice"), lambda args: args[0][args[1]:args[2]])
+        self._env.define(Ident("push"), lambda args: args[0].append(args[1]))
+        self._env.define(Ident("pop"), lambda args: args[0].pop(*args[1:]))
+
         self._env.define(Ident("print"), lambda args: print(*args))
 
         self._env = Environment(self._env)
@@ -607,68 +631,45 @@ if __name__ == "__main__":
 
     # Example
 
-    print("While-then-else:")
+    print("Array (list):")
 
-    print(toil.ast(r""" while i < 3 do i = i + 1 end """))
-    # -> (while, [(less, [i, 3]), (assign, [i, (add, [i, 1])]), None, None])
-    print(toil.walk(r""" i := 1; while i < 3 do i = i + 1 end """))
-    # -> None
-    print(toil.walk(r""" i := 1; while i < 3 do break end """))
-    # -> None
+    print(toil.walk(r""" list() """)) # -> []
+    print(toil.walk(r""" list(2) """)) # -> [2]
+    print(toil.walk(r""" list(2, 3) """)) # -> [2, 3]
 
-    print(toil.ast(r""" while i < 3 do i = i + 1 then i else 0 end """))
-    # -> (while, [(less, [i, 3]), (assign, [i, (add, [i, 1])]), i, 0])
-    print(toil.walk(r""" i := 1; while i < 3 do i = i + 1 then i else 0 end """))
-    # -> 3
-    print(toil.walk(r""" i := 1; while i < 3 do break then i else 0 end """))
-    # -> 0
+    toil.walk(r""" l := list(2, 3, 4) """)
+    print(toil.walk(r""" index(l, 0) """)) # -> 2
+    print(toil.walk(r""" index(l, 2) """)) # -> 4
 
-    print(toil.walk(r""" i := 1; while i < 3 do i = i + 1 then i end """))
-    # -> 3
-    print(toil.walk(r""" i := 1; while i < 3 do break then i end """))
-    # -> None
+    print(toil.walk(r""" len(list(2, 3)) """)) # -> 2
+    print(toil.walk(r""" slice(list(2, 3, 4, 5), 1, 3) """)) # -> [3, 4]
+    print(toil.walk(r""" slice(list(2, 3, 4, 5), None, 3) """)) # -> [2, 3, 4]
+    print(toil.walk(r""" slice(list(2, 3, 4, 5), 1, None) """)) # -> [3, 4, 5]
 
-    print(toil.walk(r""" i := 1; while i < 3 do i = i + 1 else 0 end """))
-    # -> None
-    print(toil.walk(r""" i := 1; while i < 3 do break else 0 end """))
-    # -> 0
+    print(toil.scan(r""" l[2] """)) # -> [l, [, 2, ], $EOF]
+    print(toil.ast(r""" l[2] """)) # -> (index, [l, 2])
+    toil.walk(r""" l := list(2, 3, 4) """)
+    print(toil.walk(r""" l[1] """)) # -> 3
+    print(toil.walk(r""" l[-1] """)) # -> 4
 
-    print(toil.walk(r"""
-        sum := 0; i := 1;
-        while i < 4 do
-            sum = sum + i;
-            i = i + 1
-        then sum end
-    """)) # -> 6
+    print(toil.walk(r""" l := list(2, 3, list(4, 5)) """)) # -> [2, 3, [4, 5]]
+    print(toil.walk(r""" l[2] """)) # -> [4, 5]
+    print(toil.walk(r""" l[2][0] """)) # -> 4
 
-    print(toil.walk(r"""
-        i := 0; while i < 4 do
-            if i == 1 then i = 2; continue end;
-            print(i);
-            i = i + 1
-        then i end
-    """)) # -> 0\n2\n3\n4
+    print(toil.walk(r""" push(l, 6) """)) # -> None
+    print(toil.walk(r""" l """)) # -> [2, 3, [4, 5], 6]
+    print(toil.walk(r""" pop(l) """)) # -> 6
+    print(toil.walk(r""" l """)) # -> [2, 3, [4, 5]]
+    print(toil.walk(r""" pop(l, 1) """)) # -> 3
+    print(toil.walk(r""" l """)) # -> [2, [4, 5]]
 
-    toil.walk(r"""
-        i := 1; while i < 4 do
-            j := 1; while j < 4 do
-                if i == 2 and j == 2 then break end;
-                print(i, j);
-                j = j + 1
-            else break end;
-            i = i + 1
-        end
-    """)
-    # -> "1 1\n1 2\n1 3\n2 1\n"
+    print(toil.ast(r""" [] """)) # -> []
+    print(toil.walk(r""" [] """)) # -> []
+    print(toil.walk(r""" [2 + 3] """)) # -> [5]
+    print(toil.walk(r""" [2, 3] """)) # -> [2, 3]
+    print(toil.walk(r""" [2, 3, [4, 5]] """)) # -> [2, 3, [4, 5]]
 
-    print(toil.walk(r""" while False do 1/0 then 3 else 4 end """)) # -> 3
+    print(toil.walk(r""" [2, 3][1] """)) # -> 3
 
-    # toil.walk(r""" while do 2 then 3 else 4 end """) # -> Expected do
-    # toil.walk(r""" while True 2 then 3 else 4 end """) # -> Expected do
-    # toil.walk(r""" while True do then 3 else 4 end """) # -> Expected end
-    # toil.walk(r""" while True do 2 3 else 4 end """) # -> Expected end
-    # toil.walk(r""" while True do 2 then else 4 end """) # -> Expected end
-    # toil.walk(r""" while True do 2 then 3 4 end """) # -> Expected end
-    # toil.walk(r""" while True do 2 then 3 else end """) # -> Expected end
-    # toil.walk(r""" while True do 2 then 3 else 4 """) # -> Expected end
-
+    # toil.walk(r""" [2 """) # -> Expected ]
+    # toil.walk(r""" 2] """) # -> Extra token

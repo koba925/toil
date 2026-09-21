@@ -51,7 +51,7 @@
              f"Extra token @ parse(): {self._current_token()}"
          return expr
  
-     def _expression(self): return self._sequence()
+     def _expression(self) -> Expr: return self._sequence()
  
      def _sequence(self):
          exprs = [self._define_assign()]

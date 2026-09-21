@@ -103,7 +103,7 @@
 +            except BreakException: return self.eval(else_expr, env)
 +        return self.eval(then_expr, env)
  
-     def _op(self, op_expr, args_expr, env):
+     def _op(self, op_expr, args_expr, env) -> Value:
          op_val = self.eval(op_expr, env)
          args_val = [self.eval(arg, env) for arg in args_expr]
          match op_val:

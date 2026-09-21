@@ -83,7 +83,7 @@
 +                    target = (Ident("index"), [target, index])
          return target
  
-     def _primary(self):
+     def _primary(self) -> Expr:
          match self._current_token():
              case None | bool() | int(): return self._current_and_advance()
              case Ident("("): return self._group()

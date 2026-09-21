@@ -88,7 +88,7 @@ class Parser:
             f"Extra token @ parse(): {self._current_token()}"
         return expr
 
-    def _expression(self): return self._sequence()
+    def _expression(self) -> Expr: return self._sequence()
 
     def _sequence(self):
         exprs = [self._define_assign()]
@@ -139,7 +139,7 @@ class Parser:
             self._consume(Ident(")"))
         return target
 
-    def _primary(self):
+    def _primary(self) -> Expr:
         match self._current_token():
             case None | bool() | int(): return self._current_and_advance()
             case Ident("("): return self._group()
@@ -332,7 +332,7 @@ class Evaluator:
         while self.eval(cond_expr, env): val = self.eval(body_expr, env)
         return val
 
-    def _op(self, op_expr, args_expr, env):
+    def _op(self, op_expr, args_expr, env) -> Value:
         op_val = self.eval(op_expr, env)
         args_val = [self.eval(arg, env) for arg in args_expr]
         match op_val:
@@ -357,7 +357,7 @@ class Compiler:
         self._emit("ret")
         return self._code
 
-    def _expression(self, expr):
+    def _expression(self, expr: Expr):
         match expr:
             case None | bool() | int(): self._emit("const", expr)
             case Ident() as ident: self._emit("get", ident)

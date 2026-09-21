@@ -65,7 +65,7 @@
          while self.eval(cond_expr, env): val = self.eval(body_expr, env)
          return val
  
-     def _op(self, op_expr, args_expr, env):
+     def _op(self, op_expr, args_expr, env) -> Value:
          op_val = self.eval(op_expr, env)
          args_val = [self.eval(arg, env) for arg in args_expr]
          match op_val:
@@ -91,7 +91,7 @@
          self._emit("ret")
          return self._code
  
-     def _expression(self, expr):
+     def _expression(self, expr: Expr):
          match expr:
              case None | bool() | int(): self._emit("const", expr)
              case Ident() as ident: self._emit("get", ident)
