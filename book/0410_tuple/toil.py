@@ -633,8 +633,6 @@ if __name__ == "__main__":
     print(toil.walk(r""" slice(tuple(2, 3, 4, 5), 1, 3) """)) # -> (3, 4)
     print(toil.walk(r""" slice(tuple(2, 3, 4, 5), None, 3) """)) # -> (2, 3, 4)
     print(toil.walk(r""" slice(tuple(2, 3, 4, 5), 1, None) """)) # -> (3, 4, 5)
-
-
     print(toil.scan(r""" t[2] """)) # -> [t, [, 2, ], $EOF]
     print(toil.ast(r""" t[2] """)) # -> (index, [t, 2])
     toil.walk(r""" t := tuple(2, 3, 4) """)
@@ -648,6 +646,10 @@ if __name__ == "__main__":
     toil.walk(r""" f := func do tuple(add, sub) end """)
     print(toil.ast(r""" f()[0](2, 3) """)) # -> ((index, [(f, []), 0]), [2, 3])
     print(toil.walk(r""" f()[0](2, 3) """)) # -> 5
+
+    print(toil.walk(r""" tuple(2, 3) == tuple(2, 3) """)) # -> True
+    print(toil.walk(r""" tuple(2, 3) == tuple(2, 4) """)) # -> False
+    print(toil.walk(r""" tuple(2, 3) + tuple(4, 5) """)) # -> (2, 3, 4, 5)
 
     # toil.walk(r""" t[2 """) # -> Expected ]
     # toil.walk(r""" 2] """) # -> Extra token

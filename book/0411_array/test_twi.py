@@ -500,6 +500,10 @@ class TestTreeWalkInterpreter:
         assert toil.walk(r""" slice(tuple(2, 3, 4, 5), None, 3) """) == (2, 3, 4)
         assert toil.walk(r""" slice(tuple(2, 3, 4, 5), 1, None) """) == (3, 4, 5)
 
+        assert toil.walk(r""" tuple(2, 3) == tuple(2, 3) """) is True
+        assert toil.walk(r""" tuple(2, 3) == tuple(2, 4) """) is False
+        assert toil.walk(r""" tuple(2, 3) + tuple(4, 5) """) == (2, 3, 4, 5)
+
         with pytest.raises(AssertionError, match=r"Expected \]"):
             toil.walk(r""" t[2 """)
         with pytest.raises(AssertionError, match="Extra token"):
@@ -540,6 +544,10 @@ class TestTreeWalkInterpreter:
         assert toil.walk(r""" [2, 3, [4, 5]] """) == [2, 3, [4, 5]]
 
         assert toil.walk(r""" [2, 3][1] """) == 3
+
+        assert toil.walk(r""" [2, 3] == [2, 3] """) is True
+        assert toil.walk(r""" [2, 3] == [2, 4] """) is False
+        assert toil.walk(r""" [2, 3] + [4, 5] """) == [2, 3, 4, 5]
 
         with pytest.raises(AssertionError, match=r"Expected \]"):
             toil.walk(r""" [2 """)

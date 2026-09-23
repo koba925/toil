@@ -671,5 +671,10 @@ if __name__ == "__main__":
 
     print(toil.walk(r""" [2, 3][1] """)) # -> 3
 
+    print(toil.walk(r""" [2, 3] == [2, 3] """)) # -> True
+    print(toil.walk(r""" [2, 3] == [2, 4] """)) # -> False
+
+    print(toil.walk(r""" [2, 3] + [4, 5] """)) # -> [2, 3, 4, 5]
+
     # toil.walk(r""" [2 """) # -> Expected ]
     # toil.walk(r""" 2] """) # -> Extra token
