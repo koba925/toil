@@ -1,0 +1,433 @@
+@@ -1,78 +1,88 @@
+ from __future__ import annotations
+ 
+ class Ident:
+     __match_args__ = ("name",)
+ 
+     def __init__(self, name: str) -> None: self.name = name
+     def __hash__(self): return hash(self.name)
+     def __repr__(self): return self.name
+     def __str__(self): return self.name
+     def __eq__(self, other):
+         return isinstance(other, Ident) and self.name == other.name
+ 
+ def is_ident_first(c): return c.isalpha() or c == "_"
+ def is_ident_rest(c): return c.isalnum() or c == "_"
+ def is_ident(s): return is_ident_first(s[0])
+ 
+ from typing import Callable
+ 
+-type Token = None | bool | int | Ident
+-type Expr = None | bool | int | Ident | tuple | list
+-type Value = None | bool | int | Callable | tuple | list
++type Token = None | bool | int | str | Ident
++type Expr = None | bool | int | str | Ident | tuple | list
++type Value = None | bool | int | str | Callable | tuple | list
+ type Instruction = tuple
+ 
+ class Scanner:
+     def __init__(self, src: str) -> None:
+         self._src = src
+         self._start_pos = 0
+         self._current_pos = 0
+         self._tokens: list[Token] = []
+ 
+     def tokenize(self) -> list[Token]:
+         while (c := self._current_char()) != "$EOF":
+             self._start_pos = self._current_pos
+             match c:
+                 case c if c.isspace(): self._advance()
+                 case "#": self._comment()
+                 case c if c.isdecimal(): self._number()
++                case "'": self._raw_string()
+                 case c if is_ident_first(c): self._ident()
+                 case c if c in "=<>!:":
+                     self._advance()
+                     if self._current_char() == "=": self._advance()
+                     self._tokens.append(Ident(self._lexeme()))
+                 case c if c in "+-*/%()[],;":
+                     self._tokens.append(Ident(c)); self._advance()
+                 case invalid:
+                     assert False, f"Invalid character @ tokenize(): {invalid}"
+ 
+         self._tokens.append(Ident("$EOF"))
+         return self._tokens
+ 
+     def _comment(self):
+         while self._current_char() not in ("\n", "$EOF"):
+             self._advance()
+ 
+     def _number(self):
+         while self._current_char().isdecimal(): self._advance()
+         self._tokens.append(int(self._lexeme()))
+ 
++    def _raw_string(self):
++        self._advance()
++        self._start_pos = self._current_pos
++        while (c := self._current_char()) != "'":
++            assert c != "$EOF", f"Unterminated string @ _raw_string(): {c}"
++            self._advance()
++        self._tokens.append(self._lexeme())
++        self._advance()
++
+     def _ident(self):
+         self._advance()
+         while is_ident_rest(self._current_char()): self._advance()
+         match self._lexeme():
+             case "None": self._tokens.append(None)
+             case "True": self._tokens.append(True)
+             case "False": self._tokens.append(False)
+             case ident: self._tokens.append(Ident(ident))
+ 
+     def _lexeme(self):
+         return self._src[self._start_pos:self._current_pos]
+ 
+     def _advance(self): self._current_pos += 1
+ 
+     def _current_char(self):
+         if self._current_pos < len(self._src):
+             return self._src[self._current_pos]
+         else:
+             return "$EOF"
+ 
+@@ -130,41 +140,41 @@
+ 
+     def _unaries(self):
+         return self._unary({Ident("-"): Ident("neg")}, self._call_index)
+ 
+     def _call_index(self):
+         target = self._primary()
+         while (op := self._current_token()) in (Ident("("), Ident("[")):
+             self._current_and_advance()
+             match op:
+                 case Ident("("):
+                     target = (target, self._comma_separated_exprs(Ident(")")))
+                     self._consume(Ident(")"))
+                 case Ident("["):
+                     index = self._expression()
+                     self._consume(Ident("]"))
+                     target = (Ident("index"), [target, index])
+         return target
+ 
+     def _primary(self) -> Expr:
+         match self._current_token():
+-            case None | bool() | int(): return self._current_and_advance()
++            case None | bool() | int() | str(): return self._current_and_advance()
+             case Ident("("): return self._group()
+             case Ident("["): return self._list()
+             case Ident("func"): return self._func()
+             case Ident("def"): return self._def()
+             case Ident("scope"): return self._scope()
+             case Ident("if"): return self._if()
+             case Ident("while"): return self._while()
+             case Ident("for"): return self._for()
+             case Ident(name) if is_ident(name): return self._current_and_advance()
+             case invalid:
+                 assert False, f"Invalid token @ _primary(): {invalid}"
+ 
+     def _group(self):
+         self._current_and_advance()
+         expr = self._expression()
+         self._consume(Ident(")"))
+         return expr
+ 
+     def _list(self):
+         self._current_and_advance()
+@@ -313,41 +323,41 @@
+         if ident in self._vars: return self._vars[ident]
+         elif self._parent:
+             return self._parent.val(ident)
+         else:
+             assert False, f"Undefined variable @ val(): {ident}"
+ 
+     def bind(self, params: list[Ident], args: list[Value]) -> None:
+         for param, arg in zip(params, args):
+             self.define(param, arg)
+ 
+ 
+ class ReturnException(Exception):
+     def __init__(self, val: Value = None) -> None: self.val = val
+ 
+ class BreakException(Exception): pass
+ class ContinueException(Exception): pass
+ 
+ class Evaluator:
+     def eval(self, expr: Expr, env: Environment) -> Value:
+         match expr:
+-            case None | bool() | int(): return expr
++            case None | bool() | int() | str(): return expr
+             case list() as exprs:
+                 return [self.eval(expr, env) for expr in exprs]
+             case Ident("return"): raise ReturnException(None)
+             case Ident("break"): raise BreakException()
+             case Ident("continue"): raise ContinueException()
+             case Ident() as ident: return env.val(ident)
+             case (Ident("func"), [params, body_expr]):
+                 return (Ident("closure"), [params, body_expr, env])
+             case (Ident("return"), args):
+                 raise ReturnException(self.eval(args[0], env))
+             case (Ident("scope"), [body_expr]):
+                 return self.eval(body_expr, Environment(env))
+             case (Ident("define"), [Ident() as ident, expr]):
+                 return env.define(ident, self.eval(expr, env))
+             case (Ident("assign"), [left_expr, right_expr]):
+                 return self._assign(left_expr, right_expr, env)
+             case (Ident("seq"), exprs): return self._seq(exprs, env)
+             case (Ident("if"), [cond_expr, then_expr, else_expr]):
+                 return self._if(cond_expr, then_expr, else_expr, env)
+             case (Ident("and"), [left_expr, right_expr]):
+@@ -384,41 +394,41 @@
+         val = None
+         for expr in exprs: val = self.eval(expr, env)
+         return val
+ 
+     def _if(self, cond_expr, then_expr, else_expr, env):
+         if self.eval(cond_expr, env):
+             return self.eval(then_expr, env)
+         else:
+             return self.eval(else_expr, env)
+ 
+     def _while(self, cond_expr, body_expr, then_expr, else_expr, env):
+         while self.eval(cond_expr, env):
+             try:
+                 self.eval(body_expr, env)
+             except ContinueException: continue
+             except BreakException: return self.eval(else_expr, env)
+         return self.eval(then_expr, env)
+ 
+     def _for(self, var_expr, coll_expr, body_expr, then_expr, else_expr, env):
+         coll_val = self.eval(coll_expr, env)
+-        assert isinstance(coll_val, (list, tuple)), \
++        assert isinstance(coll_val, (list, tuple, str)), \
+             f"Invalid loop target @ _for(): {coll_val}"
+         for val in coll_val:
+             try:
+                 env.define(var_expr, val)
+                 self.eval(body_expr, env)
+             except ContinueException: continue
+             except BreakException: return self.eval(else_expr, env)
+         return self.eval(then_expr, env)
+ 
+     def _op(self, op_expr, args_expr, env) -> Value:
+         op_val = self.eval(op_expr, env)
+         args_val = [self.eval(arg, env) for arg in args_expr]
+         match op_val:
+             case f if callable(f): return f(args_val)
+             case (Ident("closure"), [params, body_expr, closure_env]):
+                 new_env = Environment(closure_env)
+                 new_env.bind(params, args_val)
+                 try:
+                     return self.eval(body_expr, new_env)
+                 except ReturnException as e: return e.val
+@@ -580,40 +590,45 @@
+         self._env.define(Ident("neg"), lambda args: -args[0])
+ 
+         self._env.define(Ident("equal"), lambda args: args[0] == args[1])
+         self._env.define(Ident("not_equal"), lambda args: args[0] != args[1])
+         self._env.define(Ident("less"), lambda args: args[0] < args[1])
+         self._env.define(Ident("greater"), lambda args: args[0] > args[1])
+         self._env.define(Ident("less_equal"), lambda args: args[0] <= args[1])
+         self._env.define(Ident("greater_equal"), lambda args: args[0] >= args[1])
+ 
+         self._env.define(Ident("not"), lambda args: not args[0])
+ 
+         self._env.define(Ident("tuple"), lambda args: tuple(args))
+         self._env.define(Ident("list"), lambda args: args)
+ 
+         self._env.define(Ident("index"), lambda args: args[0][args[1]])
+         self._env.define(Ident("len"), lambda args: len(args[0]))
+         self._env.define(Ident("slice"), lambda args: args[0][args[1]:args[2]])
+         self._env.define(Ident("push"), lambda args: args[0].append(args[1]))
+         self._env.define(Ident("pop"), lambda args: args[0].pop(*args[1:]))
+ 
++        self._env.define(Ident("join"),
++            lambda args: str(args[1]).join(map(str, args[0])))
++        self._env.define(Ident("format"),
++            lambda args: args[0].format(*args[1:]))
++
+         self._env.define(Ident("print"), lambda args: print(*args))
+ 
+         self._env = Environment(self._env)
+ 
+     def stdlib(self) -> None:
+         self.walk(r"""
+             def first(a) do a[0] end;
+             def rest(a) do slice(a, 1, None) end;
+             def last(a) do a[-1] end;
+ 
+             def range(start, stop, step) do
+                 b := [];
+                 i := start; while i < stop do push(b, i); i = i + step then b end
+             end;
+ 
+             def map(a, f) do
+                 b := [];
+                 for x in a do push(b, f(x)) then b end
+             end;
+ 
+@@ -712,144 +727,42 @@
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(walk_or_run, filename):
+         with open(filename, "r") as f:
+             if walk_or_run == "walk":
+                 result = toil.walk(f.read())
+             else:
+                 result = toil.run(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl("walk")
+         case [_, "--rcepl"]: repl("run")
+         case [_, "--walk", filename]: from_file("walk", filename)
+         case [_, "--run", filename]: from_file("run", filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    print("Standard library:")
++    print("Raw string:")
+ 
+-    print(toil.walk(r"""
+-        sum := 0;
+-        n := 10;
+-        for i in range(1, n + 1, 1) do
+-            sum = sum + i
+-        then sum end
+-    """)) # -> 55
+-
+-    print(toil.walk(r""" a := range(2, 10, 1) """)) # -> [2, 3, 4, 5, 6, 7, 8, 9]
+-    print(toil.walk(r""" b := range(2, 10, 3) """)) # -> [2, 5, 8]
+-
+-    print(toil.walk(r""" first(a) """)) # -> 2
+-    print(toil.walk(r""" rest(a) """)) # -> [3, 4, 5, 6, 7, 8, 9]
+-    print(toil.walk(r""" last(a) """)) # -> 9
+-
+-    print(toil.walk(r""" first(tuple(2, 3, 4)) """)) # -> 2
+-    print(toil.walk(r""" rest(tuple(2, 3, 4)) """)) # -> (3, 4)
+-
+-    print(toil.walk(r""" map(a, func n do n * 2 end) """))
+-    # -> [4, 6, 8, 10, 12, 14, 16, 18]
+-
+-    print(toil.walk(r""" filter(a, func n do n % 2 == 0 end) """))
+-    # -> [2, 4, 6, 8]
+-
+-    print(toil.walk(r""" reverse(a) """)) # -> [9, 8, 7, 6, 5, 4, 3, 2]
+-    print(toil.walk(r""" reverse([]) """)) # -> []
+-
+-    print(toil.walk(r""" zip(a, [4, 5, 6]) """)) # -> [[2, 4], [3, 5], [4, 6]]
+-
+-    print(toil.walk(r""" enumerate(a) """))
+-    # -> [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7], [6, 8], [7, 9]]
+-
+-    print(toil.walk(r""" all([True, True], func x do x end) """)) # -> True
+-    print(toil.walk(r""" all([True, False], func x do x end) """)) # -> False
+-    print(toil.walk(r""" any([False, True], func x do x end) """)) # -> True
+-    print(toil.walk(r""" any([False, False], func x do x end) """)) # -> False
+-
+-    toil.walk(r"""
+-        def bubblesort(a) do
+-            n := len(a);
+-            for i in range(0, n, 1) do
+-                for j in range(0, n - i - 1, 1) do
+-                    if a[j] > a[j + 1] then
+-                        tmp := a[j]; a[j] = a[j + 1]; a[j + 1] = tmp
+-                    end
+-                end
+-            then a end
+-        end
+-    """)
+-    print(toil.walk(r""" bubblesort([5, 3, 8, 4, 2]) """)) # -> [2, 3, 4, 5, 8]
+-
+-    toil.walk(r"""
+-        def quicksort(a) do
+-            if len(a) <= 1 then a else
+-                pivot := first(a); rem := rest(a);
+-                left := filter(rem, func x do x < pivot end);
+-                right := filter(rem, func x do x >= pivot end);
+-                quicksort(left) + [pivot] + quicksort(right)
+-            end
+-        end
+-    """)
+-    print(toil.walk(r""" quicksort([5, 3, 8, 4, 2]) """)) # -> [2, 3, 4, 5, 8]
+-
+-    toil.walk(r"""
+-        def sieve(n) do
+-            s := [False, False] + [True] * (n - 2);
+-            i := 2; while i * i < n do
+-                if s[i] then
+-                    j := i * i; while j < n do
+-                        s[j] = False;
+-                        j = j + i
+-                    end
+-                end;
+-                i = i + 1
+-            then s end
+-        end;
+-
+-        s := sieve(10)
+-    """)
+-
+-    toil.walk(r"""
+-        primes := [];
+-        i := 0; while i < 10 do
+-            if s[i] then push(primes, i) end;
+-            i = i + 1
+-        end;
+-        print(primes)
+-    """) # -> [2, 3, 5, 7]
+-
+-    toil.walk(r"""
+-        primes := [];
+-        for i in range(0, 10, 1) do
+-            if s[i] then push(primes, i) end
+-        end;
+-        print(primes)
+-    """) # -> [2, 3, 5, 7]
+-
+-    toil.walk(r"""
+-        print(enumerate(s));
+-        print(filter(enumerate(s), last));
+-        print(map(filter(enumerate(s), last), first))
+-    """)
+-    # -> [[0, False], [1, False], [2, True], ..., [9, False]]
+-    # -> [[2, True], [3, True], [5, True], [7, True]]
+-    # -> [2, 3, 5, 7]
+-
+-    print(toil.walk(r"""
+-        def sieve(n) do
+-            s := [False, False] + [True] * (n - 2);
+-            i := 2; while i * i < n do
+-                if s[i] then
+-                    j := i * i; while j < n do
+-                        s[j] = False;
+-                        j = j + i
+-                    end
+-                end;
+-                i = i + 1
+-            then map(filter(enumerate(s), last), first) end
+-        end;
++    print(toil.scan(r""" 'abc' """)) # -> ['abc', $EOF]
++    print(toil.walk(r""" ['abc'] """)) # -> ['abc']
++    print(toil.walk(r""" [''] """)) # -> ['']
++    print(toil.walk(r""" ['if ; #"\n'] """)) # -> ['if ; #"\\n']
++    print(toil.walk(r""" ['a
++b'] """)) # -> ['a\nb']
++
++    print(toil.walk(r""" [join(['a', 'b', 'c'], ' ')] """)) # -> ['a b c']
++    print(toil.walk(r""" [format('Age: {}', 25)] """)) # -> ['Age: 25']
++
++    print(toil.walk(r""" len('abc') """)) # -> 3
++    print(toil.walk(r""" ['abc' + 'def'] """)) # -> ['abcdef']
++    print(toil.walk(r""" ['abc'[2]] """)) # -> ['c']
++    print(toil.walk(r""" [slice('abcdef', 2, 4)] """)) # -> ['cd']
++    toil.walk(r""" for c in 'abc' do print(c) end """) # -> a\nb\nc
++
++    # toil.walk(r""" ' """) # -> Unterminated string
++    # toil.walk(r""" s := 'abc'; s[2] = 'd' """) # -> Invalid index assignment
+ 
+-        sieve(10)
+-    """)) # -> [2, 3, 5, 7]
+\ No newline at end of file
++    toil.walk(r""" print('hello, world') """) # -> hello, world
