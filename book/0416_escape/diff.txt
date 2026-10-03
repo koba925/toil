@@ -1,0 +1,147 @@
+@@ -19,70 +19,89 @@
+ type Token = None | bool | int | str | Ident
+ type Expr = None | bool | int | str | Ident | tuple | list
+ type Value = None | bool | int | str | Callable | tuple | list
+ type Instruction = tuple
+ 
+ class Scanner:
+     def __init__(self, src: str) -> None:
+         self._src = src
+         self._start_pos = 0
+         self._current_pos = 0
+         self._tokens: list[Token] = []
+ 
+     def tokenize(self) -> list[Token]:
+         while (c := self._current_char()) != "$EOF":
+             self._start_pos = self._current_pos
+             match c:
+                 case c if c.isspace(): self._advance()
+                 case "#": self._comment()
+                 case c if c.isdecimal(): self._number()
+                 case "'": self._raw_string()
++                case '"': self._string()
+                 case c if is_ident_first(c): self._ident()
+                 case c if c in "=<>!:":
+                     self._advance()
+                     if self._current_char() == "=": self._advance()
+                     self._tokens.append(Ident(self._lexeme()))
+                 case c if c in "+-*/%()[],;":
+                     self._tokens.append(Ident(c)); self._advance()
+                 case invalid:
+                     assert False, f"Invalid character @ tokenize(): {invalid}"
+ 
+         self._tokens.append(Ident("$EOF"))
+         return self._tokens
+ 
+     def _comment(self):
+         while self._current_char() not in ("\n", "$EOF"):
+             self._advance()
+ 
+     def _number(self):
+         while self._current_char().isdecimal(): self._advance()
+         self._tokens.append(int(self._lexeme()))
+ 
+     def _raw_string(self):
+         self._advance()
+         self._start_pos = self._current_pos
+         while (c := self._current_char()) != "'":
+             assert c != "$EOF", f"Unterminated string @ _raw_string(): {c}"
+             self._advance()
+         self._tokens.append(self._lexeme())
+         self._advance()
+ 
++    def _string(self):
++        self._advance()
++        s = []
++        while (c := self._current_char()) != '"':
++            assert c != "$EOF", f"Unterminated string @ _string(): {c}"
++            if c == "\\":
++                self._advance()
++                c = self._current_char()
++                assert c != "$EOF", f"Unterminated escape sequence @ _string(): {c}"
++                match c:
++                    case "n": s.append("\n")
++                    case _: s.append(c)
++            else:
++                s.append(c)
++            self._advance()
++        self._advance()
++        self._tokens.append("".join(s))
++
+     def _ident(self):
+         self._advance()
+         while is_ident_rest(self._current_char()): self._advance()
+         match self._lexeme():
+             case "None": self._tokens.append(None)
+             case "True": self._tokens.append(True)
+             case "False": self._tokens.append(False)
+             case ident: self._tokens.append(Ident(ident))
+ 
+     def _lexeme(self):
+         return self._src[self._start_pos:self._current_pos]
+ 
+     def _advance(self): self._current_pos += 1
+ 
+     def _current_char(self):
+         if self._current_pos < len(self._src):
+             return self._src[self._current_pos]
+         else:
+             return "$EOF"
+ 
+@@ -727,42 +746,36 @@
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(walk_or_run, filename):
+         with open(filename, "r") as f:
+             if walk_or_run == "walk":
+                 result = toil.walk(f.read())
+             else:
+                 result = toil.run(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl("walk")
+         case [_, "--rcepl"]: repl("run")
+         case [_, "--walk", filename]: from_file("walk", filename)
+         case [_, "--run", filename]: from_file("run", filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    print("Raw string:")
+-
+-    print(toil.scan(r""" 'abc' """)) # -> ['abc', $EOF]
+-    print(toil.walk(r""" ['abc'] """)) # -> ['abc']
+-    print(toil.walk(r""" [''] """)) # -> ['']
+-    print(toil.walk(r""" ['if ; #"\n'] """)) # -> ['if ; #"\\n']
+-    print(toil.walk(r""" ['a
+-b'] """)) # -> ['a\nb']
+-
+-    print(toil.walk(r""" [join(['a', 'b', 'c'], ' ')] """)) # -> ['a b c']
+-    print(toil.walk(r""" [format('Age: {}', 25)] """)) # -> ['Age: 25']
+-
+-    print(toil.walk(r""" len('abc') """)) # -> 3
+-    print(toil.walk(r""" ['abc' + 'def'] """)) # -> ['abcdef']
+-    print(toil.walk(r""" ['abc'[2]] """)) # -> ['c']
+-    print(toil.walk(r""" [slice('abcdef', 2, 4)] """)) # -> ['cd']
+-    toil.walk(r""" for c in 'abc' do print(c) end """) # -> a\nb\nc
++    print("String with escape:")
+ 
+-    # toil.walk(r""" ' """) # -> Unterminated string
+-    # toil.walk(r""" s := 'abc'; s[2] = 'd' """) # -> Invalid index assignment
++    print(toil.scan(r""" "abc" """)) # -> ['abc', $EOF]
++    print(toil.walk(r""" ["abc"] """)) # -> ['abc']
++    print(toil.walk(r""" [""] """)) # -> ['']
++    print(toil.walk(r""" ["if ; #'"] """)) # -> ["if ; #'"]
++    print(toil.walk(r""" ["a
++b"] """)) # -> ['a\nb']
++
++    print(toil.walk(r""" ["a\nc"] """)) # -> ['a\nc']
++    print(toil.walk(r""" ["a\\c"] """)) # -> ['a\\c']
++    print(toil.walk(r""" ["a\"c"] """)) # -> ['a"c']
++    print(toil.walk(r""" ["a\xc"] """)) # -> ['axc']
+ 
+-    toil.walk(r""" print('hello, world') """) # -> hello, world
++    # toil.walk(r""" " """) # -> Unterminated string
++    # toil.walk(""" "a\\""") # -> Unterminated escape sequence
