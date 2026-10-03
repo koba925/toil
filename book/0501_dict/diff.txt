@@ -1,0 +1,23 @@
+@@ -762,22 +762,20 @@
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+     print("String with escape:")
+ 
+     print(toil.scan(r""" "abc" """)) # -> ['abc', $EOF]
+     print(toil.walk(r""" ["abc"] """)) # -> ['abc']
+     print(toil.walk(r""" [""] """)) # -> ['']
+     print(toil.walk(r""" ["if ; #'"] """)) # -> ["if ; #'"]
+     print(toil.walk(r""" ["a
+ b"] """)) # -> ['a\nb']
+ 
+     print(toil.walk(r""" ["a\nc"] """)) # -> ['a\nc']
+     print(toil.walk(r""" ["a\\c"] """)) # -> ['a\\c']
+     print(toil.walk(r""" ["a\"c"] """)) # -> ['a"c']
+     print(toil.walk(r""" ["a\xc"] """)) # -> ['axc']
+ 
+     # toil.walk(r""" " """) # -> Unterminated string
+     # toil.walk(""" "a\\""") # -> Unterminated escape sequence
+-
+-    toil.walk(r""" print("hello, world") """) # -> hello, world

@@ -642,6 +642,26 @@ b'] """) == ["a\nb"]
         with pytest.raises(AssertionError, match="Invalid index assignment"):
             toil.walk(r""" s := 'abc'; s[2] = 'd' """)
 
+        assert toil.walk(r""" print('hello, world') """) is None
+        assert capsys.readouterr().out == "hello, world\n"
+
+    def test_string(self):
+        assert toil.walk(r""" ["abc"] """) == ["abc"]
+        assert toil.walk(r""" [""] """) == [""]
+        assert toil.walk(r""" ["if ; #'"] """) == ["if ; #'"]
+        assert toil.walk(r""" ["a
+b"] """) == ["a\nb"]
+
+        assert toil.walk(r""" ["a\nc"] """) == ["a\nc"]
+        assert toil.walk(r""" ["a\\c"] """) == ["a\\c"]
+        assert toil.walk(r""" ["a\"c"] """) == ["a\"c"]
+        assert toil.walk(r""" ["a\xc"] """) == ["axc"]
+
+        with pytest.raises(AssertionError, match="Unterminated string"):
+            toil.walk(r""" " """)
+        with pytest.raises(AssertionError, match="Unterminated escape sequence"):
+            toil.walk(""" "a\\""")
+
     def test_stdlib(self):
         assert toil.walk(r"""
             sum := 0;

@@ -36,6 +36,7 @@ class Scanner:
                 case "#": self._comment()
                 case c if c.isdecimal(): self._number()
                 case "'": self._raw_string()
+                case '"': self._string()
                 case c if is_ident_first(c): self._ident()
                 case c if c in "=<>!:":
                     self._advance()
@@ -65,6 +66,24 @@ class Scanner:
             self._advance()
         self._tokens.append(self._lexeme())
         self._advance()
+
+    def _string(self):
+        self._advance()
+        s = []
+        while (c := self._current_char()) != '"':
+            assert c != "$EOF", f"Unterminated string @ _string(): {c}"
+            if c == "\\":
+                self._advance()
+                c = self._current_char()
+                assert c != "$EOF", f"Unterminated escape sequence @ _string(): {c}"
+                match c:
+                    case "n": s.append("\n")
+                    case _: s.append(c)
+            else:
+                s.append(c)
+            self._advance()
+        self._advance()
+        self._tokens.append("".join(s))
 
     def _ident(self):
         self._advance()
@@ -744,23 +763,19 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Raw string:")
+    print("String with escape:")
 
-    print(toil.scan(r""" 'abc' """)) # -> ['abc', $EOF]
-    print(toil.walk(r""" ['abc'] """)) # -> ['abc']
-    print(toil.walk(r""" [''] """)) # -> ['']
-    print(toil.walk(r""" ['if ; #"\n'] """)) # -> ['if ; #"\\n']
-    print(toil.walk(r""" ['a
-b'] """)) # -> ['a\nb']
+    print(toil.scan(r""" "abc" """)) # -> ['abc', $EOF]
+    print(toil.walk(r""" ["abc"] """)) # -> ['abc']
+    print(toil.walk(r""" [""] """)) # -> ['']
+    print(toil.walk(r""" ["if ; #'"] """)) # -> ["if ; #'"]
+    print(toil.walk(r""" ["a
+b"] """)) # -> ['a\nb']
 
-    print(toil.walk(r""" [join(['a', 'b', 'c'], ' ')] """)) # -> ['a b c']
-    print(toil.walk(r""" [format('Age: {}', 25)] """)) # -> ['Age: 25']
+    print(toil.walk(r""" ["a\nc"] """)) # -> ['a\nc']
+    print(toil.walk(r""" ["a\\c"] """)) # -> ['a\\c']
+    print(toil.walk(r""" ["a\"c"] """)) # -> ['a"c']
+    print(toil.walk(r""" ["a\xc"] """)) # -> ['axc']
 
-    print(toil.walk(r""" len('abc') """)) # -> 3
-    print(toil.walk(r""" ['abc' + 'def'] """)) # -> ['abcdef']
-    print(toil.walk(r""" ['abc'[2]] """)) # -> ['c']
-    print(toil.walk(r""" [slice('abcdef', 2, 4)] """)) # -> ['cd']
-    toil.walk(r""" for c in 'abc' do print(c) end """) # -> a\nb\nc
-
-    # toil.walk(r""" ' """) # -> Unterminated string
-    # toil.walk(r""" s := 'abc'; s[2] = 'd' """) # -> Invalid index assignment
+    # toil.walk(r""" " """) # -> Unterminated string
+    # toil.walk(""" "a\\""") # -> Unterminated escape sequence

@@ -779,3 +779,5 @@ b"] """)) # -> ['a\nb']
 
     # toil.walk(r""" " """) # -> Unterminated string
     # toil.walk(""" "a\\""") # -> Unterminated escape sequence
+
+    toil.walk(r""" print("hello, world") """) # -> hello, world

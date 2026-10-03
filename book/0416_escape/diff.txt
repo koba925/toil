@@ -88,7 +88,7 @@
          else:
              return "$EOF"
  
-@@ -727,42 +746,36 @@
+@@ -727,40 +746,38 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):
@@ -110,7 +110,20 @@
      # Example
  
 -    print("Raw string:")
--
++    print("String with escape:")
++
++    print(toil.scan(r""" "abc" """)) # -> ['abc', $EOF]
++    print(toil.walk(r""" ["abc"] """)) # -> ['abc']
++    print(toil.walk(r""" [""] """)) # -> ['']
++    print(toil.walk(r""" ["if ; #'"] """)) # -> ["if ; #'"]
++    print(toil.walk(r""" ["a
++b"] """)) # -> ['a\nb']
++
++    print(toil.walk(r""" ["a\nc"] """)) # -> ['a\nc']
++    print(toil.walk(r""" ["a\\c"] """)) # -> ['a\\c']
++    print(toil.walk(r""" ["a\"c"] """)) # -> ['a"c']
++    print(toil.walk(r""" ["a\xc"] """)) # -> ['axc']
+ 
 -    print(toil.scan(r""" 'abc' """)) # -> ['abc', $EOF]
 -    print(toil.walk(r""" ['abc'] """)) # -> ['abc']
 -    print(toil.walk(r""" [''] """)) # -> ['']
@@ -126,22 +139,9 @@
 -    print(toil.walk(r""" ['abc'[2]] """)) # -> ['c']
 -    print(toil.walk(r""" [slice('abcdef', 2, 4)] """)) # -> ['cd']
 -    toil.walk(r""" for c in 'abc' do print(c) end """) # -> a\nb\nc
-+    print("String with escape:")
++    # toil.walk(r""" " """) # -> Unterminated string
++    # toil.walk(""" "a\\""") # -> Unterminated escape sequence
  
 -    # toil.walk(r""" ' """) # -> Unterminated string
 -    # toil.walk(r""" s := 'abc'; s[2] = 'd' """) # -> Invalid index assignment
-+    print(toil.scan(r""" "abc" """)) # -> ['abc', $EOF]
-+    print(toil.walk(r""" ["abc"] """)) # -> ['abc']
-+    print(toil.walk(r""" [""] """)) # -> ['']
-+    print(toil.walk(r""" ["if ; #'"] """)) # -> ["if ; #'"]
-+    print(toil.walk(r""" ["a
-+b"] """)) # -> ['a\nb']
-+
-+    print(toil.walk(r""" ["a\nc"] """)) # -> ['a\nc']
-+    print(toil.walk(r""" ["a\\c"] """)) # -> ['a\\c']
-+    print(toil.walk(r""" ["a\"c"] """)) # -> ['a"c']
-+    print(toil.walk(r""" ["a\xc"] """)) # -> ['axc']
- 
--    toil.walk(r""" print('hello, world') """) # -> hello, world
-+    # toil.walk(r""" " """) # -> Unterminated string
-+    # toil.walk(""" "a\\""") # -> Unterminated escape sequence
++    toil.walk(r""" print("hello, world") """) # -> hello, world

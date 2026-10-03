@@ -265,7 +265,7 @@
                  for x in a do push(b, f(x)) then b end
              end;
  
-@@ -712,144 +727,42 @@
+@@ -712,144 +727,40 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):
@@ -423,11 +423,9 @@
 +    print(toil.walk(r""" ['abc'[2]] """)) # -> ['c']
 +    print(toil.walk(r""" [slice('abcdef', 2, 4)] """)) # -> ['cd']
 +    toil.walk(r""" for c in 'abc' do print(c) end """) # -> a\nb\nc
-+
-+    # toil.walk(r""" ' """) # -> Unterminated string
-+    # toil.walk(r""" s := 'abc'; s[2] = 'd' """) # -> Invalid index assignment
  
 -        sieve(10)
 -    """)) # -> [2, 3, 5, 7]
 \ No newline at end of file
-+    toil.walk(r""" print('hello, world') """) # -> hello, world
++    # toil.walk(r""" ' """) # -> Unterminated string
++    # toil.walk(r""" s := 'abc'; s[2] = 'd' """) # -> Invalid index assignment

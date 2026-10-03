@@ -642,9 +642,6 @@ b'] """) == ["a\nb"]
         with pytest.raises(AssertionError, match="Invalid index assignment"):
             toil.walk(r""" s := 'abc'; s[2] = 'd' """)
 
-        assert toil.walk(r""" print('hello, world') """) is None
-        assert capsys.readouterr().out == "hello, world\n"
-
     def test_string(self):
         assert toil.walk(r""" ["abc"] """) == ["abc"]
         assert toil.walk(r""" [""] """) == [""]
