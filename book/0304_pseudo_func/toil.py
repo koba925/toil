@@ -307,7 +307,7 @@ class Compiler:
                 self._expression(left_expr)
                 self._expression(right_expr)
                 self._emit(op)
-            case _: assert False, f"Unsupported expression @ compile(): {expr}"
+            case _: assert False, f"Unsupported expression @ _expression(): {expr}"
 
     def _emit(self, *inst):
         self._code.append(inst)

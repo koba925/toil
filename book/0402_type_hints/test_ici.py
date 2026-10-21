@@ -39,7 +39,7 @@ class TestIntermediateCodeInterpreter:
         assert toil.run(r""" print(2); print(3) """) is None
         assert capsys.readouterr().out == "2\n3\n"
 
-        with pytest.raises(Exception, match="Empty sequence"):
+        with pytest.raises(AssertionError, match="Empty sequence"):
             toil.compile((Ident("seq"), []))
 
     def test_assignment_scope(self):
@@ -167,13 +167,13 @@ class TestIntermediateCodeInterpreter:
         assert toil.run(r""" f(2, 3) """) == 5
 
     def test_invalid_expression(self):
-        with pytest.raises(Exception, match="Invalid stack state"):
-            toil.execute([('ret',)]) # ->
-        with pytest.raises(Exception, match="Invalid stack state"):
-            toil.execute([('const', 2), ('const', 3), ('ret',)])
-        with pytest.raises(Exception, match="Invalid instruction"):
-            toil.execute([('not_op',), ('halt',)])
-        with pytest.raises(Exception, match="Unsupported expression"):
+        with pytest.raises(AssertionError, match="Invalid stack state"):
+            toil.execute([("ret",)])
+        with pytest.raises(AssertionError, match="Invalid stack state"):
+            toil.execute([("const", 2), ("const", 3), ("ret",)])
+        with pytest.raises(AssertionError, match="Invalid instruction"):
+            toil.execute([("not_op",), ("ret",)])
+        with pytest.raises(AssertionError, match="Unsupported expression"):
             toil.compile((2, 3, 4))
 
 
@@ -320,7 +320,7 @@ class TestExamples:
                 if bst == None then False
                 else
                     cur_val := bst(1);
-                    if val == cur_val then val
+                    if val == cur_val then True
                     else if val < cur_val then bst_find(bst(2), val)
                     else bst_find(bst(3), val)
                     end end
@@ -338,7 +338,7 @@ class TestExamples:
                 i = i + 1
             end
         """)
-        assert capsys.readouterr().out == "False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9\n"
+        assert capsys.readouterr().out == "False\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\n"
 
 
 import os, sys, io, runpy

@@ -194,7 +194,7 @@
          self._expr = expr
          self._code: list[Instruction] = []
  
-@@ -629,63 +663,68 @@
+@@ -629,64 +663,68 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):
@@ -237,6 +237,7 @@
 -    # -> Invalid index assignment
 -    print(toil.walk(r""" arr := [2, 3]; arr[True] = 4; arr """))
 -    # -> [2, 4]
+-    # toil.walk(r""" 2 = 3 """) # -> Invalid assign target
 -
 -    toil.walk(r"""
 -        def sieve(n) do

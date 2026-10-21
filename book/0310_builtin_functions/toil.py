@@ -315,7 +315,7 @@ class Compiler:
                 self._while(cond_expr, body_expr)
             case (op_expr, args_expr):
                 self._op(op_expr, args_expr)
-            case _: assert False, f"Unsupported expression @ compile(): {expr}"
+            case _: assert False, f"Unsupported expression @ _expression(): {expr}"
 
     def _scope(self, body_expr):
         self._emit("enter_scope")
@@ -323,7 +323,7 @@ class Compiler:
         self._emit("leave_scope")
 
     def _seq(self, exprs):
-        assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
+        assert len(exprs) > 0, f"Empty sequence @ _seq(): {exprs}"
         for expr in exprs[:-1]:
             self._expression(expr)
             self._emit("pop")

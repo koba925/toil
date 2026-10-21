@@ -232,7 +232,7 @@
 +        i := 0; while True do
 +            check_and_quit(i);
 +            print(i);
-+            i := i + 1
++            i = i + 1
          end
 -    """)
 -    print(toil.walk(r""" is_prime(1) """)) # -> False

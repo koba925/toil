@@ -182,7 +182,7 @@ if __name__ == "__main__":
 
     print("Scan numbers:")
 
-    print(toil.scan(r""""""))  # -> ['$EOF']
+    print(toil.scan(r""""""))  # -> ["$EOF"]
     print(toil.scan(r"""2"""))  # -> [2, '$EOF']
     print(toil.scan(r"""02"""))  # -> [2, '$EOF']
     print(toil.scan(r"""23"""))  # -> [23, '$EOF']
@@ -196,7 +196,7 @@ if __name__ == "__main__":
     print(toil.parse([23, "$EOF"])) # -> 23
 
     # print(toil.parse([2, 34, "$EOF"])) # -> Extra token
-    # print(toil.parse(['$EOF'])) # -> Invalid token
+    # print(toil.parse(["$EOF"])) # -> Invalid token
 
     print("AST:")
 

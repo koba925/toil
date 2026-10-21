@@ -292,7 +292,7 @@
                  self._while(cond_expr, body_expr)
              case (op_expr, args_expr):
                  self._op(op_expr, args_expr)
-             case _: assert False, f"Unsupported expression @ compile(): {expr}"
+             case _: assert False, f"Unsupported expression @ _expression(): {expr}"
  
 @@ -370,48 +379,48 @@
          self._emit("jump", loop_jump)
@@ -505,7 +505,7 @@
      # -> 24
 @@ -931,21 +918,21 @@
                  cur_val := bst(1);
-                 if val == cur_val then val
+                 if val == cur_val then True
                  else if val < cur_val then bst_find(bst(2), val)
                  else bst_find(bst(3), val)
                  end end
@@ -524,6 +524,6 @@
              i = i + 1
          end
      """)
--    # -> False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9
+-    # -> False\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue
 \ No newline at end of file
-+    # -> False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9
++    # -> False\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue

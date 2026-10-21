@@ -72,7 +72,7 @@
          return self.eval(then_expr, env)
  
      def _op(self, op_expr, args_expr, env) -> Value:
-@@ -614,67 +629,63 @@
+@@ -614,67 +629,64 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):
@@ -160,6 +160,7 @@
 +    # -> Invalid index assignment
 +    print(toil.walk(r""" arr := [2, 3]; arr[True] = 4; arr """))
 +    # -> [2, 4]
++    # toil.walk(r""" 2 = 3 """) # -> Invalid assign target
 +
 +    toil.walk(r"""
 +        def sieve(n) do

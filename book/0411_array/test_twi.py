@@ -697,7 +697,7 @@ class TestExamples:
                 if bst == None then False
                 else
                     cur_val := bst[0];
-                    if val == cur_val then val
+                    if val == cur_val then True
                     elif val < cur_val then bst_find(bst[1], val)
                     else bst_find(bst[2], val)
                     end
@@ -715,7 +715,7 @@ class TestExamples:
                 i = i + 1
             end
         """)
-        assert capsys.readouterr().out == "False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9\n"
+        assert capsys.readouterr().out == "False\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\n"
 
     def test_is_prime(self):
         toil.walk(r"""

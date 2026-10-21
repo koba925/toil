@@ -39,7 +39,7 @@ class TestIntermediateCodeInterpreter:
         assert toil.run(r""" print(2); print(3) """) is None
         assert capsys.readouterr().out == "2\n3\n"
 
-        with pytest.raises(Exception, match="Empty sequence"):
+        with pytest.raises(AssertionError, match="Empty sequence"):
             toil.compile(("seq", []))
 
     def test_assignment_scope(self):
@@ -134,13 +134,13 @@ class TestIntermediateCodeInterpreter:
             toil.run(r""" not_defined() """)
 
     def test_invalid_expression(self):
-        with pytest.raises(Exception, match="Invalid stack state"):
-            toil.execute([('halt',)]) # ->
-        with pytest.raises(Exception, match="Invalid stack state"):
-            toil.execute([('const', 2), ('const', 3), ('halt',)])
-        with pytest.raises(Exception, match="Invalid instruction"):
-            toil.execute([('not_op',), ('halt',)])
-        with pytest.raises(Exception, match="Unsupported expression"):
+        with pytest.raises(AssertionError, match="Invalid stack state"):
+            toil.execute([("halt",)])
+        with pytest.raises(AssertionError, match="Invalid stack state"):
+            toil.execute([("const", 2), ("const", 3), ("halt",)])
+        with pytest.raises(AssertionError, match="Invalid instruction"):
+            toil.execute([("not_op",), ("halt",)])
+        with pytest.raises(AssertionError, match="Unsupported expression"):
             toil.compile((2, 3, 4))
 
 

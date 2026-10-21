@@ -341,7 +341,7 @@
 -            if bst == None then False
 -            else
 -                cur_val := bst(1);
--                if val == cur_val then val
+-                if val == cur_val then True
 -                else if val < cur_val then bst_find(bst(2), val)
 -                else bst_find(bst(3), val)
 -                end end
@@ -360,9 +360,9 @@
 -            i = i + 1
 -        end
 -    """)
--    # -> False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9
+-    # -> False\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue
 -
--    print("### Intermidiate code interpreter ###")
+-    print("### Intermediate code interpreter ###")
 -
 -    print("Factorial:")
 -
@@ -538,7 +538,7 @@
 -            if bst == None then False
 -            else
 -                cur_val := bst(1);
--                if val == cur_val then val
+-                if val == cur_val then True
 -                else if val < cur_val then bst_find(bst(2), val)
 -                else bst_find(bst(3), val)
 -                end end
@@ -557,7 +557,7 @@
 -            i = i + 1
 -        end
 -    """)
--    # -> False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9
+-    # -> False\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue
 +    print(toil.walk(r""" 3 <= 2 """)) # -> False
 +    print(toil.walk(r""" 2 <= 2 """)) # -> True
 +    print(toil.walk(r""" 2 <= 3 """)) # -> True

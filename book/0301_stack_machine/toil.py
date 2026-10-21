@@ -375,11 +375,11 @@ if __name__ == "__main__":
 
     print("Stack machine:")
 
-    print(toil.execute([('const', 2), ('halt',)])) # -> 2
-    print(toil.execute([('const', None), ('halt',)])) # -> None
-    print(toil.execute([('const', True), ('halt',)])) # -> True
-    print(toil.execute([('const', False), ('halt',)])) # -> False
+    print(toil.execute([("const", 2), ("halt",)])) # -> 2
+    print(toil.execute([("const", None), ("halt",)])) # -> None
+    print(toil.execute([("const", True), ("halt",)])) # -> True
+    print(toil.execute([("const", False), ("halt",)])) # -> False
 
-    # toil.execute([('halt',)]) # -> Invalid stack state
-    # toil.execute([('const', 2), ('const', 3), ('halt',)]) # -> Invalid stack state
-    # toil.execute([('not_op',), ('halt',)]) # -> Invalid instruction
+    # toil.execute([("halt",)]) # -> Invalid stack state
+    # toil.execute([("const", 2), ("const", 3), ("halt",)]) # -> Invalid stack state
+    # toil.execute([("not_op",), ("halt",)]) # -> Invalid instruction

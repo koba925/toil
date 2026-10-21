@@ -397,7 +397,7 @@ class Compiler:
                 self._while(cond_expr, body_expr)
             case (op_expr, args_expr):
                 self._op(op_expr, args_expr)
-            case _: assert False, f"Unsupported expression @ compile(): {expr}"
+            case _: assert False, f"Unsupported expression @ _expression(): {expr}"
 
     def _func(self, params, body_expr):
         body_code = Compiler(body_expr).compile()
@@ -409,7 +409,7 @@ class Compiler:
         self._emit("leave_scope")
 
     def _seq(self, exprs):
-        assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
+        assert len(exprs) > 0, f"Empty sequence @ _seq(): {exprs}"
         for expr in exprs[:-1]:
             self._expression(expr)
             self._emit("pop")
@@ -691,7 +691,7 @@ if __name__ == "__main__":
             if bst == None then False
             else
                 cur_val := bst[0];
-                if val == cur_val then val
+                if val == cur_val then True
                 elif val < cur_val then bst_find(bst[1], val)
                 else bst_find(bst[2], val)
                 end
@@ -710,4 +710,4 @@ if __name__ == "__main__":
             i = i + 1
         end
     """)
-    # -> False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9
+    # -> False\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue

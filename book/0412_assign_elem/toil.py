@@ -421,7 +421,7 @@ class Compiler:
                 self._while(cond_expr, body_expr)
             case (op_expr, args_expr):
                 self._op(op_expr, args_expr)
-            case _: assert False, f"Unsupported expression @ compile(): {expr}"
+            case _: assert False, f"Unsupported expression @ _expression(): {expr}"
 
     def _func(self, params, body_expr):
         body_code = Compiler(body_expr).compile()
@@ -433,7 +433,7 @@ class Compiler:
         self._emit("leave_scope")
 
     def _seq(self, exprs):
-        assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
+        assert len(exprs) > 0, f"Empty sequence @ _seq(): {exprs}"
         for expr in exprs[:-1]:
             self._expression(expr)
             self._emit("pop")
@@ -667,6 +667,7 @@ if __name__ == "__main__":
     # -> Invalid index assignment
     print(toil.walk(r""" arr := [2, 3]; arr[True] = 4; arr """))
     # -> [2, 4]
+    # toil.walk(r""" 2 = 3 """) # -> Invalid assign target
 
     toil.walk(r"""
         def sieve(n) do

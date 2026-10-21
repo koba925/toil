@@ -1,3 +1,59 @@
+@@ -467,53 +467,53 @@
+ 
+     def _expression(self, expr: Expr):
+         match expr:
+             case None | bool() | int(): self._emit("const", expr)
+             case Ident() as ident: self._emit("get", ident)
+             case (Ident("func"), [params, body_expr]): self._func(params, body_expr)
+             case (Ident("define"), [Ident() as ident, expr]):
+                 self._expression(expr)
+                 self._emit("def", ident)
+             case (Ident("assign"), [Ident() as ident, expr]):
+                 self._expression(expr)
+                 self._emit("set", ident)
+             case (Ident("scope"), [body_expr]): self._scope(body_expr)
+             case (Ident("seq"), exprs): self._seq(exprs)
+             case (Ident("if"), [cond_expr, then_expr, else_expr]):
+                 self._if(cond_expr, then_expr, else_expr)
+             case (Ident("while"), [cond_expr, body_expr]):
+                 self._while(cond_expr, body_expr)
+             case (op_expr, args_expr):
+                 self._op(op_expr, args_expr)
+-            case _: assert False, f"Unsupported expression @ _expression(): {expr}"
++            case _: assert False, f"Unsupported expression @ compile(): {expr}"
+ 
+     def _func(self, params, body_expr):
+         body_code = Compiler(body_expr).compile()
+         self._emit("make_closure", params, body_code)
+ 
+     def _scope(self, body_expr):
+         self._emit("enter_scope")
+         self._expression(body_expr)
+         self._emit("leave_scope")
+ 
+     def _seq(self, exprs):
+-        assert len(exprs) > 0, f"Empty sequence @ _seq(): {exprs}"
++        assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
+         for expr in exprs[:-1]:
+             self._expression(expr)
+             self._emit("pop")
+         self._expression(exprs[-1])
+ 
+     def _if(self, cond_expr, then_expr, else_expr):
+         self._expression(cond_expr)
+         else_jump = self._current_addr()
+         self._emit("jump_if_false", None)
+         self._expression(then_expr)
+         end_jump = self._current_addr()
+         self._emit("jump", None)
+         self._set_operand(else_jump, self._current_addr())
+         self._expression(else_expr)
+         self._set_operand(end_jump, self._current_addr())
+ 
+     def _while(self, cond_expr, body_expr):
+         self._emit("const", None)
+         loop_jump = self._current_addr()
+         self._expression(cond_expr)
 @@ -762,22 +762,20 @@
          case _: assert False, f"Invalid command line: {sys.argv}"
  

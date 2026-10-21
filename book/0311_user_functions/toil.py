@@ -316,7 +316,7 @@ class Compiler:
                 self._while(cond_expr, body_expr)
             case (op_expr, args_expr):
                 self._op(op_expr, args_expr)
-            case _: assert False, f"Unsupported expression @ compile(): {expr}"
+            case _: assert False, f"Unsupported expression @ _expression(): {expr}"
 
     def _func(self, params, body_expr):
         body_code = Compiler(body_expr).compile()
@@ -328,7 +328,7 @@ class Compiler:
         self._emit("leave_scope")
 
     def _seq(self, exprs):
-        assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
+        assert len(exprs) > 0, f"Empty sequence @ _seq(): {exprs}"
         for expr in exprs[:-1]:
             self._expression(expr)
             self._emit("pop")
@@ -526,7 +526,7 @@ if __name__ == "__main__":
     print_code(toil.code(r""" func do 2 end ()"""))
     # ->   0: ('make_closure', [], [('const', 2), ('ret',)])
     # ->   1: ('call', 0)
-    # ->   2: ('halt',)
+    # ->   2: ('ret',)
     print(toil.run(r""" func do 2 end () """)) # -> 2
 
     print(toil.ast(r""" func a do a + 2 end (3) """))
@@ -535,7 +535,7 @@ if __name__ == "__main__":
     # ->   0: ('const', 3)
     # ->   1: ('make_closure', ['a'], [('get', 'a'), ('const', 2), ('get', 'add'), ('call', 2), ('ret',)])
     # ->   2: ('call', 1)
-    # ->   3: ('halt',)
+    # ->   3: ('ret',)
     print(toil.run(r""" func a do a + 2 end (3) """)) # -> 5
 
     print(toil.ast(r""" func a, b do a + b end (2, 3) """))
@@ -545,7 +545,7 @@ if __name__ == "__main__":
     # ->   1: ('const', 3)
     # ->   2: ('make_closure', ['a', 'b'], [('get', 'a'), ('get', 'b'), ('get', 'add'), ('call', 2), ('ret',)])
     # ->   3: ('call', 2)
-    # ->   4: ('halt',)
+    # ->   4: ('ret',)
     print(toil.run(r""" func a, b do a + b end (2, 3) """)) # -> 5
 
     print(toil.run(r"""

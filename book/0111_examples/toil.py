@@ -283,12 +283,12 @@ if __name__ == "__main__":
             ])
         ])
     ])]))
-    toil.eval(("define",["bst", None]))
-    toil.eval(("define",["bst", ("bst_put", ["bst", 7])]))
-    toil.eval(("define",["bst", ("bst_put", ["bst", 3])]))
-    toil.eval(("define",["bst", ("bst_put", ["bst", 1])]))
-    toil.eval(("define",["bst", ("bst_put", ["bst", 9])]))
-    toil.eval(("define",["bst", ("bst_put", ["bst", 5])]))
+    toil.eval(("define", ["bst", None]))
+    toil.eval(("define", ["bst", ("bst_put", ["bst", 7])]))
+    toil.eval(("define", ["bst", ("bst_put", ["bst", 3])]))
+    toil.eval(("define", ["bst", ("bst_put", ["bst", 1])]))
+    toil.eval(("define", ["bst", ("bst_put", ["bst", 9])]))
+    toil.eval(("define", ["bst", ("bst_put", ["bst", 5])]))
 
     print("Walking tree:")
     toil.eval(("define", ["bst_walk", ("func", [["bst"],
@@ -322,7 +322,7 @@ if __name__ == "__main__":
     toil.eval(("seq", [
         ("define", ["i", 0]),
         ("while", [("less", ["i", 10]), ("seq", [
-            ("print", [("bst_find",["bst", "i"])]),
+            ("print", [("bst_find", ["bst", "i"])]),
             ("assign", ["i", ("add", ["i", 1])])
         ])])
     ]))

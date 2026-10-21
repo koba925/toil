@@ -64,8 +64,8 @@ book/
 
 * `<ZENN>` はエンジニア向け情報共有サイト [zenn](https://zenn.dev/) 用の原稿執筆用プロジェクトです。
 * `<ZENN>/books` は zenn 書籍の原稿を置くディレクトリです。ここには複数の書籍の原稿があります。
-* `<ZENN>/books/learning-by-growing-language` にはこのプロジェクトの公開済みの原稿があります。
-* `<ZENN>/books/learning-by-growing-language-draft` にはこのプロジェクトの公開予定のドラフト原稿があります。
+* `<ZENN>/books/learning-by-growing-language` にはこのプロジェクトの公開済みの原稿（Book 1）があります。
+* `<ZENN>/books/learning-by-growing-language-bk2` にはこのプロジェクトの執筆中・一部公開済みの原稿（Book 2）があります。
 
 
 ## 開発の進め方とパート（部）ごとの方針

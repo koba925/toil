@@ -314,12 +314,12 @@ class TestExamples:
                 ])
             ])
         ])]))
-        toil.eval(("define",["bst", None]))
-        toil.eval(("define",["bst", ("bst_put", ["bst", 7])]))
-        toil.eval(("define",["bst", ("bst_put", ["bst", 3])]))
-        toil.eval(("define",["bst", ("bst_put", ["bst", 1])]))
-        toil.eval(("define",["bst", ("bst_put", ["bst", 9])]))
-        toil.eval(("define",["bst", ("bst_put", ["bst", 5])]))
+        toil.eval(("define", ["bst", None]))
+        toil.eval(("define", ["bst", ("bst_put", ["bst", 7])]))
+        toil.eval(("define", ["bst", ("bst_put", ["bst", 3])]))
+        toil.eval(("define", ["bst", ("bst_put", ["bst", 1])]))
+        toil.eval(("define", ["bst", ("bst_put", ["bst", 9])]))
+        toil.eval(("define", ["bst", ("bst_put", ["bst", 5])]))
 
         toil.eval(("define", ["bst_walk", ("func", [["bst"],
             ("if", [("equal", ["bst", None]),
@@ -337,7 +337,7 @@ class TestExamples:
                 ("seq", [
                     ("define", ["cur_val", ("bst", [1])]),
                     ("if", [("equal", ["val", "cur_val"]),
-                        "val",
+                        True,
                     ("if", [("less", ["val", "cur_val"]),
                         ("bst_find", [("bst", [2]), "val"]),
                         ("bst_find", [("bst", [3]), "val"])
@@ -346,17 +346,17 @@ class TestExamples:
             ])
         ])]))
 
-        toil.eval(("bst_walk",["bst"]))
+        toil.eval(("bst_walk", ["bst"]))
         assert capsys.readouterr().out == "1\n3\n5\n7\n9\n"
 
         toil.eval(("seq", [
             ("define", ["i", 0]),
             ("while", [("less", ["i", 10]), ("seq", [
-                ("print", [("bst_find",["bst", "i"])]),
+                ("print", [("bst_find", ["bst", "i"])]),
                 ("assign", ["i", ("add", ["i", 1])])
             ])])
         ]))
-        assert capsys.readouterr().out == "False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9\n"
+        assert capsys.readouterr().out == "False\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\n"
 
 
 if __name__ == "__main__":
