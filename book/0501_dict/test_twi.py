@@ -619,6 +619,8 @@ class TestTreeWalkInterpreter:
         with pytest.raises(AssertionError, match="Invalid index assignment"):
             toil.walk(r""" arr := [2, 3]; arr[None] = 4 """)
         assert toil.walk(r""" arr := [2, 3]; arr[True] = 4; arr """) == [2, 4]
+        with pytest.raises(AssertionError, match="Invalid assign target"):
+            toil.walk(r""" 2 = 3 """)
 
     def test_raw_string(self, capsys):
         assert toil.walk(r""" ['abc'] """) == ["abc"]
@@ -642,9 +644,6 @@ b'] """) == ["a\nb"]
         with pytest.raises(AssertionError, match="Invalid index assignment"):
             toil.walk(r""" s := 'abc'; s[2] = 'd' """)
 
-        assert toil.walk(r""" print('hello, world') """) is None
-        assert capsys.readouterr().out == "hello, world\n"
-
     def test_string(self):
         assert toil.walk(r""" ["abc"] """) == ["abc"]
         assert toil.walk(r""" [""] """) == [""]
@@ -661,6 +660,43 @@ b"] """) == ["a\nb"]
             toil.walk(r""" " """)
         with pytest.raises(AssertionError, match="Unterminated escape sequence"):
             toil.walk(""" "a\\""")
+
+    def test_dict(self, capsys):
+        assert toil.walk(r""" dict() """) == {}
+        assert toil.walk(r""" dict(["a", 2]) """) == {"a": 2}
+        assert toil.walk(r""" d := dict(["a", 2], tuple("b", 3)) """) == {"a": 2, "b": 3}
+
+        assert toil.walk(r""" index(d, "a") """) == 2
+        assert toil.walk(r""" d["b"] """) == 3
+
+        toil.walk(r""" d["b"] = 4 """)
+        toil.walk(r""" d["c"] = dict(["d", 5]) """)
+        assert toil.walk(r""" d """) == {"a": 2, "b": 4, "c": {"d": 5}}
+        assert toil.walk(r""" d["c"]["d"] """) == 5
+
+        assert toil.walk(r""" len(d) """) == 3
+        assert toil.walk(r""" pop(d, "c") """) == {"d": 5}
+        assert toil.walk(r""" len(d) """) == 2
+
+        assert toil.walk(r""" in("a", d) """) is True
+        assert toil.walk(r""" in("A", d) """) is False
+        assert toil.walk(r""" in("a", "abc") """) is True
+        assert toil.walk(r""" in("A", "abc") """) is False
+
+        toil.walk(r""" e := copy(d); e["b"] = 6 """)
+        assert toil.walk(r""" d """) == {"a": 2, "b": 4}
+        assert toil.walk(r""" e """) == {"a": 2, "b": 6}
+
+        assert toil.walk(r""" keys(d) """) == ["a", "b"]
+        assert toil.walk(r""" items(d) """) == [["a", 2], ["b", 4]]
+
+        toil.walk(r""" for key in keys(d) do print(d[key]) end """)
+        assert capsys.readouterr().out == "2\n4\n"
+        toil.walk(r""" for item in items(d) do print(item) end """)
+        assert capsys.readouterr().out == "['a', 2]\n['b', 4]\n"
+
+        with pytest.raises(AssertionError, match="Invalid index assignment"):
+            toil.walk(r""" d := dict(); d[2] = 3 """)
 
     def test_stdlib(self):
         assert toil.walk(r"""
@@ -842,7 +878,7 @@ class TestExamples:
                 if bst == None then False
                 else
                     cur_val := bst[0];
-                    if val == cur_val then val
+                    if val == cur_val then True
                     elif val < cur_val then bst_find(bst[1], val)
                     else bst_find(bst[2], val)
                     end
@@ -860,7 +896,7 @@ class TestExamples:
                 i = i + 1
             end
         """)
-        assert capsys.readouterr().out == "False\n1\nFalse\n3\nFalse\n5\nFalse\n7\nFalse\n9\n"
+        assert capsys.readouterr().out == "False\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nTrue\n"
 
     def test_bubblesort(self):
         toil.walk(r"""

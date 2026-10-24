@@ -18,7 +18,7 @@ from typing import Callable
 
 type Token = None | bool | int | str | Ident
 type Expr = None | bool | int | str | Ident | tuple | list
-type Value = None | bool | int | str | Callable | tuple | list
+type Value = None | bool | int | str | Callable | tuple | list | dict
 type Instruction = tuple
 
 class Scanner:
@@ -402,9 +402,13 @@ class Evaluator:
             case (Ident("index"), [coll_expr, index_expr]):
                 coll_val = self.eval(coll_expr, env)
                 index_val = self.eval(index_expr, env)
-                assert isinstance(coll_val, list) and isinstance(index_val, int), \
-                    f"Invalid index assignment @ _assign(): {left_expr}"
-                coll_val[index_val] = val
+                match coll_val:
+                    case list() if isinstance(index_val, int):
+                        coll_val[index_val] = val
+                    case dict() if isinstance(index_val, str):
+                        coll_val[index_val] = val
+                    case _: assert False, \
+                        f"Invalid index assignment @ _assign(): {left_expr}"
                 return val
             case unexpected:
                 assert False, f"Invalid assign target @ _assign(): {unexpected}"
@@ -484,7 +488,7 @@ class Compiler:
                 self._while(cond_expr, body_expr)
             case (op_expr, args_expr):
                 self._op(op_expr, args_expr)
-            case _: assert False, f"Unsupported expression @ compile(): {expr}"
+            case _: assert False, f"Unsupported expression @ _expression(): {expr}"
 
     def _func(self, params, body_expr):
         body_code = Compiler(body_expr).compile()
@@ -496,7 +500,7 @@ class Compiler:
         self._emit("leave_scope")
 
     def _seq(self, exprs):
-        assert len(exprs) > 0, f"Empty sequence @ compile(): {exprs}"
+        assert len(exprs) > 0, f"Empty sequence @ _seq(): {exprs}"
         for expr in exprs[:-1]:
             self._expression(expr)
             self._emit("pop")
@@ -619,12 +623,19 @@ class Interpreter:
 
         self._env.define(Ident("tuple"), lambda args: tuple(args))
         self._env.define(Ident("list"), lambda args: args)
+        self._env.define(Ident("dict"), lambda args: dict(args))
 
         self._env.define(Ident("index"), lambda args: args[0][args[1]])
         self._env.define(Ident("len"), lambda args: len(args[0]))
         self._env.define(Ident("slice"), lambda args: args[0][args[1]:args[2]])
         self._env.define(Ident("push"), lambda args: args[0].append(args[1]))
         self._env.define(Ident("pop"), lambda args: args[0].pop(*args[1:]))
+        self._env.define(Ident("in"), lambda args: args[0] in args[1])
+        self._env.define(Ident("copy"), lambda args: args[0].copy())
+
+        self._env.define(Ident("keys"), lambda args: list(args[0].keys()))
+        self._env.define(Ident("items"),
+            lambda args: [list(e) for e in args[0].items()])
 
         self._env.define(Ident("join"),
             lambda args: str(args[1]).join(map(str, args[0])))
@@ -763,19 +774,36 @@ if __name__ == "__main__":
 
     # Example
 
-    print("String with escape:")
+    print("Dict:")
 
-    print(toil.scan(r""" "abc" """)) # -> ['abc', $EOF]
-    print(toil.walk(r""" ["abc"] """)) # -> ['abc']
-    print(toil.walk(r""" [""] """)) # -> ['']
-    print(toil.walk(r""" ["if ; #'"] """)) # -> ["if ; #'"]
-    print(toil.walk(r""" ["a
-b"] """)) # -> ['a\nb']
+    print(toil.walk(r""" dict() """)) # -> {}
+    print(toil.walk(r""" dict(["a", 2]) """)) # -> {'a': 2}
+    print(toil.walk(r""" d := dict(["a", 2], tuple("b", 3)) """)) # -> {'a': 2, 'b': 3}
 
-    print(toil.walk(r""" ["a\nc"] """)) # -> ['a\nc']
-    print(toil.walk(r""" ["a\\c"] """)) # -> ['a\\c']
-    print(toil.walk(r""" ["a\"c"] """)) # -> ['a"c']
-    print(toil.walk(r""" ["a\xc"] """)) # -> ['axc']
+    print(toil.walk(r""" index(d, "a") """)) # -> 2
+    print(toil.walk(r""" d["b"] """)) # -> 3
 
-    # toil.walk(r""" " """) # -> Unterminated string
-    # toil.walk(""" "a\\""") # -> Unterminated escape sequence
+    toil.walk(r""" d["b"] = 4 """)
+    toil.walk(r""" d["c"] = dict(["d", 5]) """)
+    print(toil.walk(r""" d """)) # -> {'a': 2, 'b': 4, 'c': {'d': 5}}
+    print(toil.walk(r""" d["c"]["d"] """)) # -> 5
+
+    print(toil.walk(r""" len(d) """)) # -> 3
+    print(toil.walk(r""" pop(d, "c") """)) # -> {'d': 5}
+    print(toil.walk(r""" len(d) """)) # -> 2
+
+    print(toil.walk(r""" in("a", d) """)) # -> True
+    print(toil.walk(r""" in("A", d) """)) # -> False
+    print(toil.walk(r""" in("a", "abc") """)) # -> True
+    print(toil.walk(r""" in("A", "abc") """)) # -> False
+
+    toil.walk(r""" e := copy(d); e["b"] = 6 """)
+    print(toil.walk(r""" d """)) # -> {'a': 2, 'b': 4}
+    print(toil.walk(r""" e """)) # -> {'a': 2, 'b': 6}
+
+    print(toil.walk(r""" keys(d) """)) # -> ['a', 'b']
+    print(toil.walk(r""" items(d) """)) # -> [['a', 2], ['b', 4]]
+    toil.walk(r""" for key in keys(d) do print(d[key]) end """) # -> 2\n4
+    toil.walk(r""" for item in items(d) do print(item) end """) # -> ['a', 2]\n['b', 4]
+
+    # toil.walk(r""" d := dict(); d[2] = 3 """) # -> Invalid index assignment
