@@ -1,0 +1,274 @@
+@@ -1,65 +1,65 @@
+ from __future__ import annotations
+ 
+ class Ident:
+     __match_args__ = ("name",)
+ 
+     def __init__(self, name: str) -> None: self.name = name
+     def __hash__(self): return hash(self.name)
+     def __repr__(self): return self.name
+     def __str__(self): return self.name
+     def __eq__(self, other):
+         return isinstance(other, Ident) and self.name == other.name
+ 
+ def is_ident_first(c): return c.isalpha() or c == "_"
+ def is_ident_rest(c): return c.isalnum() or c == "_"
+ def is_ident(s): return is_ident_first(s[0])
+ 
+ from typing import Callable
+ 
+ type Token = None | bool | int | str | Ident
+-type Expr = None | bool | int | str | Ident | tuple | list
++type Expr = None | bool | int | str | Ident | tuple | list | dict
+ type Value = None | bool | int | str | Callable | tuple | list | dict
+ type Instruction = tuple
+ 
+ class Scanner:
+     def __init__(self, src: str) -> None:
+         self._src = src
+         self._start_pos = 0
+         self._current_pos = 0
+         self._tokens: list[Token] = []
+ 
+     def tokenize(self) -> list[Token]:
+         while (c := self._current_char()) != "$EOF":
+             self._start_pos = self._current_pos
+             match c:
+                 case c if c.isspace(): self._advance()
+                 case "#": self._comment()
+                 case c if c.isdecimal(): self._number()
+                 case "'": self._raw_string()
+                 case '"': self._string()
+                 case c if is_ident_first(c): self._ident()
+                 case c if c in "=<>!:":
+                     self._advance()
+                     if self._current_char() == "=": self._advance()
+                     self._tokens.append(Ident(self._lexeme()))
+-                case c if c in "+-*/%()[],;":
++                case c if c in "+-*/%()[]{},;":
+                     self._tokens.append(Ident(c)); self._advance()
+                 case invalid:
+                     assert False, f"Invalid character @ tokenize(): {invalid}"
+ 
+         self._tokens.append(Ident("$EOF"))
+         return self._tokens
+ 
+     def _comment(self):
+         while self._current_char() not in ("\n", "$EOF"):
+             self._advance()
+ 
+     def _number(self):
+         while self._current_char().isdecimal(): self._advance()
+         self._tokens.append(int(self._lexeme()))
+ 
+     def _raw_string(self):
+         self._advance()
+         self._start_pos = self._current_pos
+         while (c := self._current_char()) != "'":
+             assert c != "$EOF", f"Unterminated string @ _raw_string(): {c}"
+@@ -162,62 +162,90 @@
+ 
+     def _call_index(self):
+         target = self._primary()
+         while (op := self._current_token()) in (Ident("("), Ident("[")):
+             self._current_and_advance()
+             match op:
+                 case Ident("("):
+                     target = (target, self._comma_separated_exprs(Ident(")")))
+                     self._consume(Ident(")"))
+                 case Ident("["):
+                     index = self._expression()
+                     self._consume(Ident("]"))
+                     target = (Ident("index"), [target, index])
+         return target
+ 
+     def _primary(self) -> Expr:
+         match self._current_token():
+             case None | bool() | int() | str(): return self._current_and_advance()
+             case Ident("("): return self._group()
+             case Ident("["): return self._list()
++            case Ident("{"): return self._dict()
+             case Ident("func"): return self._func()
+             case Ident("def"): return self._def()
+             case Ident("scope"): return self._scope()
+             case Ident("if"): return self._if()
+             case Ident("while"): return self._while()
+             case Ident("for"): return self._for()
+             case Ident(name) if is_ident(name): return self._current_and_advance()
+             case invalid:
+                 assert False, f"Invalid token @ _primary(): {invalid}"
+ 
+     def _group(self):
+         self._current_and_advance()
+         expr = self._expression()
+         self._consume(Ident(")"))
+         return expr
+ 
+     def _list(self):
+         self._current_and_advance()
+         exprs = self._comma_separated_exprs(Ident("]"))
+         self._consume(Ident("]"))
+         return exprs
+ 
++    def _dict(self):
++        def _parse_key_value(dic):
++            match self._current_token():
++                case str():
++                    key = self._current_and_advance()
++                    self._consume(Ident(":"))
++                    dic[key] = self._expression()
++                case Ident(key) if is_ident(key):
++                    self._current_and_advance()
++                    if self._current_token() == Ident(":"):
++                        self._current_and_advance()
++                        dic[key] = self._expression()
++                    else:
++                        dic[key] = Ident(key)
++                case invalid:
++                    assert False, f"Invalid key @ _dict(): {invalid}"
++
++        self._current_and_advance()
++        dic = {}
++        if self._current_token() != Ident("}"):
++            _parse_key_value(dic)
++            while self._current_token() != Ident("}"):
++                self._consume(Ident(","))
++                _parse_key_value(dic)
++        self._consume(Ident("}"))
++        return dic
++
+     def _func(self):
+         self._current_and_advance()
+         params = self._comma_separated_exprs(Ident("do"))
+         self._consume(Ident("do"))
+         body_expr = self._expression()
+         self._consume(Ident("end"))
+         return (Ident("func"), [params, body_expr])
+ 
+     def _def(self):
+         self._current_and_advance()
+         call_expr = self._expression()
+         self._consume(Ident("do"))
+         body_expr = self._expression()
+         self._consume(Ident("end"))
+         match call_expr:
+             case (Ident() as ident, params):
+                 return (Ident("define"), [ident, (Ident("func"), [params, body_expr])])
+             case Ident() as ident:
+                 return (Ident("define"), [ident, (Ident("func"), [[], body_expr])])
+             case _:
+@@ -345,40 +373,42 @@
+         else:
+             assert False, f"Undefined variable @ val(): {ident}"
+ 
+     def bind(self, params: list[Ident], args: list[Value]) -> None:
+         for param, arg in zip(params, args):
+             self.define(param, arg)
+ 
+ 
+ class ReturnException(Exception):
+     def __init__(self, val: Value = None) -> None: self.val = val
+ 
+ class BreakException(Exception): pass
+ class ContinueException(Exception): pass
+ 
+ class Evaluator:
+     def eval(self, expr: Expr, env: Environment) -> Value:
+         match expr:
+             case None | bool() | int() | str(): return expr
+             case list() as exprs:
+                 return [self.eval(expr, env) for expr in exprs]
++            case dict() as exprs:
++                return {key: self.eval(val, env) for key, val in exprs.items()}
+             case Ident("return"): raise ReturnException(None)
+             case Ident("break"): raise BreakException()
+             case Ident("continue"): raise ContinueException()
+             case Ident() as ident: return env.val(ident)
+             case (Ident("func"), [params, body_expr]):
+                 return (Ident("closure"), [params, body_expr, env])
+             case (Ident("return"), args):
+                 raise ReturnException(self.eval(args[0], env))
+             case (Ident("scope"), [body_expr]):
+                 return self.eval(body_expr, Environment(env))
+             case (Ident("define"), [Ident() as ident, expr]):
+                 return env.define(ident, self.eval(expr, env))
+             case (Ident("assign"), [left_expr, right_expr]):
+                 return self._assign(left_expr, right_expr, env)
+             case (Ident("seq"), exprs): return self._seq(exprs, env)
+             case (Ident("if"), [cond_expr, then_expr, else_expr]):
+                 return self._if(cond_expr, then_expr, else_expr, env)
+             case (Ident("and"), [left_expr, right_expr]):
+                 return self.eval(left_expr, env) and self.eval(right_expr, env)
+             case (Ident("or"), [left_expr, right_expr]):
+@@ -757,54 +787,38 @@
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(walk_or_run, filename):
+         with open(filename, "r") as f:
+             if walk_or_run == "walk":
+                 result = toil.walk(f.read())
+             else:
+                 result = toil.run(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl("walk")
+         case [_, "--rcepl"]: repl("run")
+         case [_, "--walk", filename]: from_file("walk", filename)
+         case [_, "--run", filename]: from_file("run", filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    print("Dict:")
+-
+-    print(toil.walk(r""" dict() """)) # -> {}
+-    print(toil.ast(r""" dict(["a", 2 + 3]) """)) # -> (dict, [['a', (add, [2, 3])]])
+-    print(toil.walk(r""" dict(["a", 2 + 3]) """)) # -> {'a': 5}
+-    print(toil.walk(r""" d := dict(["a", 2], tuple("b", 3)) """)) # -> {'a': 2, 'b': 3}
+-
+-    print(toil.walk(r""" index(d, "a") """)) # -> 2
+-    print(toil.walk(r""" d["b"] """)) # -> 3
+-
+-    toil.walk(r""" d["b"] = 4 """)
+-    toil.walk(r""" d["c"] = dict(["d", 5]) """)
+-    print(toil.walk(r""" d """)) # -> {'a': 2, 'b': 4, 'c': {'d': 5}}
+-    print(toil.walk(r""" d["c"]["d"] """)) # -> 5
+-
+-    print(toil.walk(r""" len(d) """)) # -> 3
+-    print(toil.walk(r""" pop(d, "c") """)) # -> {'d': 5}
+-    print(toil.walk(r""" len(d) """)) # -> 2
+-
+-    print(toil.walk(r""" in("a", d) """)) # -> True
+-    print(toil.walk(r""" in("A", d) """)) # -> False
+-    print(toil.walk(r""" in("a", "abc") """)) # -> True
+-    print(toil.walk(r""" in("A", "abc") """)) # -> False
+-
+-    toil.walk(r""" e := copy(d); e["b"] = 6 """)
+-    print(toil.walk(r""" d """)) # -> {'a': 2, 'b': 4}
+-    print(toil.walk(r""" e """)) # -> {'a': 2, 'b': 6}
+-
+-    print(toil.walk(r""" keys(d) """)) # -> ['a', 'b']
+-    print(toil.walk(r""" items(d) """)) # -> [['a', 2], ['b', 4]]
+-    toil.walk(r""" for key in keys(d) do print(d[key]) end """) # -> 2\n4
+-    toil.walk(r""" for item in items(d) do print(item) end """) # -> ['a', 2]\n['b', 4]
++    print("Dict literal:")
+ 
+-    # toil.walk(r""" d := dict(); d[2] = 3 """) # -> Invalid index assignment
++    print(toil.walk(r""" {} """)) # -> {}
++    print(toil.ast(r""" {"a": 2 + 3} """)) # -> {'a': (add, [2, 3])}
++    print(toil.walk(r""" {"a": 2 + 3} """)) # -> {'a': 5}
++    print(toil.walk(r""" {"a": 2, "b": 3} """)) # -> {'a': 2, 'b': 3}
++    print(toil.walk(r""" {a: 4, b: 5} """)) # -> {'a': 4, 'b': 5}
++    print(toil.ast(r""" {a, b} """)) # -> {'a': a, 'b': b}
++    print(toil.walk(r""" a := 6; b := 7; {a, b} """)) # -> {'a': 6, 'b': 7}
++
++    print(toil.walk(r""" {a: 8, b: {c: 9}} """)) # -> {'a': 8, 'b': {'c': 9}}
++
++    # toil.walk(r""" { """) # -> Invalid key
++    # toil.walk(r""" {2: 3} """) # -> Invalid key
++    # toil.walk(r""" {: 3} """) # -> Invalid key
++    # toil.walk(r""" {a:} """) # -> Invalid token
++    # toil.walk(r""" {a: 2 b: 3} """) # -> Expected ,
++    # toil.walk(r""" {a: 2,} """) # -> Invalid key

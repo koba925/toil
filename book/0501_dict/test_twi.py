@@ -663,7 +663,7 @@ b"] """) == ["a\nb"]
 
     def test_dict(self, capsys):
         assert toil.walk(r""" dict() """) == {}
-        assert toil.walk(r""" dict(["a", 2]) """) == {"a": 2}
+        assert toil.walk(r""" dict(["a", 2 + 3]) """) == {"a": 5}
         assert toil.walk(r""" d := dict(["a", 2], tuple("b", 3)) """) == {"a": 2, "b": 3}
 
         assert toil.walk(r""" index(d, "a") """) == 2
