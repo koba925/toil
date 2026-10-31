@@ -1,0 +1,146 @@
+@@ -471,41 +471,45 @@
+             except ContinueException: continue
+             except BreakException: return self.eval(else_expr, env)
+         return self.eval(then_expr, env)
+ 
+     def _for(self, var_expr, coll_expr, body_expr, then_expr, else_expr, env):
+         coll_val = self.eval(coll_expr, env)
+         assert isinstance(coll_val, (list, tuple, str)), \
+             f"Invalid loop target @ _for(): {coll_val}"
+         for val in coll_val:
+             try:
+                 env.define(var_expr, val)
+                 self.eval(body_expr, env)
+             except ContinueException: continue
+             except BreakException: return self.eval(else_expr, env)
+         return self.eval(then_expr, env)
+ 
+     def _dot(self, target_expr, attr_name, env):
+         target_val = self.eval(target_expr, env)
+         match target_val:
+             case dict() if attr_name in target_val:
+-                return target_val[attr_name]
++                match target_val[attr_name]:
++                    case (Ident("closure"), [[Ident("self"), *_], *_]) as func_val:
++                        return (Ident("binding"), [func_val, target_val])
++                    case attr_val:
++                        return attr_val
+             case _:
+                 func_val = env.val(Ident(attr_name))
+                 return (Ident("binding"), [func_val, target_val])
+ 
+     def _op(self, op_expr, args_expr, env) -> Value:
+         op_val = self.eval(op_expr, env)
+         args_val = [self.eval(arg, env) for arg in args_expr]
+         match op_val:
+             case (Ident("binding"), [func_val, target_val]):
+                 op_val = func_val
+                 args_val = [target_val] + args_val
+         match op_val:
+             case f if isinstance(f, Callable): return f(args_val)
+             case (Ident("closure"), [params, body_expr, closure_env]):
+                 new_env = Environment(closure_env)
+                 new_env.bind(params, args_val)
+                 try:
+                     return self.eval(body_expr, new_env)
+                 except ReturnException as e: return e.val
+             case _:
+@@ -810,58 +814,66 @@
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(walk_or_run, filename):
+         with open(filename, "r") as f:
+             if walk_or_run == "walk":
+                 result = toil.walk(f.read())
+             else:
+                 result = toil.run(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl("walk")
+         case [_, "--rcepl"]: repl("run")
+         case [_, "--walk", filename]: from_file("walk", filename)
+         case [_, "--run", filename]: from_file("run", filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    print("UFCS:")
++    print("Method notation:")
+ 
+-    print(toil.walk(r""" add(2, 3) """)) # -> 5
+-    print(toil.ast(r""" 2.add(3) """)) # -> ((dot, [2, 'add']), [3])
++    print(toil.walk(r""" {add: 2}.add """)) # -> 2
+     print(toil.walk(r""" 2.add(3) """)) # -> 5
++    print(toil.walk(r""" {add: func a, b do a + b end}.add(2, 3) """)) # -> 5
++    print(toil.walk(r""" {a: 2, add: func self, b do self.a + b end}.add(3) """)) # -> 5
+ 
+-    print(toil.walk(r""" f := 2.add; f(3) """)) # -> 5
++    print("Poor man's object:")
+ 
+-    print(toil.walk(r""" keys({a: 2, b: 3}) """)) # -> ['a', 'b']
+-    print(toil.walk(r""" {a: 2, b: 3}.keys() """)) # -> ['a', 'b']
+-    print(toil.walk(r""" {a: 2, keys: func do 3 end}.keys() """)) # -> 3
+-
+-    print(toil.walk(r""" "a".in("abc") """)) # -> True
+-    print(toil.walk(r""" "d".in("abc") """)) # -> False
+-
+-    toil.walk(r""" def myadd(a, b) do a + b end """)
+-    print(toil.walk(r""" 2.myadd(3) """)) # -> 5
+-
+-    print(toil.walk(r"""
+-        def sieve(n) do
+-            s := [False, False] + [True] * (n - 2);
+-            i := 2; while i * i < n do
+-                if s[i] then
+-                    j := i * i; while j < n do
+-                        s[j] = False;
+-                        j = j + i
+-                    end
+-                end;
+-                i = i + 1
+-            # then map(filter(enumerate(s), last), first) end
+-            then s.enumerate().filter(last).map(first) end
+-        end;
++    toil.walk(r"""
++        def Animal(name) do
++            self := {};
++            self._name = name;
++            self.introduce = func self do print("I am", self._name) end;
++            self.make_sound = func self do print("crying") end;
++            self.rename = func self, name do self._name = name end;
++            self
++        end
++    """)
++    toil.walk(r"""
++        animal1 := Animal("Rocky");
++        animal2 := Animal("Lucy");
++        animal1.introduce();
++        animal1.make_sound();
++        animal2.introduce();
++        animal2.make_sound();
++        animal2.rename("Betty");
++        animal2.introduce()
++    """) # -> I am Rocky\ncrying\nI am Lucy\ncrying\nI am Betty
++
++    toil.walk(r"""
++        def Dog(name) do
++            self := Animal(name);
++            self.make_sound = func self do print("woof") end;
++            self
++        end
++    """)
++    toil.walk(r"""
++        dog1 := Dog("Leo");
++        dog1.introduce();
++        dog1.make_sound()
++    """) # -> I am Leo\nwoof
+ 
+-        sieve(10)
+-    """)) # -> [2, 3, 5, 7]
++    toil.walk(r""" di := dog1.introduce; di() """) # -> I am Leo
+ 
+-    # toil.walk(r""" 2.not_found() """) # -> Undefined variable
+-    # toil.walk(r""" foo := 2; 3.foo() """) # -> Invalid operator
++    print(toil.walk(r""" [2, 3, 4].map(10.add) """)) # -> [12, 13, 14]
