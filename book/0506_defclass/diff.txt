@@ -1,0 +1,241 @@
+@@ -176,40 +176,42 @@
+                     target = (Ident("index"), [target, index])
+                 case Ident("."):
+                     attr_name = self._current_and_advance()
+                     assert type(attr_name) is Ident and is_ident(attr_name.name), \
+                         f"Invalid attribute @ _call_index_dot(): {attr_name}"
+                     target = (Ident("dot"), [target, attr_name.name])
+         return target
+ 
+     def _primary(self) -> Expr:
+         match self._current_token():
+             case None | bool() | int() | str(): return self._current_and_advance()
+             case Ident("("): return self._group()
+             case Ident("["): return self._list()
+             case Ident("{"): return self._dict()
+             case Ident("func"): return self._func()
+             case Ident("def"): return self._def()
+             case Ident("scope"): return self._scope()
+             case Ident("if"): return self._if()
+             case Ident("while"): return self._while()
+             case Ident("for"): return self._for()
++            case Ident("defclass"): return self._defclass()
++            case Ident("defmethod"): return self._defmethod()
+             case Ident(name) if is_ident(name): return self._current_and_advance()
+             case invalid:
+                 assert False, f"Invalid token @ _primary(): {invalid}"
+ 
+     def _group(self):
+         self._current_and_advance()
+         expr = self._expression()
+         self._consume(Ident(")"))
+         return expr
+ 
+     def _list(self):
+         self._current_and_advance()
+         exprs = self._comma_separated_exprs(Ident("]"))
+         self._consume(Ident("]"))
+         return exprs
+ 
+     def _dict(self):
+         def _parse_key_value(dic):
+             match self._current_token():
+                 case str():
+@@ -295,40 +297,88 @@
+         self._consume(Ident("end"))
+         return (Ident("while"), [cond_expr, body_expr, then_expr, else_expr])
+ 
+     def _for(self):
+         self._current_and_advance()
+         var_expr = self._expression()
+         self._consume(Ident("in"))
+         coll_expr = self._expression()
+         self._consume(Ident("do"))
+         body_expr = self._expression()
+         then_expr = else_expr = None
+         if self._current_token() == Ident("then"):
+             self._current_and_advance()
+             then_expr = self._expression()
+         if self._current_token() == Ident("else"):
+             self._current_and_advance()
+             else_expr = self._expression()
+         self._consume(Ident("end"))
+         return (Ident("for"), [var_expr, coll_expr, body_expr, then_expr, else_expr])
+ 
++    def _defclass(self):
++        self._current_and_advance()
++        call_expr = self._expression()
++        self._consume(Ident("do"))
++        body_expr = self._expression()
++        self._consume(Ident("end"))
++
++        match call_expr:
++            case (Ident() as ident, params):
++                return (Ident("define"), [ident, (Ident("func"), [params,
++                    (Ident("seq"), [
++                        (Ident("define"), [Ident("self"), {}]),
++                        body_expr,
++                        Ident("self")
++                    ])
++                ])])
++            case Ident() as ident:
++                return (Ident("define"), [ident, (Ident("func"), [[],
++                    (Ident("seq"), [
++                        (Ident("define"), [Ident("self"), {}]),
++                        body_expr,
++                        Ident("self")
++                    ])
++                ])])
++            case _:
++                assert False, f"Invalid defclass syntax @ _defclass(): {call_expr}"
++
++    def _defmethod(self):
++        self._current_and_advance()
++        call_expr = self._expression()
++        self._consume(Ident("do"))
++        body_expr = self._expression()
++        self._consume(Ident("end"))
++
++        match call_expr:
++            case (Ident() as ident, params):
++                return (Ident("assign"), [
++                    (Ident("dot"), [Ident("self"), ident.name]),
++                    (Ident("func"), [[Ident("self")] + params, body_expr])
++                ])
++            case Ident() as ident:
++                return (Ident("assign"), [
++                    (Ident("dot"), [Ident("self"), ident.name]),
++                    (Ident("func"), [[Ident("self")], body_expr])
++                ])
++            case _:
++                assert False, f"Invalid defmethod syntax @ _defmethod(): {call_expr}"
++
+     def _binary_left(self, ops, sub_elem):
+         left = sub_elem()
+         while type(op := self._current_token()) is Ident and op in ops:
+             self._current_and_advance()
+             left = (ops[op], [left, sub_elem()])
+         return left
+ 
+     def _binary_right(self, ops, sub_elem):
+         left = sub_elem()
+         if type(op := self._current_token()) is Ident and op in ops:
+             self._current_and_advance()
+             return (ops[op], [left, self._binary_right(ops, sub_elem)])
+         else:
+             return left
+ 
+     def _unary(self, ops, sub_elem):
+         if type(op := self._current_token()) is Ident and op in ops:
+             self._current_and_advance()
+             return (ops[op], [self._unary(ops, sub_elem)])
+         else:
+@@ -814,66 +864,79 @@
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(walk_or_run, filename):
+         with open(filename, "r") as f:
+             if walk_or_run == "walk":
+                 result = toil.walk(f.read())
+             else:
+                 result = toil.run(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl("walk")
+         case [_, "--rcepl"]: repl("run")
+         case [_, "--walk", filename]: from_file("walk", filename)
+         case [_, "--run", filename]: from_file("run", filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    print("Method notation:")
++    print("Defclass and defmethod:")
+ 
+-    print(toil.walk(r""" {add: 2}.add """)) # -> 2
+-    print(toil.walk(r""" 2.add(3) """)) # -> 5
+-    print(toil.walk(r""" {add: func a, b do a + b end}.add(2, 3) """)) # -> 5
+-    print(toil.walk(r""" {a: 2, add: func self, b do self.a + b end}.add(3) """)) # -> 5
+-
+-    print("Poor man's object:")
++    print(toil.ast(r"""
++        defclass Animal(name) do
++            self._name = name;
++            defmethod rename(name) do self._name = name end
++        end
++    """))
++    # -> (define, [Animal, (func, [[name], ...])])
++    # ->
++    # (define, [Animal, (func, [[name],
++    #     (seq, [
++    #         (define, [self, {}]),
++    #         (seq, [
++    #             (assign, [(dot, [self, '_name']), name]),
++    #             (assign, [(dot, [self, 'rename']), (func, [[self, name],
++    #                 (assign, [(dot, [self, '_name']), name])])])
++    #         ]),
++    #         self
++    #     ])
++    # ])])
+ 
+     toil.walk(r"""
+-        def Animal(name) do
+-            self := {};
++        defclass Animal(name) do
+             self._name = name;
+-            self.introduce = func self do print("I am", self._name) end;
+-            self.make_sound = func self do print("crying") end;
+-            self.rename = func self, name do self._name = name end;
+-            self
++            defmethod introduce do print("I am", self._name) end;
++            defmethod make_sound do print("crying") end;
++            defmethod rename(name) do self._name = name end
+         end
+     """)
+     toil.walk(r"""
+         animal1 := Animal("Rocky");
+         animal2 := Animal("Lucy");
+         animal1.introduce();
+         animal1.make_sound();
+         animal2.introduce();
+         animal2.make_sound();
+         animal2.rename("Betty");
+         animal2.introduce()
+     """) # -> I am Rocky\ncrying\nI am Lucy\ncrying\nI am Betty
+ 
+-    toil.walk(r"""
+-        def Dog(name) do
+-            self := Animal(name);
+-            self.make_sound = func self do print("woof") end;
+-            self
+-        end
+-    """)
+-    toil.walk(r"""
+-        dog1 := Dog("Leo");
+-        dog1.introduce();
+-        dog1.make_sound()
+-    """) # -> I am Leo\nwoof
+-
+-    toil.walk(r""" di := dog1.introduce; di() """) # -> I am Leo
+-
+-    print(toil.walk(r""" [2, 3, 4].map(10.add) """)) # -> [12, 13, 14]
++    print(toil.walk(r"""
++        defclass Counter do
++            self._count = 0;
++            defmethod inc(step) do self._count = self._count + step end;
++            defmethod get do self._count end
++        end;
++        c1 := Counter(); c2 := Counter();
++        c1.inc(2); c2.inc(5);
++        [c1.get(), c2.get()]
++    """)) # -> [2, 5]
++
++    # toil.walk(r""" defclass 2 do 2 end """) # -> Invalid defclass syntax
++    # toil.walk(r""" defclass 2(x) do 2 end """) # -> Invalid defclass syntax
++    # toil.walk(r""" defclass Foo(x) end """) # -> Expected do
++    # toil.walk(r""" defclass Foo do defmethod 2(x) do 3 end end """)
++    # # -> Invalid defmethod syntax
++    # toil.walk(r""" defclass Foo do defmethod 2 do 3 end end """)
++    # # -> Invalid defmethod syntax
