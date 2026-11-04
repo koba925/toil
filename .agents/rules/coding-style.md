@@ -34,6 +34,7 @@ Python の初心者でプログラミング言語処理系を初めて作る人�
   * match で適切な case がなかった場合。
   * 再帰の基底ケースとしてのチェック。
   * 型をチェックしないと警告が出る場合。
+  * 構文糖衣・定義構文（`_def`、`_defclass`、`_defmethod` 等）の解析時。`case (name, args):` のように型を緩めず、`case (Ident() as ident, params):` / `case Ident() as ident:` と明示的に `Ident` をガードして不正な構文で Python 側の例外（`AttributeError` 等）が発生するのを防ぐ。
 
 ## 実行例
 

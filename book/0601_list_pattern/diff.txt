@@ -1,0 +1,158 @@
+@@ -413,44 +413,55 @@
+     def define(self, ident: Ident, val: Value) -> Value:
+         self._vars[ident] = val
+         return val
+ 
+     def assign(self, ident: Ident, val: Value) -> Value:
+         if ident in self._vars:
+             self._vars[ident] = val
+             return val
+         elif self._parent:
+             return self._parent.assign(ident, val)
+         else:
+             assert False, f"Undefined variable @ assign(): {ident}"
+ 
+     def val(self, ident: Ident) -> Value:
+         if ident in self._vars: return self._vars[ident]
+         elif self._parent:
+             return self._parent.val(ident)
+         else:
+             assert False, f"Undefined variable @ val(): {ident}"
+ 
+-    def bind(self, params: list[Ident], args: list[Value]) -> None:
+-        for param, arg in zip(params, args):
+-            self.define(param, arg)
++    def bind(self, pattern: Expr, value: Value) -> None:
++        match pattern:
++            case Ident() as ident: self.define(ident, value)
++            case list():
++                assert isinstance(value, list), \
++                    f"Pattern mismatch @ bind(): {pattern}"
++                self._bind_list(pattern, value)
++            case unexpected:
++                assert False, f"Unexpected pattern @ bind(): {unexpected}"
+ 
++    def _bind_list(self, pattern, value):
++        assert len(pattern) == len(value), \
++            f"Item counts mismatch @ _bind_list(): {pattern} {value}"
++        for sub_pat, sub_val in zip(pattern, value):
++            self.bind(sub_pat, sub_val)
+ 
+ class ReturnException(Exception):
+     def __init__(self, val: Value = None) -> None: self.val = val
+ 
+ class BreakException(Exception): pass
+ class ContinueException(Exception): pass
+ 
+ class Evaluator:
+     def eval(self, expr: Expr, env: Environment) -> Value:
+         match expr:
+             case None | bool() | int() | str(): return expr
+             case list() as exprs:
+                 return [self.eval(expr, env) for expr in exprs]
+             case dict() as exprs:
+                 return {key: self.eval(val, env) for key, val in exprs.items()}
+             case Ident("return"): raise ReturnException(None)
+             case Ident("break"): raise BreakException()
+             case Ident("continue"): raise ContinueException()
+             case Ident() as ident: return env.val(ident)
+             case (Ident("func"), [params, body_expr]):
+@@ -864,79 +875,40 @@
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(walk_or_run, filename):
+         with open(filename, "r") as f:
+             if walk_or_run == "walk":
+                 result = toil.walk(f.read())
+             else:
+                 result = toil.run(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl("walk")
+         case [_, "--rcepl"]: repl("run")
+         case [_, "--walk", filename]: from_file("walk", filename)
+         case [_, "--run", filename]: from_file("run", filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    print("Defclass and defmethod:")
++    print("List match:")
++
++    print(toil.ast(r""" def foo(a, [b, c]) do print(a, b, c) end """))
++    # -> (define, [foo, (func, [[a, [b, c]], (print, [a, b, c])])])
++    toil.walk(r""" def foo(a, [b, c]) do print(a, b, c) end """)
++    toil.walk(r""" foo(2, [3, 4]) """) # -> 2 3 4
++    # toil.walk(r""" foo(2) """) # -> Item counts mismatch
++    # toil.walk(r""" foo(2, 3) """) # -> Pattern mismatch
++    # toil.walk(r""" foo(2, [3, 4], 5) """) # -> Item counts mismatch
++
++    toil.walk(r""" def foo(a, [b, [c, d]]) do print(a, b, c, d) end """)
++    toil.walk(r""" foo(2, [3, [4, 5]]) """) # -> 2 3 4 5
++
++    print(toil.ast(r""" def foo(a, b) do print(a, b) end """))
++    # -> (define, [foo, (func, [[a, b], (print, [a, b])])])
++    toil.walk(r""" def foo(a, b) do print(a, b) end """)
++    toil.walk(r""" foo(2, 3) """) # -> 2 3
++    # toil.walk(r""" foo(2) """) # -> Item counts mismatch
++    # toil.walk(r""" foo(2, 3, 4) """) # -> Item counts mismatch
+ 
+-    print(toil.ast(r"""
+-        defclass Animal(name) do
+-            self._name = name;
+-            defmethod rename(name) do self._name = name end
+-        end
+-    """))
+-    # -> (define, [Animal, (func, [[name], ...])])
+-    # ->
+-    # (define, [Animal, (func, [[name],
+-    #     (seq, [
+-    #         (define, [self, {}]),
+-    #         (seq, [
+-    #             (assign, [(dot, [self, '_name']), name]),
+-    #             (assign, [(dot, [self, 'rename']), (func, [[self, name],
+-    #                 (assign, [(dot, [self, '_name']), name])])])
+-    #         ]),
+-    #         self
+-    #     ])
+-    # ])])
+-
+-    toil.walk(r"""
+-        defclass Animal(name) do
+-            self._name = name;
+-            defmethod introduce do print("I am", self._name) end;
+-            defmethod make_sound do print("crying") end;
+-            defmethod rename(name) do self._name = name end
+-        end
+-    """)
+-    toil.walk(r"""
+-        animal1 := Animal("Rocky");
+-        animal2 := Animal("Lucy");
+-        animal1.introduce();
+-        animal1.make_sound();
+-        animal2.introduce();
+-        animal2.make_sound();
+-        animal2.rename("Betty");
+-        animal2.introduce()
+-    """) # -> I am Rocky\ncrying\nI am Lucy\ncrying\nI am Betty
+-
+-    print(toil.walk(r"""
+-        defclass Counter do
+-            self._count = 0;
+-            defmethod inc(step) do self._count = self._count + step end;
+-            defmethod get do self._count end
+-        end;
+-        c1 := Counter(); c2 := Counter();
+-        c1.inc(2); c2.inc(5);
+-        [c1.get(), c2.get()]
+-    """)) # -> [2, 5]
+-
+-    # toil.walk(r""" defclass 2 do 2 end """) # -> Invalid defclass syntax
+-    # toil.walk(r""" defclass 2(x) do 2 end """) # -> Invalid defclass syntax
+-    # toil.walk(r""" defclass Foo(x) end """) # -> Expected do
+-    # toil.walk(r""" defclass Foo do defmethod 2(x) do 3 end end """)
+-    # # -> Invalid defmethod syntax
+-    # toil.walk(r""" defclass Foo do defmethod 2 do 3 end end """)
+-    # # -> Invalid defmethod syntax
