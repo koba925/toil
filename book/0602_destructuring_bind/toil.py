@@ -299,7 +299,7 @@ class Parser:
 
     def _for(self):
         self._current_and_advance()
-        var_expr = self._expression()
+        pat_expr = self._expression()
         self._consume(Ident("in"))
         coll_expr = self._expression()
         self._consume(Ident("do"))
@@ -312,7 +312,7 @@ class Parser:
             self._current_and_advance()
             else_expr = self._expression()
         self._consume(Ident("end"))
-        return (Ident("for"), [var_expr, coll_expr, body_expr, then_expr, else_expr])
+        return (Ident("for"), [pat_expr, coll_expr, body_expr, then_expr, else_expr])
 
     def _defclass(self):
         self._current_and_advance()
@@ -483,9 +483,9 @@ class Evaluator:
                 return self.eval(left_expr, env) or self.eval(right_expr, env)
             case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
                 return self._while(cond_expr, body_expr, then_expr, else_expr, env)
-            case (Ident("for"), [var_expr, coll_expr, body_expr, then_expr, else_expr]):
+            case (Ident("for"), [pat_expr, coll_expr, body_expr, then_expr, else_expr]):
                 return self._for(
-                    var_expr, coll_expr, body_expr, then_expr, else_expr, env
+                    pat_expr, coll_expr, body_expr, then_expr, else_expr, env
                 )
             case (Ident("dot"), [target_expr, attr_name]):
                 return self._dot(target_expr, attr_name, env)
@@ -538,13 +538,13 @@ class Evaluator:
             except BreakException: return self.eval(else_expr, env)
         return self.eval(then_expr, env)
 
-    def _for(self, var_expr, coll_expr, body_expr, then_expr, else_expr, env):
+    def _for(self, pat_expr, coll_expr, body_expr, then_expr, else_expr, env):
         coll_val = self.eval(coll_expr, env)
         assert isinstance(coll_val, (list, tuple, str)), \
             f"Invalid loop target @ _for(): {coll_val}"
         for val in coll_val:
             try:
-                env.bind(var_expr, val)
+                env.bind(pat_expr, val)
                 self.eval(body_expr, env)
             except ContinueException: continue
             except BreakException: return self.eval(else_expr, env)
