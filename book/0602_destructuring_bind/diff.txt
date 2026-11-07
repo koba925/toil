@@ -1,0 +1,204 @@
+@@ -453,64 +453,69 @@
+ class ContinueException(Exception): pass
+ 
+ class Evaluator:
+     def eval(self, expr: Expr, env: Environment) -> Value:
+         match expr:
+             case None | bool() | int() | str(): return expr
+             case list() as exprs:
+                 return [self.eval(expr, env) for expr in exprs]
+             case dict() as exprs:
+                 return {key: self.eval(val, env) for key, val in exprs.items()}
+             case Ident("return"): raise ReturnException(None)
+             case Ident("break"): raise BreakException()
+             case Ident("continue"): raise ContinueException()
+             case Ident() as ident: return env.val(ident)
+             case (Ident("func"), [params, body_expr]):
+                 return (Ident("closure"), [params, body_expr, env])
+             case (Ident("return"), args):
+                 raise ReturnException(self.eval(args[0], env))
+             case (Ident("scope"), [body_expr]):
+                 return self.eval(body_expr, Environment(env))
+-            case (Ident("define"), [Ident() as ident, expr]):
+-                return env.define(ident, self.eval(expr, env))
++            case (Ident("define"), [pat_expr, val_expr]):
++                return self._define(pat_expr, val_expr, env)
+             case (Ident("assign"), [left_expr, right_expr]):
+                 return self._assign(left_expr, right_expr, env)
+             case (Ident("seq"), exprs): return self._seq(exprs, env)
+             case (Ident("if"), [cond_expr, then_expr, else_expr]):
+                 return self._if(cond_expr, then_expr, else_expr, env)
+             case (Ident("and"), [left_expr, right_expr]):
+                 return self.eval(left_expr, env) and self.eval(right_expr, env)
+             case (Ident("or"), [left_expr, right_expr]):
+                 return self.eval(left_expr, env) or self.eval(right_expr, env)
+             case (Ident("while"), [cond_expr, body_expr, then_expr, else_expr]):
+                 return self._while(cond_expr, body_expr, then_expr, else_expr, env)
+             case (Ident("for"), [var_expr, coll_expr, body_expr, then_expr, else_expr]):
+                 return self._for(
+                     var_expr, coll_expr, body_expr, then_expr, else_expr, env
+                 )
+             case (Ident("dot"), [target_expr, attr_name]):
+                 return self._dot(target_expr, attr_name, env)
+             case (op_expr, args_expr):
+                 return self._op(op_expr, args_expr, env)
+             case _:
+                 assert False, f"Unexpected expression @ eval(): {expr}"
+ 
++    def _define(self, pat_expr, val_expr, env):
++        val = self.eval(val_expr, env)
++        env.bind(pat_expr, val)
++        return val
++
+     def _assign(self, left_expr, right_expr, env):
+         val = self.eval(right_expr, env)
+         match left_expr:
+             case Ident() as ident:
+                 return env.assign(ident, val)
+             case (Ident("index"), [coll_expr, index_expr]) | \
+                  (Ident("dot"), [coll_expr, index_expr]):
+                 coll_val = self.eval(coll_expr, env)
+                 index_val = self.eval(index_expr, env)
+                 match coll_val:
+                     case list() if isinstance(index_val, int):
+                         coll_val[index_val] = val
+                     case dict() if isinstance(index_val, str):
+                         coll_val[index_val] = val
+                     case _: assert False, \
+                         f"Invalid index/dot assignment @ _assign(): {left_expr}"
+                 return val
+             case unexpected:
+                 assert False, f"Invalid assign target @ _assign(): {unexpected}"
+ 
+@@ -522,41 +527,41 @@
+     def _if(self, cond_expr, then_expr, else_expr, env):
+         if self.eval(cond_expr, env):
+             return self.eval(then_expr, env)
+         else:
+             return self.eval(else_expr, env)
+ 
+     def _while(self, cond_expr, body_expr, then_expr, else_expr, env):
+         while self.eval(cond_expr, env):
+             try:
+                 self.eval(body_expr, env)
+             except ContinueException: continue
+             except BreakException: return self.eval(else_expr, env)
+         return self.eval(then_expr, env)
+ 
+     def _for(self, var_expr, coll_expr, body_expr, then_expr, else_expr, env):
+         coll_val = self.eval(coll_expr, env)
+         assert isinstance(coll_val, (list, tuple, str)), \
+             f"Invalid loop target @ _for(): {coll_val}"
+         for val in coll_val:
+             try:
+-                env.define(var_expr, val)
++                env.bind(var_expr, val)
+                 self.eval(body_expr, env)
+             except ContinueException: continue
+             except BreakException: return self.eval(else_expr, env)
+         return self.eval(then_expr, env)
+ 
+     def _dot(self, target_expr, attr_name, env):
+         target_val = self.eval(target_expr, env)
+         match target_val:
+             case dict() if attr_name in target_val:
+                 match target_val[attr_name]:
+                     case (Ident("closure"), [[Ident("self"), *_], *_]) as func_val:
+                         return (Ident("binding"), [func_val, target_val])
+                     case attr_val:
+                         return attr_val
+             case _:
+                 func_val = env.val(Ident(attr_name))
+                 return (Ident("binding"), [func_val, target_val])
+ 
+     def _op(self, op_expr, args_expr, env) -> Value:
+         op_val = self.eval(op_expr, env)
+@@ -875,40 +880,69 @@
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(walk_or_run, filename):
+         with open(filename, "r") as f:
+             if walk_or_run == "walk":
+                 result = toil.walk(f.read())
+             else:
+                 result = toil.run(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl("walk")
+         case [_, "--rcepl"]: repl("run")
+         case [_, "--walk", filename]: from_file("walk", filename)
+         case [_, "--run", filename]: from_file("run", filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    print("List match:")
+-
+-    print(toil.ast(r""" def foo(a, [b, c]) do print(a, b, c) end """))
+-    # -> (define, [foo, (func, [[a, [b, c]], (print, [a, b, c])])])
+-    toil.walk(r""" def foo(a, [b, c]) do print(a, b, c) end """)
+-    toil.walk(r""" foo(2, [3, 4]) """) # -> 2 3 4
+-    # toil.walk(r""" foo(2) """) # -> Item counts mismatch
+-    # toil.walk(r""" foo(2, 3) """) # -> Pattern mismatch
+-    # toil.walk(r""" foo(2, [3, 4], 5) """) # -> Item counts mismatch
+-
+-    toil.walk(r""" def foo(a, [b, [c, d]]) do print(a, b, c, d) end """)
+-    toil.walk(r""" foo(2, [3, [4, 5]]) """) # -> 2 3 4 5
+-
+-    print(toil.ast(r""" def foo(a, b) do print(a, b) end """))
+-    # -> (define, [foo, (func, [[a, b], (print, [a, b])])])
+-    toil.walk(r""" def foo(a, b) do print(a, b) end """)
+-    toil.walk(r""" foo(2, 3) """) # -> 2 3
+-    # toil.walk(r""" foo(2) """) # -> Item counts mismatch
+-    # toil.walk(r""" foo(2, 3, 4) """) # -> Item counts mismatch
++    print("Destructuring bind:")
+ 
++    print(toil.ast(r""" [a, b] := [2, 3] """))
++    # -> (define, [[a, b], [2, 3]])
++    print(toil.walk(r""" [a, b] := [2, 3] """)) # -> [2, 3]
++    toil.walk(r""" print(a, b) """) # -> 2 3
++
++    print(toil.walk(r""" [a, b] := [b, a] """)) # -> [3, 2]
++    toil.walk(r""" print(a, b) """) # -> 3 2
++
++    toil.walk(r""" [a, _, _] := [2, 3, 4] """)
++    toil.walk(r""" print(a, _) """) # -> 2 4
++
++    toil.walk(r""" [a, [b, c]] := [2, [3, 4]] """)
++    toil.walk(r""" print(a, b, c) """) # -> 2 3 4
++
++    print(toil.walk(r""" a := 2 """)) # -> 2
++    print(toil.walk(r""" a """)) # -> 2
++
++    # toil.walk(r""" [a, b] := 2 """) # -> Pattern mismatch
++    # toil.walk(r""" [a, b] := [2] """) # -> Item counts mismatch
++    # toil.walk(r""" [a, b] := [2, 3, 4] """) # -> Item counts mismatch
++
++    toil.walk(r""" [] := [] """) # Legal
++
++    toil.walk(r"""
++        def fib_iter(n) do
++            a := 0; b := 1;
++            while n > 0 do
++                # tmp := b; b = a + b; a = tmp;
++                [a, b] := [b, a + b];
++                n = n - 1
++            then a end
++        end
++    """)
++    print(toil.walk(r""" fib_iter(0) """)) # -> 0
++    print(toil.walk(r""" fib_iter(1) """)) # -> 1
++    print(toil.walk(r""" fib_iter(6) """)) # -> 8
++
++    print(toil.walk(r"""
++        a := []; for [i, j] in [[2, 3], [4, 5]] do a.push([i, j]) then a end
++    """)) # -> [[2, 3], [4, 5]]
++
++    print(toil.walk(r"""
++        a := [];
++        keys := ["a", "b", "c"];
++        values := [2, 3, 4];
++        for [k, v] in zip(keys, values) do a.push([k, v]) then a end
++    """)) # -> [['a', 2], ['b', 3], ['c', 4]]
