@@ -177,7 +177,7 @@
  
      def _op(self, op_expr, args_expr, env) -> Value:
          op_val = self.eval(op_expr, env)
-@@ -875,40 +880,69 @@
+@@ -875,40 +880,71 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):
@@ -255,6 +255,8 @@
 +    print(toil.walk(r""" fib_iter(0) """)) # -> 0
 +    print(toil.walk(r""" fib_iter(1) """)) # -> 1
 +    print(toil.walk(r""" fib_iter(6) """)) # -> 8
++
++    print("Destructuring bind (for):")
 +
 +    print(toil.walk(r"""
 +        a := []; for [i, j] in [[2, 3], [4, 5]] do a.push([i, j]) then a end

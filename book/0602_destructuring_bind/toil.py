@@ -936,6 +936,8 @@ if __name__ == "__main__":
     print(toil.walk(r""" fib_iter(1) """)) # -> 1
     print(toil.walk(r""" fib_iter(6) """)) # -> 8
 
+    print("Destructuring bind (for):")
+
     print(toil.walk(r"""
         a := []; for [i, j] in [[2, 3], [4, 5]] do a.push([i, j]) then a end
     """)) # -> [[2, 3], [4, 5]]
