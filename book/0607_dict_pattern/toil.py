@@ -456,10 +456,10 @@ class Environment:
                 return True
             case list():
                 return isinstance(value, list) and self._bind_seq(pattern, value)
-            case (Ident("tuple"), sub_pats):
-                return isinstance(value, tuple) and self._bind_seq(sub_pats, value)
             case dict():
                 return isinstance(value, dict) and self._bind_dict(pattern, value)
+            case (Ident("tuple"), sub_pats):
+                return isinstance(value, tuple) and self._bind_seq(sub_pats, value)
             case _:
                 return type(pattern) is type(value) and pattern == value
 
@@ -1006,4 +1006,3 @@ if __name__ == "__main__":
     """)) # -> no
     print(toil.walk(r""" [a, b, _] """)) # -> [4, 3, {'a': 4, 'c': 5}]
     print(toil.walk(r""" match 2 case {a, b} then a * b end """)) # -> None
-

@@ -1,0 +1,157 @@
+@@ -443,40 +443,42 @@
+             assert False, f"Undefined variable @ assign(): {ident}"
+ 
+     def val(self, ident: Ident) -> Value:
+         if ident in self._vars: return self._vars[ident]
+         elif self._parent:
+             return self._parent.val(ident)
+         else:
+             assert False, f"Undefined variable @ val(): {ident}"
+ 
+     def bind(self, pattern: Expr, value: Value) -> bool:
+         match pattern:
+             case Ident() as ident:
+                 self.define(ident, value)
+                 return True
+             case list():
+                 return isinstance(value, list) and self._bind_seq(pattern, value)
+             case dict():
+                 return isinstance(value, dict) and self._bind_dict(pattern, value)
+             case (Ident("tuple"), sub_pats):
+                 return isinstance(value, tuple) and self._bind_seq(sub_pats, value)
++            case (Ident(typ), [val_pat]):
++                return type(value).__name__ == typ and self.bind(val_pat, value)
+             case _:
+                 return type(pattern) is type(value) and pattern == value
+ 
+     def _bind_seq(self, pattern, value):
+         for i, sub_pat in enumerate(pattern):
+             match sub_pat:
+                 case (Ident("*"), [rest_pat]):
+                     return i == len(pattern) - 1 and self.bind(rest_pat, value[i:])
+                 case _:
+                     if i >= len(value) or not self.bind(sub_pat, value[i]):
+                         return False
+         return len(pattern) == len(value)
+ 
+     def _bind_dict(self, pattern, value):
+         tmp_pat, tmp_val = pattern.copy(), value.copy()
+ 
+         rest_pat = tmp_pat.pop("*", None)
+ 
+         for key, sub_pat in tmp_pat.items():
+             if key not in tmp_val or not self.bind(sub_pat, tmp_val.pop(key)):
+@@ -931,78 +933,61 @@
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(walk_or_run, filename):
+         with open(filename, "r") as f:
+             if walk_or_run == "walk":
+                 result = toil.walk(f.read())
+             else:
+                 result = toil.run(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl("walk")
+         case [_, "--rcepl"]: repl("run")
+         case [_, "--walk", filename]: from_file("walk", filename)
+         case [_, "--run", filename]: from_file("run", filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    print("Parameter match:")
+-
+-    print(toil.ast(r""" def foo(a, {"bb": b, "cc": c}) do print(a, b, c) end """))
+-    # -> (define, [foo, (func, [[a, {'bb': b, 'cc': c}], (print, [a, b, c])])])
+-    toil.walk(r""" def foo(a, {"bb": b, "cc": c}) do print(a, b, c) end """)
+-    toil.walk(r""" foo(2, {"bb": 3, "cc": 4}) """) # -> 2 3 4
+-
+-    print(toil.ast(r""" def foo(a, {b, c}) do print(a, b, c) end """))
+-    # -> (define, [foo, (func, [[a, {'b': b, 'c': c}], (print, [a, b, c])])])
+-    toil.walk(r""" def foo(a, {b, c}) do print(a, b, c) end """)
+-    toil.walk(r""" foo(3, {b: 4, c: 5}) """) # -> 3 4 5
+-
+-    # toil.walk(r""" foo(2, [3, 4]) """) # -> Pattern mismatch
+-    # toil.walk(r""" foo(2) """) # -> Pattern mismatch
+-
+-    # toil.walk(r""" foo(3, {b: 4, d: 5}) """) # -> Pattern mismatch
+-    # toil.walk(r""" foo(3, {b: 4}) """) # -> Pattern mismatch
+-    toil.walk(r""" foo(3, {b: 4, c: 5, d: 6}) """) # -> 3 4 5
++    print("Type Pattern:")
+ 
+-    print("Destructuring bind:")
++    print("Match:")
+ 
+-    toil.walk(r""" {a, b} := {a: 2, b: 3}; print(a, b) """) # -> 2 3
+-    # toil.walk(r""" {a, b} := 2 """) # -> Pattern mismatch
+-    # toil.walk(r""" {a, b: [c, d]} := {a: 2, b: 3} """) # -> Pattern mismatch
+-
+-    print(toil.ast(r""" {a, *r} := {a: 3} """))
+-    # -> (define, [{'a': a, '*': r}, {'a': 3}])
+-    toil.walk(r""" {a, *r} := {a: 3}; print(a, r) """)
+-    # -> 3 {}
+-    toil.walk(r""" {a, *r} := {a: 3, b: 4}; print(a, r) """)
+-    # -> 3 {'b': 4}
+-    toil.walk(r""" {a, *r} := {a: 3, b: 4, c: 5}; print(a, r) """)
+-    # -> 3 {'b': 4, 'c': 5}
++    print(toil.ast(r""" match x case bool(b) then 'bool' end """))
++    # -> (match, [x, [((bool, [b]), 'bool')]])
+ 
+     toil.walk(r"""
+-        {a, b: {c, d}} := {a: 2, b: {c: 3, d: 4}};
+-        print(a, c, d)
+-    """) # -> 2 3 4
+-
+-    print("Destructuring bind (for):")
+-
+-    print(toil.walk(r"""
+-        a := [];
+-        for {i, j} in [{i: 2, j: 3}, {i: 4, j: 5}] do a.push([i, j]) then a end
+-    """)) # -> [[2, 3], [4, 5]]
+-    # toil.walk(r""" for {i, j} in [2, 3] do None end """) # -> Pattern mismatch
++        def foo(x) do
++            match x
++                case bool(b) then ['bool', b]
++                case int(n) then ['int', n]
++                case str(s) then ['str', s]
++                case list(l) then ['list', l]
++                case dict(d) then ['dict', d]
++                case _ then ['else', x]
++            end
++        end
++    """)
+ 
+-    print("Match:")
++    print(toil.walk(r""" foo(False) """)) # -> ['bool', False]
++    print(toil.walk(r""" foo(2) """)) # -> ['int', 2]
++    print(toil.walk(r""" foo('hello') """)) # -> ['str', 'hello']
++    print(toil.walk(r""" foo([2]) """)) # -> ['list', [2]]
++    print(toil.walk(r""" foo({a: 2}) """)) # -> ['dict', {'a': 2}]
++    print(toil.walk(r""" foo(tuple(2)) """)) # -> ['else', (2,)]
++
++    print("Parameter match:")
++
++    toil.walk(r""" def foo(int(n)) do n end """)
++    print(toil.walk(r""" foo(2) """)) # -> 2
++    # print(toil.walk(r""" foo(True) """)) # -> Pattern mismatch
++
++    print("Destructuring bind:")
++
++    print(toil.walk(r""" int(n) := 2; n """)) # -> 2
++    # print(toil.walk(r""" int(n) := True; n """)) # -> Pattern mismatch
+ 
+-    print(toil.walk(r"""
+-        match {a: 2, b: 3} case {a, b} then a * b case _ then "no" end
+-    """)) # -> 6
+-    print(toil.walk(r""" [a, b] """)) # -> [2, 3]
+-    print(toil.walk(r"""
+-        match {a: 4, c: 5} case {a, b} then a * b case _ then "no" end
+-    """)) # -> no
+-    print(toil.walk(r""" [a, b, _] """)) # -> [4, 3, {'a': 4, 'c': 5}]
+-    print(toil.walk(r""" match 2 case {a, b} then a * b end """)) # -> None
++    # print(toil.walk(r""" int(2) := 3 """)) # -> Pattern mismatch
++    print(toil.walk(r""" list([a, b]) := [2, 3]; [a, b] """)) # -> [2, 3]
++    # print(toil.walk(r""" list([a, b]) := [2] """)) # -> Pattern mismatch
