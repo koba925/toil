@@ -1,0 +1,223 @@
+@@ -25,41 +25,41 @@
+     def __init__(self, src: str) -> None:
+         self._src = src
+         self._start_pos = 0
+         self._current_pos = 0
+         self._tokens: list[Token] = []
+ 
+     def tokenize(self) -> list[Token]:
+         while (c := self._current_char()) != "$EOF":
+             self._start_pos = self._current_pos
+             match c:
+                 case c if c.isspace(): self._advance()
+                 case "#": self._comment()
+                 case c if c.isdecimal(): self._number()
+                 case "'": self._raw_string()
+                 case '"': self._string()
+                 case c if is_ident_first(c): self._ident()
+                 case c if c in "=<>!:":
+                     self._advance()
+                     if self._current_char() == "=": self._advance()
+                     self._tokens.append(Ident(self._lexeme()))
+-                case c if c in "+-*/%()[]{}.,;":
++                case c if c in "+-*/%|()[]{}.,;":
+                     self._tokens.append(Ident(c)); self._advance()
+                 case invalid:
+                     assert False, f"Invalid character @ tokenize(): {invalid}"
+ 
+         self._tokens.append(Ident("$EOF"))
+         return self._tokens
+ 
+     def _comment(self):
+         while self._current_char() not in ("\n", "$EOF"):
+             self._advance()
+ 
+     def _number(self):
+         while self._current_char().isdecimal(): self._advance()
+         self._tokens.append(int(self._lexeme()))
+ 
+     def _raw_string(self):
+         self._advance()
+         self._start_pos = self._current_pos
+         while (c := self._current_char()) != "'":
+             assert c != "$EOF", f"Unterminated string @ _raw_string(): {c}"
+@@ -116,41 +116,42 @@
+         assert self._current_token() == Ident("$EOF"), \
+             f"Extra token @ parse(): {self._current_token()}"
+         return expr
+ 
+     def _expression(self) -> Expr: return self._sequence()
+ 
+     def _sequence(self):
+         exprs = [self._define_assign()]
+         while self._current_token() == Ident(";"):
+             self._current_and_advance()
+             exprs.append(self._define_assign())
+         return exprs[0] if len(exprs) == 1 else (Ident("seq"), exprs)
+ 
+     def _define_assign(self):
+         return self._binary_right({
+             Ident(":="): Ident("define"), Ident("="): Ident("assign")
+         }, self._and_or)
+ 
+     def _and_or(self):
+         return self._binary_left({
+-            Ident("and"): Ident("and"), Ident("or"): Ident("or")
++            Ident("and"): Ident("and"), Ident("or"): Ident("or"),
++            Ident("|"): Ident("|")
+         }, self._not)
+ 
+     def _not(self):
+         return self._unary({Ident("not"): Ident("not")}, self._comparison)
+ 
+     def _comparison(self):
+         return self._binary_left({
+             Ident("=="): Ident("equal"), Ident("!="): Ident("not_equal"),
+             Ident("<"): Ident("less"), Ident(">"): Ident("greater"),
+             Ident("<="): Ident("less_equal"), Ident(">="): Ident("greater_equal"),
+         }, self._add_sub)
+ 
+     def _add_sub(self):
+         return self._binary_left({
+             Ident("+"): Ident("add"), Ident("-"): Ident("sub")
+         }, self._mul_div_mod)
+ 
+     def _mul_div_mod(self):
+         return self._binary_left({
+             Ident("*"): Ident("mul"), Ident("/"): Ident("div"),
+@@ -443,40 +444,42 @@
+             assert False, f"Undefined variable @ assign(): {ident}"
+ 
+     def val(self, ident: Ident) -> Value:
+         if ident in self._vars: return self._vars[ident]
+         elif self._parent:
+             return self._parent.val(ident)
+         else:
+             assert False, f"Undefined variable @ val(): {ident}"
+ 
+     def bind(self, pattern: Expr, value: Value) -> bool:
+         match pattern:
+             case Ident() as ident:
+                 self.define(ident, value)
+                 return True
+             case list():
+                 return isinstance(value, list) and self._bind_seq(pattern, value)
+             case dict():
+                 return isinstance(value, dict) and self._bind_dict(pattern, value)
+             case (Ident("tuple"), sub_pats):
+                 return isinstance(value, tuple) and self._bind_seq(sub_pats, value)
++            case (Ident("|"), [left_pat, right_pat]):
++                return self.bind(left_pat, value) or self.bind(right_pat, value)
+             case (Ident(typ), [val_pat]):
+                 return type(value).__name__ == typ and self.bind(val_pat, value)
+             case _:
+                 return type(pattern) is type(value) and pattern == value
+ 
+     def _bind_seq(self, pattern, value):
+         for i, sub_pat in enumerate(pattern):
+             match sub_pat:
+                 case (Ident("*"), [rest_pat]):
+                     return i == len(pattern) - 1 and self.bind(rest_pat, value[i:])
+                 case _:
+                     if i >= len(value) or not self.bind(sub_pat, value[i]):
+                         return False
+         return len(pattern) == len(value)
+ 
+     def _bind_dict(self, pattern, value):
+         tmp_pat, tmp_val = pattern.copy(), value.copy()
+ 
+         rest_pat = tmp_pat.pop("*", None)
+ 
+@@ -933,61 +936,70 @@
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(walk_or_run, filename):
+         with open(filename, "r") as f:
+             if walk_or_run == "walk":
+                 result = toil.walk(f.read())
+             else:
+                 result = toil.run(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl("walk")
+         case [_, "--rcepl"]: repl("run")
+         case [_, "--walk", filename]: from_file("walk", filename)
+         case [_, "--run", filename]: from_file("run", filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    print("Type Pattern:")
++    print("Or Pattern:")
+ 
+     print("Match:")
+ 
+-    print(toil.ast(r""" match x case bool(b) then 'bool' end """))
+-    # -> (match, [x, [((bool, [b]), 'bool')]])
+-
++    print(toil.ast(r""" match x case bool(bn) | int(bn) then bn end """))
++    # -> (match, [x, [((|, [(bool, [bn]), (int, [bn])]), bn)]])
+     toil.walk(r"""
+         def foo(x) do
+             match x
+-                case bool(b) then ['bool', b]
+-                case int(n) then ['int', n]
+-                case str(s) then ['str', s]
+-                case list(l) then ['list', l]
+-                case dict(d) then ['dict', d]
++                case 2 | 3 | 4 then ['small int', x]
++                case bool(bn) | int(bn) then ['bool or int', bn]
++                case [a, b] | tuple(a, b) then ['list or tuple', a, b]
+                 case _ then ['else', x]
+             end
+         end
+     """)
+ 
+-    print(toil.walk(r""" foo(False) """)) # -> ['bool', False]
+-    print(toil.walk(r""" foo(2) """)) # -> ['int', 2]
+-    print(toil.walk(r""" foo('hello') """)) # -> ['str', 'hello']
+-    print(toil.walk(r""" foo([2]) """)) # -> ['list', [2]]
+-    print(toil.walk(r""" foo({a: 2}) """)) # -> ['dict', {'a': 2}]
+-    print(toil.walk(r""" foo(tuple(2)) """)) # -> ['else', (2,)]
++    print(toil.walk(r""" foo(2) """)) # -> ['small int', 2]
++    print(toil.walk(r""" foo(False) """)) # -> ['bool or int', False]
++    print(toil.walk(r""" foo(5) """)) # -> ['bool or int', 5]
++    print(toil.walk(r""" foo([2, 3]) """)) # -> ['list or tuple', 2, 3]
++    print(toil.walk(r""" foo(tuple(4, 5)) """)) # -> ['list or tuple', 4, 5]
++    print(toil.walk(r""" foo({}) """)) # -> ['else', {}]
+ 
+     print("Parameter match:")
+ 
+-    toil.walk(r""" def foo(int(n)) do n end """)
++    toil.walk(r""" def foo(bool(bn) | int(bn)) do bn end """)
+     print(toil.walk(r""" foo(2) """)) # -> 2
+-    # print(toil.walk(r""" foo(True) """)) # -> Pattern mismatch
++    print(toil.walk(r""" foo(True) """)) # -> True
++    # print(toil.walk(r""" foo([]) """)) # -> Pattern mismatch
+ 
+     print("Destructuring bind:")
+ 
+-    print(toil.walk(r""" int(n) := 2; n """)) # -> 2
+-    # print(toil.walk(r""" int(n) := True; n """)) # -> Pattern mismatch
++    print(toil.walk(r""" bool(bn) | int(bn) := 2; bn """)) # -> 2
++    print(toil.walk(r""" bool(bn) | int(bn) := True; bn """)) # -> True
++    # print(toil.walk(r""" bool(bn) | int(bn) := []; bn """)) # -> Pattern mismatch
++
++    print("Fibonacci:")
+ 
+-    # print(toil.walk(r""" int(2) := 3 """)) # -> Pattern mismatch
+-    print(toil.walk(r""" list([a, b]) := [2, 3]; [a, b] """)) # -> [2, 3]
+-    # print(toil.walk(r""" list([a, b]) := [2] """)) # -> Pattern mismatch
++    toil.walk(r"""
++        def fib_rec(n) do
++            match n
++                case 0 | 1 then n
++                case _ then fib_rec(n - 1) + fib_rec(n - 2)
++            end
++        end
++    """)
++    print(toil.walk(r""" fib_rec(0) """)) # -> 0
++    print(toil.walk(r""" fib_rec(1) """)) # -> 1
++    print(toil.walk(r""" fib_rec(6) """)) # -> 8
