@@ -1,0 +1,223 @@
+@@ -21,45 +21,43 @@
+ type Value = None | bool | int | str | Callable | tuple | list | dict
+ type Instruction = tuple
+ 
+ class Scanner:
+     def __init__(self, src: str) -> None:
+         self._src = src
+         self._start_pos = 0
+         self._current_pos = 0
+         self._tokens: list[Token] = []
+ 
+     def tokenize(self) -> list[Token]:
+         while (c := self._current_char()) != "$EOF":
+             self._start_pos = self._current_pos
+             match c:
+                 case c if c.isspace(): self._advance()
+                 case "#": self._comment()
+                 case c if c.isdecimal(): self._number()
+                 case "'": self._raw_string()
+                 case '"': self._string()
+                 case c if is_ident_first(c): self._ident()
+-                case c if c in "=<>!:":
+-                    self._advance()
+-                    if self._current_char() == "=": self._advance()
+-                    self._tokens.append(Ident(self._lexeme()))
+-                case c if c in "+-*/%|()[]{}.,;":
++                case "-": self._two_char_operator(">")
++                case c if c in "=<>!:": self._two_char_operator("=")
++                case c if c in "+*/%|()[]{}.,;":
+                     self._tokens.append(Ident(c)); self._advance()
+                 case invalid:
+                     assert False, f"Invalid character @ tokenize(): {invalid}"
+ 
+         self._tokens.append(Ident("$EOF"))
+         return self._tokens
+ 
+     def _comment(self):
+         while self._current_char() not in ("\n", "$EOF"):
+             self._advance()
+ 
+     def _number(self):
+         while self._current_char().isdecimal(): self._advance()
+         self._tokens.append(int(self._lexeme()))
+ 
+     def _raw_string(self):
+         self._advance()
+         self._start_pos = self._current_pos
+         while (c := self._current_char()) != "'":
+             assert c != "$EOF", f"Unterminated string @ _raw_string(): {c}"
+@@ -77,76 +75,90 @@
+                 c = self._current_char()
+                 assert c != "$EOF", f"Unterminated escape sequence @ _string(): {c}"
+                 match c:
+                     case "n": s.append("\n")
+                     case _: s.append(c)
+             else:
+                 s.append(c)
+             self._advance()
+         self._advance()
+         self._tokens.append("".join(s))
+ 
+     def _ident(self):
+         self._advance()
+         while is_ident_rest(self._current_char()): self._advance()
+         match self._lexeme():
+             case "None": self._tokens.append(None)
+             case "True": self._tokens.append(True)
+             case "False": self._tokens.append(False)
+             case ident: self._tokens.append(Ident(ident))
+ 
++    def _two_char_operator(self, successors):
++        self._advance()
++        if self._current_char() in successors: self._advance()
++        self._tokens.append(Ident(self._lexeme()))
++
+     def _lexeme(self):
+         return self._src[self._start_pos:self._current_pos]
+ 
+     def _advance(self): self._current_pos += 1
+ 
+     def _current_char(self):
+         if self._current_pos < len(self._src):
+             return self._src[self._current_pos]
+         else:
+             return "$EOF"
+ 
+ 
+ class Parser:
+     def __init__(self, tokens: list[Token]) -> None:
+         self._tokens = tokens
+         self._pos = 0
+ 
+     def parse(self) -> Expr:
+         expr = self._expression()
+         assert self._current_token() == Ident("$EOF"), \
+             f"Extra token @ parse(): {self._current_token()}"
+         return expr
+ 
+     def _expression(self) -> Expr: return self._sequence()
+ 
+     def _sequence(self):
+         exprs = [self._define_assign()]
+         while self._current_token() == Ident(";"):
+             self._current_and_advance()
+             exprs.append(self._define_assign())
+         return exprs[0] if len(exprs) == 1 else (Ident("seq"), exprs)
+ 
+     def _define_assign(self):
+         return self._binary_right({
+             Ident(":="): Ident("define"), Ident("="): Ident("assign")
+-        }, self._and_or)
++        }, self._arrow)
++
++    def _arrow(self):
++        left = self._and_or()
++        if self._current_token() == Ident("->"):
++            self._current_and_advance()
++            body_expr = self._arrow()
++            params = left if isinstance(left, list) else [left]
++            return (Ident("func"), [params, body_expr])
++        return left
+ 
+     def _and_or(self):
+         return self._binary_left({
+             Ident("and"): Ident("and"), Ident("or"): Ident("or"),
+             Ident("|"): Ident("|")
+         }, self._not)
+ 
+     def _not(self):
+         return self._unary({Ident("not"): Ident("not")}, self._comparison)
+ 
+     def _comparison(self):
+         return self._binary_left({
+             Ident("=="): Ident("equal"), Ident("!="): Ident("not_equal"),
+             Ident("<"): Ident("less"), Ident(">"): Ident("greater"),
+             Ident("<="): Ident("less_equal"), Ident(">="): Ident("greater_equal"),
+         }, self._add_sub)
+ 
+     def _add_sub(self):
+         return self._binary_left({
+             Ident("+"): Ident("add"), Ident("-"): Ident("sub")
+@@ -941,37 +953,65 @@
+                 print("Error:", e, sep="\n")
+ 
+     def from_file(walk_or_run, filename):
+         with open(filename, "r") as f:
+             if walk_or_run == "walk":
+                 result = toil.walk(f.read())
+             else:
+                 result = toil.run(f.read())
+         exit(result if isinstance(result, int) else 255)
+ 
+     match sys.argv:
+         case [_]: pass
+         case [_, "--repl"]: repl("walk")
+         case [_, "--rcepl"]: repl("run")
+         case [_, "--walk", filename]: from_file("walk", filename)
+         case [_, "--run", filename]: from_file("run", filename)
+         case _: assert False, f"Invalid command line: {sys.argv}"
+ 
+     # Example
+ 
+-    print("Module:")
++    print("Arrow function:")
+ 
+-    toil.walk(r""" util := load('util.toil') """)
+-    print(toil.walk(r""" util.double(2) """)) # -> 4
+-    print(toil.walk(r""" util.half(2) """)) # -> 1
+-    # print(toil.walk(r""" double(2) """)) # -> Undefined variable
+-    # print(toil.walk(r""" util._two() """)) # -> Undefined variable
+-
+-    toil.walk(r""" {double, half} := load('util.toil') """)
+-    print(toil.walk(r""" double(4) """)) # -> 8
+-    print(toil.walk(r""" half(4) """)) # -> 2
+-
+-    toil.walk(r""" {double} := load('util.toil') """)
+-    print(toil.walk(r""" double(6) """)) # -> 12
+-
+-    toil.walk(r""" {double: dbl} := load('util.toil') """)
+-    print(toil.walk(r""" dbl(8) """)) # -> 16
++    print(toil.ast(r""" [a, b] -> a + b """))
++    # -> (func, [[a, b], (add, [a, b])])
++    print(toil.ast(r""" func a, b do a + b end """))
++    # -> (func, [[a, b], (add, [a, b])])
++    print(toil.walk(r""" ([a, b] -> a + b)(2, 3) """)) # -> 5
++    # toil.walk(r""" ([a, b] -> a + b)(2) """) # -> Pattern mismatch
++
++    print(toil.walk(r""" myadd := [a, b] -> a + b; myadd(2, 3) """)) # -> 5
++
++    print(toil.walk(r""" ([] -> 2)() """)) # -> 2
++    print(toil.walk(r""" ([a] -> a + 2)(3) """)) # -> 5
++
++    print(toil.walk(r""" (a -> a + 2)(3) """)) # -> 5
++    print(toil.walk(r""" ({a, b} -> a + b)({a: 2, b: 3}) """)) # -> 5
++    # toil.walk(r""" ({a} -> a + 2)({b: 3}) """) # -> Pattern mismatch
++
++    print(toil.walk(r""" ([[a, b]] -> a + b)([2, 3]) """)) # -> 5
++
++    print(toil.walk(r""" ([a, *b] -> b)(2, 3, 4) """)) # -> [3, 4]
++    print(toil.walk(r""" (int(a) -> a + 2)(3) """)) # -> 5
++    # toil.walk(r""" (int(a) -> a + 2)('aaa') """) # -> Pattern mismatch
++
++    print(toil.ast(r""" f := a -> a or 2 """))
++    # -> (define, [f, (func, [[a], (or, [a, 2])])])
++    print(toil.walk(r""" f := a -> a or 2; f(False) """)) # -> 2
++
++    print(toil.ast(r""" a -> b -> a + b """))
++    # -> (func, [[a], (func, [[b], (add, [a, b])])])
++    print(toil.walk(r""" (a -> b -> a + b)(2)(3) """)) # -> 5
++
++    toil.walk(r"""
++        def quicksort(a) do
++            if a.len() <= 1 then a else
++                [pivot, *rem] := a;
++                # left := rem.filter(func x do x < pivot end);
++                left := rem.filter(x -> x < pivot);
++                # right := rem.filter(func x do x >= pivot end);
++                right := rem.filter(x -> x >= pivot);
++                quicksort(left) + [pivot] + quicksort(right)
++            end
++        end
++    """)
++    print(toil.walk(r""" quicksort([5, 3, 8, 4, 2]) """)) # -> [2, 3, 4, 5, 8]
