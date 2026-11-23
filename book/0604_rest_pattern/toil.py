@@ -960,10 +960,10 @@ if __name__ == "__main__":
     # -> 2 []\n3 [4, 5]
 
     toil.walk(r"""
-        match [2, 3, 4] case [a, *b] then print(a, b) case _ then print("no") end
+        match [2, 3, 4] case [a, *b] then print(a, b) case _ then print('no') end
     """) # -> 2 [3, 4]
     toil.walk(r"""
-        match [] case [a, *b] then print(a, b) case _ then print("no") end
+        match [] case [a, *b] then print(a, b) case _ then print('no') end
     """) # -> no
 
     toil.walk(r"""

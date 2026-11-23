@@ -607,9 +607,9 @@ if __name__ == "__main__":
     print(toil.walk(r""" if True then 2 elif True then 3 end """))
     # -> 2
 
-    print(toil.ast(r""" if True then 2 else if True then 3 else None end end"""))
+    print(toil.ast(r""" if True then 2 else if True then 3 else None end end """))
     # -> (if, [True, 2, (if, [True, 3, None])])
-    print(toil.walk(r""" if True then 2 else if True then 3 else None end end"""))
+    print(toil.walk(r""" if True then 2 else if True then 3 else None end end """))
     # -> 2
 
     print(toil.ast(r""" if False then 2 elif True then 3 end """))
@@ -660,6 +660,13 @@ if __name__ == "__main__":
         end
     """)) # -> 4
 
+    # print(toil.walk(r""" if True 2 end """)) # -> Expected then
+    # print(toil.walk(r""" if True then 2 """)) # -> Expected end
+    # print(toil.walk(r""" if True then 2 3 end """)) # -> Expected end
+    # print(toil.walk(r""" if True then 2 else 3 """)) # -> Expected end
+    # print(toil.walk(r""" if False then 2 elif True 3 end """)) # -> Expected then
+    # print(toil.walk(r""" if False then 2 elif True then 3 """)) # -> Expected end
+
     toil.walk(r"""
         def fib_rec(n) do
             if n == 0 then 0
@@ -670,10 +677,3 @@ if __name__ == "__main__":
     print(toil.walk(r""" fib_rec(0) """)) # -> 0
     print(toil.walk(r""" fib_rec(1) """)) # -> 1
     print(toil.walk(r""" fib_rec(6) """)) # -> 8
-
-    # print(toil.walk(r""" if True 2 end """)) # -> Expected then
-    # print(toil.walk(r""" if True then 2 """)) # -> Expected end
-    # print(toil.walk(r""" if True then 2 3 end """)) # -> Expected end
-    # print(toil.walk(r""" if True then 2 else 3 """)) # -> Expected end
-    # print(toil.walk(r""" if False then 2 elif True 3 end """)) # -> Expected then
-    # print(toil.walk(r""" if False then 2 elif True then 3 """)) # -> Expected end

@@ -663,27 +663,27 @@ b"] """) == ["a\nb"]
 
     def test_dict(self, capsys):
         assert toil.walk(r""" dict() """) == {}
-        assert toil.walk(r""" dict(["a", 2 + 3]) """) == {"a": 5}
-        assert toil.walk(r""" d := dict(["a", 2], tuple("b", 3)) """) == {"a": 2, "b": 3}
+        assert toil.walk(r""" dict(['a', 2 + 3]) """) == {"a": 5}
+        assert toil.walk(r""" d := dict(['a', 2], tuple('b', 3)) """) == {"a": 2, "b": 3}
 
-        assert toil.walk(r""" index(d, "a") """) == 2
-        assert toil.walk(r""" d["b"] """) == 3
+        assert toil.walk(r""" index(d, 'a') """) == 2
+        assert toil.walk(r""" d['b'] """) == 3
 
-        toil.walk(r""" d["b"] = 4 """)
-        toil.walk(r""" d["c"] = dict(["d", 5]) """)
+        toil.walk(r""" d['b'] = 4 """)
+        toil.walk(r""" d['c'] = dict(['d', 5]) """)
         assert toil.walk(r""" d """) == {"a": 2, "b": 4, "c": {"d": 5}}
-        assert toil.walk(r""" d["c"]["d"] """) == 5
+        assert toil.walk(r""" d['c']['d'] """) == 5
 
         assert toil.walk(r""" len(d) """) == 3
-        assert toil.walk(r""" pop(d, "c") """) == {"d": 5}
+        assert toil.walk(r""" pop(d, 'c') """) == {"d": 5}
         assert toil.walk(r""" len(d) """) == 2
 
-        assert toil.walk(r""" in("a", d) """) is True
-        assert toil.walk(r""" in("A", d) """) is False
-        assert toil.walk(r""" in("a", "abc") """) is True
-        assert toil.walk(r""" in("A", "abc") """) is False
+        assert toil.walk(r""" in('a', d) """) is True
+        assert toil.walk(r""" in('A', d) """) is False
+        assert toil.walk(r""" in('a', 'abc') """) is True
+        assert toil.walk(r""" in('A', 'abc') """) is False
 
-        toil.walk(r""" e := copy(d); e["b"] = 6 """)
+        toil.walk(r""" e := copy(d); e['b'] = 6 """)
         assert toil.walk(r""" d """) == {"a": 2, "b": 4}
         assert toil.walk(r""" e """) == {"a": 2, "b": 6}
 
@@ -700,8 +700,8 @@ b"] """) == ["a\nb"]
 
     def test_dict_literal(self):
         assert toil.walk(r""" {} """) == {}
-        assert toil.walk(r""" {"a": 2 + 3} """) == {"a": 5}
-        assert toil.walk(r""" {"a": 2, "b": 3} """) == {"a": 2, "b": 3}
+        assert toil.walk(r""" {'a': 2 + 3} """) == {"a": 5}
+        assert toil.walk(r""" {'a': 2, 'b': 3} """) == {"a": 2, "b": 3}
         assert toil.walk(r""" {a: 4, b: 5} """) == {"a": 4, "b": 5}
         assert toil.walk(r""" a := 6; b := 7; {a, b} """) == {"a": 6, "b": 7}
         assert toil.walk(r""" {a: 8, b: {c: 9}} """) == {"a": 8, "b": {"c": 9}}
@@ -720,7 +720,7 @@ b"] """) == ["a\nb"]
             toil.walk(r""" {a: 2,} """)
 
     def test_dot(self):
-        toil.walk(r""" d := {"a": 2, "b": 3} """)
+        toil.walk(r""" d := {'a': 2, 'b': 3} """)
         assert toil.walk(r""" d.a """) == 2
 
         toil.walk(r""" d.a = 4; d.c = {e: 5} """)
@@ -757,8 +757,8 @@ b"] """) == ["a\nb"]
         assert toil.walk(r""" {a: 2, b: 3}.keys() """) == ["a", "b"]
         assert toil.walk(r""" {a: 2, keys: func do 3 end}.keys() """) == 3
 
-        assert toil.walk(r""" "a".in("abc") """) is True
-        assert toil.walk(r""" "d".in("abc") """) is False
+        assert toil.walk(r""" 'a'.in('abc') """) is True
+        assert toil.walk(r""" 'd'.in('abc') """) is False
 
         toil.walk(r""" def myadd(a, b) do a + b end """)
         assert toil.walk(r""" 2.myadd(3) """) == 5
@@ -778,19 +778,19 @@ b"] """) == ["a\nb"]
         toil.walk(r"""
             defclass Animal(name) do
                 self._name = name;
-                defmethod introduce do print("I am", self._name) end;
-                defmethod make_sound do print("crying") end;
+                defmethod introduce do print('I am', self._name) end;
+                defmethod make_sound do print('crying') end;
                 defmethod rename(name) do self._name = name end
             end
         """)
         toil.walk(r"""
-            animal1 := Animal("Rocky");
-            animal2 := Animal("Lucy");
+            animal1 := Animal('Rocky');
+            animal2 := Animal('Lucy');
             animal1.introduce();
             animal1.make_sound();
             animal2.introduce();
             animal2.make_sound();
-            animal2.rename("Betty");
+            animal2.rename('Betty');
             animal2.introduce()
         """)
         assert capsys.readouterr().out == "I am Rocky\ncrying\nI am Lucy\ncrying\nI am Betty\n"
@@ -873,19 +873,19 @@ b"] """) == ["a\nb"]
 
         assert toil.walk(r"""
             a := [];
-            keys := ["a", "b", "c"];
+            keys := ['a', 'b', 'c'];
             values := [2, 3, 4];
             for [k, v] in zip(keys, values) do a.push([k, v]) then a end
         """) == [["a", 2], ["b", 3], ["c", 4]]
 
     def test_match(self):
         assert toil.walk(r"""
-            match [2, 3] case [a, b] then a * b case _ then "no" end
+            match [2, 3] case [a, b] then a * b case _ then 'no' end
         """) == 6
         assert toil.walk(r""" [a, b] """) == [2, 3]
 
         assert toil.walk(r"""
-            match [4, 5] case [a, [b, c]] then a * b case _ then "no" end
+            match [4, 5] case [a, [b, c]] then a * b case _ then 'no' end
         """) == "no"
         assert toil.walk(r""" [a, b, _] """) == [4, 3, [4, 5]]
 
@@ -934,20 +934,20 @@ b"] """) == ["a\nb"]
         assert capsys.readouterr().out == "2 []\n3 [4, 5]\n"
 
         toil.walk(r"""
-            match [2, 3, 4] case [a, *b] then print(a, b) case _ then print("no") end
+            match [2, 3, 4] case [a, *b] then print(a, b) case _ then print('no') end
         """)
         toil.walk(r"""
-            match [] case [a, *b] then print(a, b) case _ then print("no") end
+            match [] case [a, *b] then print(a, b) case _ then print('no') end
         """)
         assert capsys.readouterr().out == "2 [3, 4]\nno\n"
 
     def test_literal_pattern(self):
-        assert toil.walk(r""" match 2 case "2" then 20 case 2 then 200 end """) == 200
-        assert toil.walk(r""" match "2" case "2" then 20 case 2 then 200 end """) == 20
-        assert toil.walk(r""" match [2] case "2" then 20 case 2 then 200 end """) is None
+        assert toil.walk(r""" match 2 case '2' then 20 case 2 then 200 end """) == 200
+        assert toil.walk(r""" match '2' case '2' then 20 case 2 then 200 end """) == 20
+        assert toil.walk(r""" match [2] case '2' then 20 case 2 then 200 end """) is None
 
         assert toil.walk(r"""
-            match True case 1 then "int" case True then "bool" end
+            match True case 1 then 'int' case True then 'bool' end
         """) == "bool"
 
         assert toil.walk(r""" [a, 2] := [3, 2]; a """) == 3
@@ -1234,20 +1234,20 @@ class TestExamples:
             def Animal(name) do
                 self := {};
                 self._name = name;
-                self.introduce = func self do print("I am", self._name) end;
-                self.make_sound = func self do print("crying") end;
+                self.introduce = func self do print('I am', self._name) end;
+                self.make_sound = func self do print('crying') end;
                 self.rename = func self, name do self._name = name end;
                 self
             end
         """)
         toil.walk(r"""
-            animal1 := Animal("Rocky");
-            animal2 := Animal("Lucy");
+            animal1 := Animal('Rocky');
+            animal2 := Animal('Lucy');
             animal1.introduce();
             animal1.make_sound();
             animal2.introduce();
             animal2.make_sound();
-            animal2.rename("Betty");
+            animal2.rename('Betty');
             animal2.introduce()
         """)
         assert capsys.readouterr().out == "I am Rocky\ncrying\nI am Lucy\ncrying\nI am Betty\n"
@@ -1255,12 +1255,12 @@ class TestExamples:
         toil.walk(r"""
             def Dog(name) do
                 self := Animal(name);
-                self.make_sound = func self do print("woof") end;
+                self.make_sound = func self do print('woof') end;
                 self
             end
         """)
         toil.walk(r"""
-            dog1 := Dog("Leo");
+            dog1 := Dog('Leo');
             dog1.introduce();
             dog1.make_sound()
         """)

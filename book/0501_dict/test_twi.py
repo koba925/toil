@@ -663,27 +663,27 @@ b"] """) == ["a\nb"]
 
     def test_dict(self, capsys):
         assert toil.walk(r""" dict() """) == {}
-        assert toil.walk(r""" dict(["a", 2 + 3]) """) == {"a": 5}
-        assert toil.walk(r""" d := dict(["a", 2], tuple("b", 3)) """) == {"a": 2, "b": 3}
+        assert toil.walk(r""" dict(['a', 2 + 3]) """) == {"a": 5}
+        assert toil.walk(r""" d := dict(['a', 2], tuple('b', 3)) """) == {"a": 2, "b": 3}
 
-        assert toil.walk(r""" index(d, "a") """) == 2
-        assert toil.walk(r""" d["b"] """) == 3
+        assert toil.walk(r""" index(d, 'a') """) == 2
+        assert toil.walk(r""" d['b'] """) == 3
 
-        toil.walk(r""" d["b"] = 4 """)
-        toil.walk(r""" d["c"] = dict(["d", 5]) """)
+        toil.walk(r""" d['b'] = 4 """)
+        toil.walk(r""" d['c'] = dict(['d', 5]) """)
         assert toil.walk(r""" d """) == {"a": 2, "b": 4, "c": {"d": 5}}
-        assert toil.walk(r""" d["c"]["d"] """) == 5
+        assert toil.walk(r""" d['c']['d'] """) == 5
 
         assert toil.walk(r""" len(d) """) == 3
-        assert toil.walk(r""" pop(d, "c") """) == {"d": 5}
+        assert toil.walk(r""" pop(d, 'c') """) == {"d": 5}
         assert toil.walk(r""" len(d) """) == 2
 
-        assert toil.walk(r""" in("a", d) """) is True
-        assert toil.walk(r""" in("A", d) """) is False
-        assert toil.walk(r""" in("a", "abc") """) is True
-        assert toil.walk(r""" in("A", "abc") """) is False
+        assert toil.walk(r""" in('a', d) """) is True
+        assert toil.walk(r""" in('A', d) """) is False
+        assert toil.walk(r""" in('a', 'abc') """) is True
+        assert toil.walk(r""" in('A', 'abc') """) is False
 
-        toil.walk(r""" e := copy(d); e["b"] = 6 """)
+        toil.walk(r""" e := copy(d); e['b'] = 6 """)
         assert toil.walk(r""" d """) == {"a": 2, "b": 4}
         assert toil.walk(r""" e """) == {"a": 2, "b": 6}
 

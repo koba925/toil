@@ -264,7 +264,7 @@
 +
 +    print(toil.walk(r"""
 +        a := [];
-+        keys := ["a", "b", "c"];
++        keys := ['a', 'b', 'c'];
 +        values := [2, 3, 4];
 +        for [k, v] in zip(keys, values) do a.push([k, v]) then a end
 +    """)) # -> [['a', 2], ['b', 3], ['c', 4]]

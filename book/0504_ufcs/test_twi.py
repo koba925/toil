@@ -663,27 +663,27 @@ b"] """) == ["a\nb"]
 
     def test_dict(self, capsys):
         assert toil.walk(r""" dict() """) == {}
-        assert toil.walk(r""" dict(["a", 2 + 3]) """) == {"a": 5}
-        assert toil.walk(r""" d := dict(["a", 2], tuple("b", 3)) """) == {"a": 2, "b": 3}
+        assert toil.walk(r""" dict(['a', 2 + 3]) """) == {"a": 5}
+        assert toil.walk(r""" d := dict(['a', 2], tuple('b', 3)) """) == {"a": 2, "b": 3}
 
-        assert toil.walk(r""" index(d, "a") """) == 2
-        assert toil.walk(r""" d["b"] """) == 3
+        assert toil.walk(r""" index(d, 'a') """) == 2
+        assert toil.walk(r""" d['b'] """) == 3
 
-        toil.walk(r""" d["b"] = 4 """)
-        toil.walk(r""" d["c"] = dict(["d", 5]) """)
+        toil.walk(r""" d['b'] = 4 """)
+        toil.walk(r""" d['c'] = dict(['d', 5]) """)
         assert toil.walk(r""" d """) == {"a": 2, "b": 4, "c": {"d": 5}}
-        assert toil.walk(r""" d["c"]["d"] """) == 5
+        assert toil.walk(r""" d['c']['d'] """) == 5
 
         assert toil.walk(r""" len(d) """) == 3
-        assert toil.walk(r""" pop(d, "c") """) == {"d": 5}
+        assert toil.walk(r""" pop(d, 'c') """) == {"d": 5}
         assert toil.walk(r""" len(d) """) == 2
 
-        assert toil.walk(r""" in("a", d) """) is True
-        assert toil.walk(r""" in("A", d) """) is False
-        assert toil.walk(r""" in("a", "abc") """) is True
-        assert toil.walk(r""" in("A", "abc") """) is False
+        assert toil.walk(r""" in('a', d) """) is True
+        assert toil.walk(r""" in('A', d) """) is False
+        assert toil.walk(r""" in('a', 'abc') """) is True
+        assert toil.walk(r""" in('A', 'abc') """) is False
 
-        toil.walk(r""" e := copy(d); e["b"] = 6 """)
+        toil.walk(r""" e := copy(d); e['b'] = 6 """)
         assert toil.walk(r""" d """) == {"a": 2, "b": 4}
         assert toil.walk(r""" e """) == {"a": 2, "b": 6}
 
@@ -700,8 +700,8 @@ b"] """) == ["a\nb"]
 
     def test_dict_literal(self):
         assert toil.walk(r""" {} """) == {}
-        assert toil.walk(r""" {"a": 2 + 3} """) == {"a": 5}
-        assert toil.walk(r""" {"a": 2, "b": 3} """) == {"a": 2, "b": 3}
+        assert toil.walk(r""" {'a': 2 + 3} """) == {"a": 5}
+        assert toil.walk(r""" {'a': 2, 'b': 3} """) == {"a": 2, "b": 3}
         assert toil.walk(r""" {a: 4, b: 5} """) == {"a": 4, "b": 5}
         assert toil.walk(r""" a := 6; b := 7; {a, b} """) == {"a": 6, "b": 7}
         assert toil.walk(r""" {a: 8, b: {c: 9}} """) == {"a": 8, "b": {"c": 9}}
@@ -720,7 +720,7 @@ b"] """) == ["a\nb"]
             toil.walk(r""" {a: 2,} """)
 
     def test_dot(self):
-        toil.walk(r""" d := {"a": 2, "b": 3} """)
+        toil.walk(r""" d := {'a': 2, 'b': 3} """)
         assert toil.walk(r""" d.a """) == 2
 
         toil.walk(r""" d.a = 4; d.c = {e: 5} """)
@@ -757,8 +757,8 @@ b"] """) == ["a\nb"]
         assert toil.walk(r""" {a: 2, b: 3}.keys() """) == ["a", "b"]
         assert toil.walk(r""" {a: 2, keys: func do 3 end}.keys() """) == 3
 
-        assert toil.walk(r""" "a".in("abc") """) is True
-        assert toil.walk(r""" "d".in("abc") """) is False
+        assert toil.walk(r""" 'a'.in('abc') """) is True
+        assert toil.walk(r""" 'd'.in('abc') """) is False
 
         toil.walk(r""" def myadd(a, b) do a + b end """)
         assert toil.walk(r""" 2.myadd(3) """) == 5

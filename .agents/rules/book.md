@@ -3,7 +3,7 @@ name: book
 description: Toil を題材にした書籍に関するディレクトリ構成やルールを確認する際に自動ロードする
 trigger: model_decision
 ---
-Toil を題材として書籍「[育てて学ぶ はじめての自作プログラミング言語](https://zenn.dev/kb84tkhr/books/learning-by-growing-language)」を執筆中です。まだドラフトですが、第 1 部を公開し、第 2 部を執筆中です。
+Toil を題材として書籍「[育てて学ぶ はじめての自作プログラミング言語](https://zenn.dev/kb84tkhr/books/learning-by-growing-language)」を執筆中です。まだドラフトですが、第 1 部および第 2 部（第 4〜6 章）を完了し、第 3 部の執筆に進んでいます。
 
 ## 書籍のコンセプトとターゲット
 
@@ -24,6 +24,7 @@ Toil を題材として書籍「[育てて学ぶ はじめての自作プログ�
 * `<DIR>/test_twi.py`：ツリーウォーク式インタプリタのテスト
 * `<DIR>/test_ici.py`：中間コード式インタプリタのテスト
 * `<DIR>/diff.txt`：ひとつ前の節の toil.py との差分
+* `<DIR>/gcd.toil`・`<DIR>/util.toil`：付随するサンプル Toil ファイル（`util.toil` は `0610_module` 以降）
 
 具体的には以下のような配置になります。
 

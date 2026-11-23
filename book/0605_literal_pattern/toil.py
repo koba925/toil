@@ -931,13 +931,13 @@ if __name__ == "__main__":
 
     print("Literal pattern:")
 
-    print(toil.ast(r""" match 2 case "2" then 20 case 2 then 200 end """))
+    print(toil.ast(r""" match 2 case '2' then 20 case 2 then 200 end """))
     # -> (match, [2, [('2', 20), (2, 200)]])
-    print(toil.walk(r""" match 2 case "2" then 20 case 2 then 200 end """)) # -> 200
-    print(toil.walk(r""" match "2" case "2" then 20 case 2 then 200 end """)) # -> 20
-    print(toil.walk(r""" match [2] case "2" then 20 case 2 then 200 end """)) # -> None
+    print(toil.walk(r""" match 2 case '2' then 20 case 2 then 200 end """)) # -> 200
+    print(toil.walk(r""" match '2' case '2' then 20 case 2 then 200 end """)) # -> 20
+    print(toil.walk(r""" match [2] case '2' then 20 case 2 then 200 end """)) # -> None
 
-    print(toil.walk(r""" match True case 1 then "int" case True then "bool" end """))
+    print(toil.walk(r""" match True case 1 then 'int' case True then 'bool' end """))
     # -> bool
 
     print(toil.walk(r""" [a, 2] := [3, 2]; a """)) # -> 3

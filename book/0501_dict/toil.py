@@ -777,28 +777,28 @@ if __name__ == "__main__":
     print("Dict:")
 
     print(toil.walk(r""" dict() """)) # -> {}
-    print(toil.ast(r""" dict(["a", 2 + 3]) """)) # -> (dict, [['a', (add, [2, 3])]])
-    print(toil.walk(r""" dict(["a", 2 + 3]) """)) # -> {'a': 5}
-    print(toil.walk(r""" d := dict(["a", 2], tuple("b", 3)) """)) # -> {'a': 2, 'b': 3}
+    print(toil.ast(r""" dict(['a', 2 + 3]) """)) # -> (dict, [['a', (add, [2, 3])]])
+    print(toil.walk(r""" dict(['a', 2 + 3]) """)) # -> {'a': 5}
+    print(toil.walk(r""" d := dict(['a', 2], tuple('b', 3)) """)) # -> {'a': 2, 'b': 3}
 
-    print(toil.walk(r""" index(d, "a") """)) # -> 2
-    print(toil.walk(r""" d["b"] """)) # -> 3
+    print(toil.walk(r""" index(d, 'a') """)) # -> 2
+    print(toil.walk(r""" d['b'] """)) # -> 3
 
-    toil.walk(r""" d["b"] = 4 """)
-    toil.walk(r""" d["c"] = dict(["d", 5]) """)
+    toil.walk(r""" d['b'] = 4 """)
+    toil.walk(r""" d['c'] = dict(['d', 5]) """)
     print(toil.walk(r""" d """)) # -> {'a': 2, 'b': 4, 'c': {'d': 5}}
-    print(toil.walk(r""" d["c"]["d"] """)) # -> 5
+    print(toil.walk(r""" d['c']['d'] """)) # -> 5
 
     print(toil.walk(r""" len(d) """)) # -> 3
-    print(toil.walk(r""" pop(d, "c") """)) # -> {'d': 5}
+    print(toil.walk(r""" pop(d, 'c') """)) # -> {'d': 5}
     print(toil.walk(r""" len(d) """)) # -> 2
 
-    print(toil.walk(r""" in("a", d) """)) # -> True
-    print(toil.walk(r""" in("A", d) """)) # -> False
-    print(toil.walk(r""" in("a", "abc") """)) # -> True
-    print(toil.walk(r""" in("A", "abc") """)) # -> False
+    print(toil.walk(r""" in('a', d) """)) # -> True
+    print(toil.walk(r""" in('A', d) """)) # -> False
+    print(toil.walk(r""" in('a', 'abc') """)) # -> True
+    print(toil.walk(r""" in('A', 'abc') """)) # -> False
 
-    toil.walk(r""" e := copy(d); e["b"] = 6 """)
+    toil.walk(r""" e := copy(d); e['b'] = 6 """)
     print(toil.walk(r""" d """)) # -> {'a': 2, 'b': 4}
     print(toil.walk(r""" e """)) # -> {'a': 2, 'b': 6}
 

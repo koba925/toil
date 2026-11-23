@@ -807,9 +807,9 @@ if __name__ == "__main__":
     print("Dict literal:")
 
     print(toil.walk(r""" {} """)) # -> {}
-    print(toil.ast(r""" {"a": 2 + 3} """)) # -> {'a': (add, [2, 3])}
-    print(toil.walk(r""" {"a": 2 + 3} """)) # -> {'a': 5}
-    print(toil.walk(r""" {"a": 2, "b": 3} """)) # -> {'a': 2, 'b': 3}
+    print(toil.ast(r""" {'a': 2 + 3} """)) # -> {'a': (add, [2, 3])}
+    print(toil.walk(r""" {'a': 2 + 3} """)) # -> {'a': 5}
+    print(toil.walk(r""" {'a': 2, 'b': 3} """)) # -> {'a': 2, 'b': 3}
     print(toil.walk(r""" {a: 4, b: 5} """)) # -> {'a': 4, 'b': 5}
     print(toil.ast(r""" {a, b} """)) # -> {'a': a, 'b': b}
     print(toil.walk(r""" a := 6; b := 7; {a, b} """)) # -> {'a': 6, 'b': 7}

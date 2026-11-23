@@ -953,7 +953,7 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Or Pattern:")
+    print("Or pattern:")
 
     print("Match:")
 

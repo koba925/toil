@@ -961,11 +961,11 @@ if __name__ == "__main__":
     print("Match:")
 
     print(toil.walk(r"""
-        match tuple(2, 3) case tuple(a, b) then a * b case _ then "no" end
+        match tuple(2, 3) case tuple(a, b) then a * b case _ then 'no' end
     """)) # -> 6
     print(toil.walk(r""" [a, b] """)) # -> [2, 3]
     print(toil.walk(r"""
-        match tuple(4, 5) case tuple(a, [b, c]) then a * b case _ then "no" end
+        match tuple(4, 5) case tuple(a, [b, c]) then a * b case _ then 'no' end
     """)) # -> no
     print(toil.walk(r""" [a, b, _] """)) # -> [4, 3, (4, 5)]
     print(toil.walk(r""" match 2 case tuple(a, b) then a * b end """)) # -> None

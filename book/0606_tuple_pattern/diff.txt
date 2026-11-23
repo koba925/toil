@@ -72,13 +72,13 @@
 -    print("Literal pattern:")
 +    print("Parameter match:")
  
--    print(toil.ast(r""" match 2 case "2" then 20 case 2 then 200 end """))
+-    print(toil.ast(r""" match 2 case '2' then 20 case 2 then 200 end """))
 -    # -> (match, [2, [('2', 20), (2, 200)]])
--    print(toil.walk(r""" match 2 case "2" then 20 case 2 then 200 end """)) # -> 200
--    print(toil.walk(r""" match "2" case "2" then 20 case 2 then 200 end """)) # -> 20
--    print(toil.walk(r""" match [2] case "2" then 20 case 2 then 200 end """)) # -> None
+-    print(toil.walk(r""" match 2 case '2' then 20 case 2 then 200 end """)) # -> 200
+-    print(toil.walk(r""" match '2' case '2' then 20 case 2 then 200 end """)) # -> 20
+-    print(toil.walk(r""" match [2] case '2' then 20 case 2 then 200 end """)) # -> None
 -
--    print(toil.walk(r""" match True case 1 then "int" case True then "bool" end """))
+-    print(toil.walk(r""" match True case 1 then 'int' case True then 'bool' end """))
 -    # -> bool
 -
 -    print(toil.walk(r""" [a, 2] := [3, 2]; a """)) # -> 3
@@ -146,11 +146,11 @@
 +    print("Match:")
 +
 +    print(toil.walk(r"""
-+        match tuple(2, 3) case tuple(a, b) then a * b case _ then "no" end
++        match tuple(2, 3) case tuple(a, b) then a * b case _ then 'no' end
 +    """)) # -> 6
 +    print(toil.walk(r""" [a, b] """)) # -> [2, 3]
 +    print(toil.walk(r"""
-+        match tuple(4, 5) case tuple(a, [b, c]) then a * b case _ then "no" end
++        match tuple(4, 5) case tuple(a, [b, c]) then a * b case _ then 'no' end
 +    """)) # -> no
 +    print(toil.walk(r""" [a, b, _] """)) # -> [4, 3, (4, 5)]
 +    print(toil.walk(r""" match 2 case tuple(a, b) then a * b end """)) # -> None

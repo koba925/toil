@@ -1,0 +1,6 @@
+def double(a) do a * _two() end;
+def half(a) do a / _two() end;
+
+def _two() do 2 end;
+
+{double, half}

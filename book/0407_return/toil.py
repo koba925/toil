@@ -624,4 +624,3 @@ if __name__ == "__main__":
     print(toil.walk(r""" is_prime(4) """)) # -> False
     print(toil.walk(r""" is_prime(7) """)) # -> True
     print(toil.walk(r""" is_prime(15) """)) # -> False
-

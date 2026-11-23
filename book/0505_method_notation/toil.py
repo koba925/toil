@@ -844,32 +844,32 @@ if __name__ == "__main__":
         def Animal(name) do
             self := {};
             self._name = name;
-            self.introduce = func self do print("I am", self._name) end;
-            self.make_sound = func self do print("crying") end;
+            self.introduce = func self do print('I am', self._name) end;
+            self.make_sound = func self do print('crying') end;
             self.rename = func self, name do self._name = name end;
             self
         end
     """)
     toil.walk(r"""
-        animal1 := Animal("Rocky");
-        animal2 := Animal("Lucy");
+        animal1 := Animal('Rocky');
+        animal2 := Animal('Lucy');
         animal1.introduce();
         animal1.make_sound();
         animal2.introduce();
         animal2.make_sound();
-        animal2.rename("Betty");
+        animal2.rename('Betty');
         animal2.introduce()
     """) # -> I am Rocky\ncrying\nI am Lucy\ncrying\nI am Betty
 
     toil.walk(r"""
         def Dog(name) do
             self := Animal(name);
-            self.make_sound = func self do print("woof") end;
+            self.make_sound = func self do print('woof') end;
             self
         end
     """)
     toil.walk(r"""
-        dog1 := Dog("Leo");
+        dog1 := Dog('Leo');
         dog1.introduce();
         dog1.make_sound()
     """) # -> I am Leo\nwoof

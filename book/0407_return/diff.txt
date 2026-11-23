@@ -142,7 +142,7 @@
  if __name__ == "__main__":
      import sys
  
-@@ -563,117 +573,55 @@
+@@ -563,117 +573,54 @@
                  print("Error:", e, sep="\n")
  
      def from_file(walk_or_run, filename):
@@ -164,8 +164,7 @@
      # Example
  
 -    print("Elif and omitting else clauses:")
-+    print("Return:")
- 
+-
 -    print(toil.ast(r""" if True then 2 end """))
 -    # -> (if, [True, 2, None])
 -    print(toil.walk(r""" if True then 2 end """))
@@ -191,9 +190,9 @@
 -    print(toil.walk(r""" if True then 2 elif True then 3 end """))
 -    # -> 2
 -
--    print(toil.ast(r""" if True then 2 else if True then 3 else None end end"""))
+-    print(toil.ast(r""" if True then 2 else if True then 3 else None end end """))
 -    # -> (if, [True, 2, (if, [True, 3, None])])
--    print(toil.walk(r""" if True then 2 else if True then 3 else None end end"""))
+-    print(toil.walk(r""" if True then 2 else if True then 3 else None end end """))
 -    # -> 2
 -
 -    print(toil.ast(r""" if False then 2 elif True then 3 end """))
@@ -243,6 +242,14 @@
 -            5
 -        end
 -    """)) # -> 4
++    print("Return:")
+ 
+-    # print(toil.walk(r""" if True 2 end """)) # -> Expected then
+-    # print(toil.walk(r""" if True then 2 """)) # -> Expected end
+-    # print(toil.walk(r""" if True then 2 3 end """)) # -> Expected end
+-    # print(toil.walk(r""" if True then 2 else 3 """)) # -> Expected end
+-    # print(toil.walk(r""" if False then 2 elif True 3 end """)) # -> Expected then
+-    # print(toil.walk(r""" if False then 2 elif True then 3 """)) # -> Expected end
 +    print(toil.ast(r""" return """)) # -> return
 +    print(toil.walk(r""" return; 3 """)) # -> None
 +    print(toil.ast(r""" return(2) """)) # -> (return, [2])
@@ -261,13 +268,7 @@
      print(toil.walk(r""" fib_rec(0) """)) # -> 0
      print(toil.walk(r""" fib_rec(1) """)) # -> 1
      print(toil.walk(r""" fib_rec(6) """)) # -> 8
- 
--    # print(toil.walk(r""" if True 2 end """)) # -> Expected then
--    # print(toil.walk(r""" if True then 2 """)) # -> Expected end
--    # print(toil.walk(r""" if True then 2 3 end """)) # -> Expected end
--    # print(toil.walk(r""" if True then 2 else 3 """)) # -> Expected end
--    # print(toil.walk(r""" if False then 2 elif True 3 end """)) # -> Expected then
--    # print(toil.walk(r""" if False then 2 elif True then 3 """)) # -> Expected end
++
 +    toil.walk(r"""
 +        def is_prime(n) do
 +            if n < 2 then return(False) end;
@@ -284,4 +285,3 @@
 +    print(toil.walk(r""" is_prime(4) """)) # -> False
 +    print(toil.walk(r""" is_prime(7) """)) # -> True
 +    print(toil.walk(r""" is_prime(15) """)) # -> False
-+

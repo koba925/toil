@@ -83,15 +83,15 @@
 -
 -    toil.walk(r""" def foo(a, *[b, c]) do print(a, b, c) end """)
 -    toil.walk(r""" foo(2, 3, 4) """) # -> 2 3 4
-+    print(toil.ast(r""" match 2 case "2" then 20 case 2 then 200 end """))
++    print(toil.ast(r""" match 2 case '2' then 20 case 2 then 200 end """))
 +    # -> (match, [2, [('2', 20), (2, 200)]])
-+    print(toil.walk(r""" match 2 case "2" then 20 case 2 then 200 end """)) # -> 200
-+    print(toil.walk(r""" match "2" case "2" then 20 case 2 then 200 end """)) # -> 20
-+    print(toil.walk(r""" match [2] case "2" then 20 case 2 then 200 end """)) # -> None
++    print(toil.walk(r""" match 2 case '2' then 20 case 2 then 200 end """)) # -> 200
++    print(toil.walk(r""" match '2' case '2' then 20 case 2 then 200 end """)) # -> 20
++    print(toil.walk(r""" match [2] case '2' then 20 case 2 then 200 end """)) # -> None
  
 -    # toil.walk(r""" def foo(*a, b) do print(a, b) end """)
 -    # toil.walk(r""" foo(2, 3) """) # -> Pattern mismatch
-+    print(toil.walk(r""" match True case 1 then "int" case True then "bool" end """))
++    print(toil.walk(r""" match True case 1 then 'int' case True then 'bool' end """))
 +    # -> bool
  
 -    toil.walk(r""" [a, *b] := [2]; print(a, b) """) # -> 2 []
@@ -108,10 +108,10 @@
 +    print(toil.walk(r""" 2 := 2 """)) # -> 2
  
      toil.walk(r"""
--        match [2, 3, 4] case [a, *b] then print(a, b) case _ then print("no") end
+-        match [2, 3, 4] case [a, *b] then print(a, b) case _ then print('no') end
 -    """) # -> 2 [3, 4]
 -    toil.walk(r"""
--        match [] case [a, *b] then print(a, b) case _ then print("no") end
+-        match [] case [a, *b] then print(a, b) case _ then print('no') end
 -    """) # -> no
 +        def factorial_rec(n) do
 +            # if n == 0 then 1 else n * factorial_rec(n - 1) end

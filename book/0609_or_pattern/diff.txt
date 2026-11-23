@@ -149,8 +149,8 @@
  
      # Example
  
--    print("Type Pattern:")
-+    print("Or Pattern:")
+-    print("Type pattern:")
++    print("Or pattern:")
  
      print("Match:")
  

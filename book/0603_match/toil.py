@@ -944,14 +944,14 @@ if __name__ == "__main__":
     print("Match:")
 
     print(toil.ast(r"""
-        match [2, 3] case [a, b] then a * b case _ then "no" end
+        match [2, 3] case [a, b] then a * b case _ then 'no' end
     """)) # -> (match, [[2, 3], [([a, b], (mul, [a, b])), (_, 'no')]])
     print(toil.walk(r"""
-        match [2, 3] case [a, b] then a * b case _ then "no" end
+        match [2, 3] case [a, b] then a * b case _ then 'no' end
     """)) # -> 6
     print(toil.walk(r""" [a, b] """)) # -> [2, 3]
     print(toil.walk(r"""
-        match [4, 5] case [a, [b, c]] then a * b case _ then "no" end
+        match [4, 5] case [a, [b, c]] then a * b case _ then 'no' end
     """)) # -> no
     print(toil.walk(r""" [a, b, _] """)) # -> [4, 3, [4, 5]]
     print(toil.walk(r""" match 2 case [a, b] then a * b end """)) # -> None

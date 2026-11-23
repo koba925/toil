@@ -839,8 +839,8 @@ if __name__ == "__main__":
     print(toil.walk(r""" {a: 2, b: 3}.keys() """)) # -> ['a', 'b']
     print(toil.walk(r""" {a: 2, keys: func do 3 end}.keys() """)) # -> 3
 
-    print(toil.walk(r""" "a".in("abc") """)) # -> True
-    print(toil.walk(r""" "d".in("abc") """)) # -> False
+    print(toil.walk(r""" 'a'.in('abc') """)) # -> True
+    print(toil.walk(r""" 'd'.in('abc') """)) # -> False
 
     toil.walk(r""" def myadd(a, b) do a + b end """)
     print(toil.walk(r""" 2.myadd(3) """)) # -> 5

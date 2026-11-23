@@ -906,19 +906,19 @@ if __name__ == "__main__":
     toil.walk(r"""
         defclass Animal(name) do
             self._name = name;
-            defmethod introduce do print("I am", self._name) end;
-            defmethod make_sound do print("crying") end;
+            defmethod introduce do print('I am', self._name) end;
+            defmethod make_sound do print('crying') end;
             defmethod rename(name) do self._name = name end
         end
     """)
     toil.walk(r"""
-        animal1 := Animal("Rocky");
-        animal2 := Animal("Lucy");
+        animal1 := Animal('Rocky');
+        animal2 := Animal('Lucy');
         animal1.introduce();
         animal1.make_sound();
         animal2.introduce();
         animal2.make_sound();
-        animal2.rename("Betty");
+        animal2.rename('Betty');
         animal2.introduce()
     """) # -> I am Rocky\ncrying\nI am Lucy\ncrying\nI am Betty
 

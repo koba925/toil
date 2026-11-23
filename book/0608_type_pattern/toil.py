@@ -950,7 +950,7 @@ if __name__ == "__main__":
 
     # Example
 
-    print("Type Pattern:")
+    print("Type pattern:")
 
     print("Match:")
 

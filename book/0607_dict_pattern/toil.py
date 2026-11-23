@@ -950,10 +950,10 @@ if __name__ == "__main__":
 
     print("Parameter match:")
 
-    print(toil.ast(r""" def foo(a, {"bb": b, "cc": c}) do print(a, b, c) end """))
+    print(toil.ast(r""" def foo(a, {'bb': b, 'cc': c}) do print(a, b, c) end """))
     # -> (define, [foo, (func, [[a, {'bb': b, 'cc': c}], (print, [a, b, c])])])
-    toil.walk(r""" def foo(a, {"bb": b, "cc": c}) do print(a, b, c) end """)
-    toil.walk(r""" foo(2, {"bb": 3, "cc": 4}) """) # -> 2 3 4
+    toil.walk(r""" def foo(a, {'bb': b, 'cc': c}) do print(a, b, c) end """)
+    toil.walk(r""" foo(2, {'bb': 3, 'cc': 4}) """) # -> 2 3 4
 
     print(toil.ast(r""" def foo(a, {b, c}) do print(a, b, c) end """))
     # -> (define, [foo, (func, [[a, {'b': b, 'c': c}], (print, [a, b, c])])])
@@ -998,11 +998,11 @@ if __name__ == "__main__":
     print("Match:")
 
     print(toil.walk(r"""
-        match {a: 2, b: 3} case {a, b} then a * b case _ then "no" end
+        match {a: 2, b: 3} case {a, b} then a * b case _ then 'no' end
     """)) # -> 6
     print(toil.walk(r""" [a, b] """)) # -> [2, 3]
     print(toil.walk(r"""
-        match {a: 4, c: 5} case {a, b} then a * b case _ then "no" end
+        match {a: 4, c: 5} case {a, b} then a * b case _ then 'no' end
     """)) # -> no
     print(toil.walk(r""" [a, b, _] """)) # -> [4, 3, {'a': 4, 'c': 5}]
     print(toil.walk(r""" match 2 case {a, b} then a * b end """)) # -> None

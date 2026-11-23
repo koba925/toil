@@ -65,7 +65,7 @@
  
      # Example
  
--    print("Or Pattern:")
+-    print("Or pattern:")
 +    print("Module:")
  
 -    print("Match:")

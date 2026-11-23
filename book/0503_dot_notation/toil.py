@@ -822,7 +822,7 @@ if __name__ == "__main__":
 
     print("Dot notation:")
 
-    toil.walk(r""" d := {"a": 2, "b": 3} """)
+    toil.walk(r""" d := {'a': 2, 'b': 3} """)
     print(toil.ast(r""" d.a """)) # -> (dot, [d, 'a'])
     print(toil.walk(r""" d.a """)) # -> 2
 
