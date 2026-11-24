@@ -24,3 +24,13 @@ description: 会話の終わりに、これまでの対話履歴を振り返り�
 
     **AGENTS.mdやルール・スキルへの追記提案**
     プロジェクトの `AGENTS.md` や `.agents/rules/`、`.agents/skills/` に直接反映すべきものとして具体的に提案してください。
+
+## 肥大化防止ルール（常にコンパクトに保つ）
+
+* **役割分担の厳守（重複禁止）**:
+  * 書籍構成・ディレクトリ・パート方針 → `.agents/rules/book.md`
+  * コーディング規約・テスト・開発方針 → `.agents/rules/coding-style.md` / `.agents/rules/policy.md`
+  * レビュー手順・観点 → `.agents/rules/review.md` / `.agents/skills/review-section-*`
+  * 動的な進捗・次回タスク・直近の設計前提 → `session-context.md`（恒久ルールへ移管した項目は削除）
+* **追記と同時に削る**: 完了済みの細かな作業履歴や古いタスクは残さず、完了した部・章は 1 行に要約・統合する。
+* **簡潔な記述**: 仕様やルールは箇条書きで 1 項目 1 行程度を目安に凝縮し、既存項目と重複する追記は統合する。
